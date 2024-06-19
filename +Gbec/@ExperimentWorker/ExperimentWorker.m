@@ -33,6 +33,10 @@ classdef ExperimentWorker<handle
 		HostAction
 		%将要合并的旧数据路径
 		MergeData=missing
+		%会话后展示事件记录的参数
+		%必须安装统一实验分析作图才能使用此属性。会话后，将调用UniExp.TrialwiseEventPlot，将本会话的事件记录表作为第一个参数，此属性值元胞展开作为后续参数。
+		%See also UniExp.TrialwiseEventPlot
+		TepArguments
 	end
 	properties(Access=protected)
 		Serial internal.Serialport

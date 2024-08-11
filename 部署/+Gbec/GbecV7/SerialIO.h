@@ -3,6 +3,12 @@
 #include <queue>
 #include <functional>
 #include <dynarray>
+// 每个具体的消息应当继承自此消息
+struct MessageHeader
+{
+	uint8_t From;
+	uint8_t To;
+};
 extern std::queue<char> SerialWriteBuffer;
 extern std::queue<std::function<void()>> SerialReadBuffer;
 template <typename T>

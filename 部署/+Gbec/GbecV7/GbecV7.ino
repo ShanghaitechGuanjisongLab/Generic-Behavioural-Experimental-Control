@@ -1,36 +1,36 @@
-#include "ExperimentDesign.h"
-#include "SerialIO.h"
+#include <Cpp_Standard_Library.h>
+#include <functional>
+#include <optional>
+#include <vector>
+// 一个魔数，表示接下来要开始的是有效的报文信息
+constexpr char SerialReady = 17;
 void setup()
 {
 	Serial.setTimeout(-1);
 	Serial.begin(9600);
-	SerialWrite(UID::Signal_SerialReady);
 }
-std::queue<std::function<void()>> SerialReadBuffer;
-std::queue<char> SerialWriteBuffer;
-std::set<Routine *> Processes;
+// 对此对象的任何访问都不允许中断
+std::vector<std::optiostd::move_only_function<void(std::unique_ptr<char[]> &&) const>> ListeningPorts;
 void loop()
 {
-	SerialRead<UID>([](UID &&CommandID)
-					{
-		switch(CommandID)
-		{
-	case UID::Command_StartProcess:
-		SerialRead<UID>([](UID&&RoutineID)
-		{
-		Routine *const NewProcess = ExportedRoutines::RoutineMap[RoutineID]();
-		Processes.insert(NewProcess);
-		SerialWrite(UID::Signal_CommandSuccess);
-		});
-		break;
-		} });
-	String WriteBuffer;
-	noInterrupts();
-	while (SerialWriteBuffer.size())
+	// 主循环要做的事情就只有转发报文
+	while (Serial.available())
 	{
-		WriteBuffer += SerialWriteBuffer.front();
-		SerialWriteBuffer.pop();
+		if (Serial.read() == SerialReady)
+		{
+			struct MessageHeader
+			{
+				// 这个长度不包括消息头
+				uint8_t Length;
+				uint8_t To;
+			} Header;
+			Serial.readBytes((char *)&Header, sizeof(Header));
+			std::unique_ptr<char[]> Message = std::make_unique_for_overwrite<char[]>(Header.Length);
+			Serial.readBytes(Message.get(), Header.Length);
+			noInterrupts();
+			ListeningPorts[Header.To](std::move(Message));
+			interrupts();
+		}
 	}
-	interrupts();
-	Serial.print(WriteBuffer);
+
 }

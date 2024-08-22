@@ -52,6 +52,15 @@
 		"xmemory": "cpp",
 		"xtr1common": "cpp",
 		"xutility": "cpp",
-		"optional": "cpp"
+		"optional": "cpp",
+		"array": "cpp",
+		"cctype": "cpp",
+		"clocale": "cpp",
+		"cstdarg": "cpp",
+		"cstdint": "cpp",
+		"ctime": "cpp",
+		"*.tcc": "cpp",
+		"fstream": "cpp",
+		"cinttypes": "cpp"
 	}
 }

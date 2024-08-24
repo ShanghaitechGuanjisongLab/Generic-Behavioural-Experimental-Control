@@ -4,6 +4,8 @@
 #include <set>
 static std::queue<std::move_only_function<void() const>> TransactionQueue;
 static std::unordered_map<uint8_t, std::move_only_function<void() const>> Listeners;
+// Listeners的交换必须放在全局，这样执行期间的Receive/Listen中断调用才能检查到Port是否被占用。
+static std::unordered_map<uint8_t, std::move_only_function<void() const>> Listeners_Swap;
 static std::set<uint8_t> ListenersToRelease;
 static std::set<Stream &> StreamsToListen;
 bool SaveAndDisableInterrupts()
@@ -67,9 +69,9 @@ void AddReceiveListener(std::move_only_function<void(std::dynarray<char> &&Messa
 			interrupts();          \
 		return Result;             \
 	}
-#define InterruptiveCheckPort                              \
-	const bool HasInterrupts = SaveAndDisableInterrupts(); \
-	if (Listeners.contains(FromPort))                      \
+#define InterruptiveCheckPort                                              \
+	const bool HasInterrupts = SaveAndDisableInterrupts();                 \
+	if (Listeners.contains(FromPort) || Listeners_Swap.contains(FromPort)) \
 		InterruptiveReturn(Exception::Port_occupied);
 // 用于查找一个有效消息的起始
 constexpr uint8_t MagicByte = 0x5A;
@@ -155,12 +157,13 @@ namespace Async_stream_message_queue
 
 	void ReleasePort(uint8_t Port, std::move_only_function<void(Exception Result) const> &&Callback)
 	{
+		//必须延迟释放端口，因为这个函数可能是被监听器Callback调用的，此时如果释放了监听器自身，将导致未定义行为
 		const bool HasInterrupts = SaveAndDisableInterrupts();
 		TransactionQueue.push([Port, Callback = std::move(Callback)]()
 							  { 
-								const bool HasInterrupts = SaveAndDisableInterrupts();
+								noInterrupts();
 								const bool AnyErased = Listeners.erase(Port);
-								InterruptiveReturn();
+								interrupts();
 								Callback(AnyErased ? Exception::Success : Exception::Port_idle); });
 		InterruptiveReturn();
 	}
@@ -168,25 +171,28 @@ namespace Async_stream_message_queue
 	void ExecuteTransactionsInQueue()
 	{
 		noInterrupts();
-		std::queue<std::move_only_function<void() const>> TransactionCopy;
-		std::swap(TransactionCopy, TransactionQueue);		// 仅执行已有任务
-		const std::set<Stream &> STLCopy = StreamsToListen; // 拷贝，避免争用
-		interrupts();										// 读写串口必须开启中断
-		for (Stream &STL : STLCopy)
+		// 在无中断模式下将全局容器交换到局部，避免争用。事后再换回去。
+		std::set<Stream &> StreamsToListen_Swap;
+		std::swap(StreamsToListen_Swap, StreamsToListen);
+		std::queue<std::move_only_function<void() const>> TransactionQueue_Swap;
+		std::swap(TransactionQueue_Swap, TransactionQueue);
+		std::swap(Listeners_Swap, Listeners);
+		interrupts();
+		for (Stream &STL : StreamsToListen_Swap)
 			STL.setTimeout(-1); // 无限等待
-		while (TransactionCopy.size())
+		while (TransactionQueue_Swap.size())
 		{
-			TransactionCopy.front()();
-			TransactionCopy.pop();
+			TransactionQueue_Swap.front()();
+			TransactionQueue_Swap.pop();
 		}
-		for (Stream &STL : STLCopy)
+		for (Stream &STL : StreamsToListen_Swap)
 			while (STL.available())
 				if (STL.read() == MagicByte)
 				{
 					uint8_t ToPort;
 					STL.readBytes(&ToPort, sizeof(ToPort)); // 保证读入
-					const std::unordered_map<uint8_t, std::move_only_function<void() const>>::const_iterator PortListener = Listeners.find(ToPort);
-					if (PortListener == Listeners.end())
+					const std::unordered_map<uint8_t, std::move_only_function<void() const>>::const_iterator PortListener = Listeners_Swap.find(ToPort);
+					if (PortListener == Listeners_Swap.end())
 					{
 						uint8_t Length;
 						STL.readBytes(&Length, sizeof(Length));
@@ -200,6 +206,5 @@ namespace Async_stream_message_queue
 						break;
 					}
 				}
-				
 	}
 }

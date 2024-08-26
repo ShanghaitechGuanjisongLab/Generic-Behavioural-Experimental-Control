@@ -1,7 +1,7 @@
 #pragma once
 #include <dynarray>
 #include <functional>
-namespace Async_stream_message_queue
+namespace Async_stream_IO
 {
 	enum class Exception
 	{
@@ -10,6 +10,8 @@ namespace Async_stream_message_queue
 		Insufficient_message_capacity,
 		Port_idle,
 	};
+
+	// API层级0：报文收发
 
 	/*一般应在loop中调用此方法。它将实际执行所有排队中的事务，包括发送消息和调用监听器。此方法执行过程中会允许中断，即使调用前处于不可中断状态。此方法返回之前会恢复调用前的中断状态。
 	不应在此方法执行期间存在任何可能会直接调用Stream读写操作的中断，可能破坏数据结构。只能使用此命名空间中的方法进行委托。
@@ -73,4 +75,19 @@ namespace Async_stream_message_queue
 
 	// 释放指定端口，取消任何Receive或Listen监听。如果端口未被监听，返回Port_idle。无论如何，此方法返回后即可以在被释放的端口上附加新的监听。
 	Exception ReleasePort(uint8_t Port);
+
+	// API层级1：函数和对象
+
+	template <typename ReturnType, typename... ArgumentTypes>
+	struct Caller
+	{
+		static void Call(std::function<ReturnType(ArgumentTypes...)>);
+	};
+	template <typename ReturnType, typename ArgumentTypes>
+	void Call(std::function<ReturnType(ArgumentTypes...)>);
+	void Call()
+	{
+		Caller<void,int>::Call([](int) {});
+		Call<void,int>([](int) {});
+	}
 }

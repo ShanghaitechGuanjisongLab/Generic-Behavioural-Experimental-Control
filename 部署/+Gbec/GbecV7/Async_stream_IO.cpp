@@ -1,4 +1,4 @@
-#include "Async_stream_message_queue.hpp"
+#include "Async_stream_IO.hpp"
 #include <queue>
 #include <unordered_map>
 #include <set>
@@ -25,7 +25,7 @@ uint8_t AllocatePort()
 		++Port;
 	return Port;
 }
-using namespace Async_stream_message_queue;
+using namespace Async_stream_IO;
 template <bool Once>
 void AddReceiveListener(char *Message, uint8_t Capacity, std::move_only_function<void(Exception Result) const> &&Callback, Stream &FromStream, uint8_t FromPort)
 {

@@ -83,11 +83,10 @@ namespace Async_stream_IO
 	{
 		static void Call(std::function<ReturnType(ArgumentTypes...)>);
 	};
-	template <typename ReturnType, typename ArgumentTypes>
+	template <typename ReturnType, typename...ArgumentTypes>
 	void Call(std::function<ReturnType(ArgumentTypes...)>);
 	void Call()
 	{
-		Caller<void,int>::Call([](int) {});
 		Call<void,int>([](int) {});
 	}
 }

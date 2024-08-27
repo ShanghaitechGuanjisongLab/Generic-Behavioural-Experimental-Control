@@ -80,7 +80,7 @@ void AddReceiveListener(std::move_only_function<void(std::dynarray<char> &&Messa
 constexpr uint8_t MagicByte = 0x5A;
 namespace Async_stream_message_queue
 {
-	void Send(const char *Message, uint8_t Length, Stream &ToStream, uint8_t ToPort, std::move_only_function<void() const> &&Callback)
+	void Send(const char *Message, uint8_t Length, uint8_t ToPort, std::move_only_function<void() const> &&Callback, Stream &ToStream)
 	{
 		const bool HasInterrupts = SaveAndDisableInterrupts();
 		StreamsInvolved.insert(ToStream);
@@ -94,7 +94,20 @@ namespace Async_stream_message_queue
 						Callback(); });
 		InterruptiveReturn();
 	}
-	void Send(std::dynarray<char> &&Message, Stream &ToStream, uint8_t ToPort, std::move_only_function<void() const> &&Callback)
+	void Send(const char *Message, uint8_t Length, uint8_t ToPort, Stream &ToStream)
+	{
+		const bool HasInterrupts = SaveAndDisableInterrupts();
+		StreamsInvolved.insert(ToStream);
+		ToStream.setTimeout(-1);
+		TransactionQueue.push([Message, Length, &ToStream, ToPort]()
+							  { 
+								ToStream.write(MagicByte);
+						ToStream.write(ToPort); 
+						ToStream.write(Length);
+						ToStream.write(Message,Length); });
+		InterruptiveReturn();
+	}
+	void Send(std::dynarray<char> &&Message, uint8_t ToPort, std::move_only_function<void() const> &&Callback, Stream &ToStream)
 	{
 		const bool HasInterrupts = SaveAndDisableInterrupts();
 		StreamsInvolved.insert(ToStream);
@@ -108,14 +121,27 @@ namespace Async_stream_message_queue
 						Callback(); });
 		InterruptiveReturn();
 	}
+	void Send(std::dynarray<char> &&Message, uint8_t ToPort, Stream &ToStream)
+	{
+		const bool HasInterrupts = SaveAndDisableInterrupts();
+		StreamsInvolved.insert(ToStream);
+		ToStream.setTimeout(-1);
+		TransactionQueue.push([Message = std::move(Message), &ToStream, ToPort]()
+							  { 
+								ToStream.write(MagicByte);
+						ToStream.write(ToPort); 
+						ToStream.write((uint8_t)Message.size());
+						ToStream.write(Message.data(),Message.size()); });
+		InterruptiveReturn();
+	}
 
-	Exception Receive(char *Message, uint8_t Capacity, std::move_only_function<void(Exception Result) const> &&Callback, Stream &FromStream, uint8_t FromPort)
+	Exception Receive(char *Message, uint8_t Capacity, std::move_only_function<void(Exception Result) const> &&Callback, uint8_t FromPort, Stream &FromStream)
 	{
 		InterruptiveCheckPort;
 		AddReceiveListener<true>(Message, Capacity, std::move(Callback), FromStream, FromPort);
 		InterruptiveReturn(Exception::Success);
 	}
-	Exception Receive(std::move_only_function<void(std::dynarray<char> &&Message) const> &&Callback, Stream &FromStream, uint8_t FromPort)
+	Exception Receive(std::move_only_function<void(std::dynarray<char> &&Message) const> &&Callback, uint8_t FromPort, Stream &FromStream)
 	{
 		InterruptiveCheckPort;
 		AddReceiveListener<true>(std::move(Callback), FromStream, FromPort);
@@ -135,13 +161,13 @@ namespace Async_stream_message_queue
 		AddReceiveListener<true>(std::move(Callback), FromStream, FromPort);
 		InterruptiveReturn(FromPort);
 	}
-	Exception Listen(char *Message, uint8_t Capacity, std::move_only_function<void(Exception Result) const> &&Callback, Stream &FromStream, uint8_t FromPort)
+	Exception Listen(char *Message, uint8_t Capacity, std::move_only_function<void(Exception Result) const> &&Callback, uint8_t FromPort, Stream &FromStream)
 	{
 		InterruptiveCheckPort;
 		AddReceiveListener<false>(Message, Capacity, std::move(Callback), FromStream, FromPort);
 		InterruptiveReturn(Exception::Success);
 	}
-	Exception Listen(std::move_only_function<void(std::dynarray<char> &&Message) const> &&Callback, Stream &FromStream, uint8_t FromPort)
+	Exception Listen(std::move_only_function<void(std::dynarray<char> &&Message) const> &&Callback, uint8_t FromPort, Stream &FromStream)
 	{
 		InterruptiveCheckPort;
 		AddReceiveListener<false>(std::move(Callback), FromStream, FromPort);

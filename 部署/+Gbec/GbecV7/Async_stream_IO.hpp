@@ -9,7 +9,6 @@ namespace Async_stream_IO
 	{
 		Success,
 		Port_occupied,
-		Insufficient_message_capacity,
 		Port_idle,
 	};
 
@@ -23,73 +22,73 @@ namespace Async_stream_IO
 	如果在Callback中再次调用Send要非常小心，因为那个委托会直接在本次ExecuteTransactionsInQueue中执行而不等到下一次，然后再次调用Callback，如果那个Callback中又有Send，这样就存在形成无限循环的风险。
 	*/
 	void Send(const void *Message, uint8_t Length, uint8_t ToPort, std::move_only_function<void() const> &&Callback, Stream &ToStream = Serial);
-
 	/* 委托下次ExecuteTransactionsInQueue时，向指定目标发送指定长度的消息。调用方应确保那时Message指针仍然有效。
 	写串口操作依赖中断，在不允许中断的状态下使用Stream原生方法写出可能会永不返回，因此需要调用此方法委托延迟写出。反之则可以直接调用Stream提供的写出方法，无需委托。
 	*/
 	void Send(const void *Message, uint8_t Length, uint8_t ToPort, Stream &ToStream = Serial);
-
 	/* 委托下次ExecuteTransactionsInQueue时，向指定目标发送消息。Message的所有权将被转移到内部，调用方不应再使用它。消息发送后，可选调用Callback通知委托完成。
 	写串口操作依赖中断，在不允许中断的状态下使用Stream原生方法写出可能会永不返回，因此需要调用此方法委托延迟写出。反之则可以直接调用Stream提供的写出方法，无需委托。
 	如果在Callback中再次调用Send要非常小心，因为那个委托会直接在本次ExecuteTransactionsInQueue中执行而不等到下一次，然后再次调用Callback，如果那个Callback中又有Send，这样就存在形成无限循环的风险。
 	*/
 	void Send(std::dynarray<char> &&Message, uint8_t ToPort, std::move_only_function<void() const> &&Callback, Stream &ToStream = Serial);
-
 	/* 委托下次ExecuteTransactionsInQueue时，向指定目标发送消息。Message的所有权将被转移到内部，调用方不应再使用它。
 	写串口操作依赖中断，在不允许中断的状态下使用Stream原生方法写出可能会永不返回，因此需要调用此方法委托延迟写出。反之则可以直接调用Stream提供的写出方法，无需委托。
 	*/
 	void Send(std::dynarray<char> &&Message, uint8_t ToPort, Stream &ToStream = Serial);
 
-	/*监听FromStream流的FromPort端口。当远程传来指向FromPort的消息时，那个消息将被拷贝到Message指针最多Capacity字节，并调用Callback。在那之前，调用方有义务维持Message指针有效。
+	/*监听FromStream流的FromPort端口。当远程传来指向FromPort的消息时，那个消息将被拷贝到Message指针最多Capacity字节，并调用Callback，提供消息字节数。在那之前，调用方有义务维持Message指针有效。
 	如果FromPort已被监听，那么新的监听将失败，返回Port_occupied。
 	此监听是一次性的。一旦收到消息，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
-	如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，提供异常Insufficient_message_capacity。
+	如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，并提供存储该消息所需的字节数。
 	 */
-	Exception Receive(void *Message, uint8_t Capacity, std::move_only_function<void(Exception Result) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial);
-
-	/*监听FromStream流的FromPort端口。当远程传来指向FromPort的消息时，调用Callback，提供消息内容Message。
+	Exception Receive(void *Message, uint8_t Capacity, std::move_only_function<void(uint8_t MessageSize) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial);
+	/*监听FromStream流的FromPort端口。当远程传来指向FromPort的消息时，调用Callback，消息内容Message所有权移交给调用方。
 	如果FromPort已被监听，那么新的监听将失败，返回Port_occupied。
 	此监听是一次性的。一旦收到消息，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
 	 */
 	Exception Receive(std::move_only_function<void(std::dynarray<char> &&Message) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial);
-
-	/*持续监听FromStream流的FromPort端口。每当远程传来指向FromPort的消息时，那个消息都将被拷贝到Message指针最多Capacity字节，并调用Callback。在停止监听前，调用方有义务维持Message指针有效。
+	/*监听FromStream流的FromPort端口。当远程传来指向FromPort的消息时，调用Callback，提供消息内容Message。此Message引用的内容在Callback返回后不再可用，调用方不应保存该引用。
 	如果FromPort已被监听，那么新的监听将失败，返回Port_occupied。
-	如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，提供异常Insufficient_message_capacity，监听仍然继续。
+	此监听是一次性的。一旦收到消息，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
 	 */
-	Exception Listen(void *Message, uint8_t Capacity, std::move_only_function<void(Exception Result) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial);
+	Exception Receive(std::move_only_function<void(const std::vector<char> &Message) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial);
+	/*自动分配一个空闲端口返回，并监听FromStream流的那个端口。当远程传来指向该端口的消息时，那个消息将被拷贝到Message指针最多Capacity字节，并调用Callback，提供消息字节数。在那之前，调用方有义务维持Message指针有效。
+	此监听是一次性的。一旦收到消息，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
+	如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，并提供存储该消息所需的字节数。
+	 */
+	uint8_t Receive(void *Message, uint8_t Capacity, std::move_only_function<void(uint8_t MessageSize) const> &&Callback, Stream &FromStream = Serial);
+	/*自动分配一个空闲端口返回，并监听FromStream流的那个端口。当远程传来指向该端口的消息时，调用Callback，消息内容Message所有权移交给调用方。
+	此监听是一次性的。一旦收到消息，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
+	 */
+	uint8_t Receive(std::move_only_function<void(std::dynarray<char> &&Message) const> &&Callback, Stream &FromStream = Serial);
+	/*自动分配一个空闲端口返回，并监听FromStream流的那个端口。当远程传来指向该端口的消息时，调用Callback，提供消息内容Message。此Message引用的内容在Callback返回后不再可用，调用方不应保存该引用。
+	此监听是一次性的。一旦收到消息，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
+	 */
+	uint8_t Receive(std::move_only_function<void(const std::vector<char> &Message) const> &&Callback, Stream &FromStream = Serial);
 
+	/*持续监听FromStream流的FromPort端口。每当远程传来指向FromPort的消息时，那个消息都将被拷贝到Message指针最多Capacity字节，并调用Callback，提供消息字节数。在停止监听前，调用方有义务维持Message指针有效。
+	如果FromPort已被监听，那么新的监听将失败，返回Port_occupied。
+	如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，并提供存储该消息所需的字节数，监听仍然继续。
+	 */
+	Exception Listen(void *Message, uint8_t Capacity, std::move_only_function<void(uint8_t MessageSize) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial);
 	/*持续监听FromStream流的FromPort端口。每当远程传来指向FromPort的消息时，调用Callback，并提供消息内容Message。
 	如果FromPort已被监听，那么新的监听将失败，返回Port_occupied。
 	 */
 	Exception Listen(std::move_only_function<void(std::dynarray<char> &&Message) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial);
-
-	/*自动分配一个空闲端口返回，并监听FromStream流的那个端口。当远程传来指向该端口的消息时，那个消息将被拷贝到Message指针最多Capacity字节，并调用Callback。在那之前，调用方有义务维持Message指针有效。
-	此监听是一次性的。一旦收到消息，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
-	如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，提供异常Insufficient_message_capacity。
+	/*自动分配一个空闲端口返回，并持续监听FromStream流的那个端口。每当远程传来指向该端口的消息时，那个消息都将被拷贝到Message指针最多Capacity字节，并调用Callback，提供消息字节数。在停止监听前，调用方有义务维持Message指针有效。
+	如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，并提供存储该消息所需的字节数，监听仍然继续。
 	 */
-	uint8_t Receive(void *Message, uint8_t Capacity, std::move_only_function<void(Exception Result) const> &&Callback, Stream &FromStream = Serial);
-
-	/*自动分配一个空闲端口返回，并监听FromStream流的那个端口。当远程传来指向该端口的消息时，调用Callback，提供消息内容Message。
-	此监听是一次性的。一旦收到消息，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
-	 */
-	uint8_t Receive(std::move_only_function<void(std::dynarray<char> &&Message) const> &&Callback, Stream &FromStream = Serial);
-
-	/*自动分配一个空闲端口返回，并持续监听FromStream流的那个端口。每当远程传来指向该端口的消息时，那个消息都将被拷贝到Message指针最多Capacity字节，并调用Callback。在停止监听前，调用方有义务维持Message指针有效。
-	如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，提供异常Insufficient_message_capacity，监听仍然继续。
-	 */
-	uint8_t Listen(void *Message, uint8_t Capacity, std::move_only_function<void(Exception Result) const> &&Callback, Stream &FromStream = Serial);
-
+	uint8_t Listen(void *Message, uint8_t Capacity, std::move_only_function<void(uint8_t MessageSize) const> &&Callback, Stream &FromStream = Serial);
 	// 自动分配一个空闲端口返回，并持续监听FromStream流的那个端口。每当远程传来指向该端口的消息时，调用Callback，并提供消息内容Message。
 	uint8_t Listen(std::move_only_function<void(std::dynarray<char> &&Message) const> &&Callback, Stream &FromStream = Serial);
 
 	// 释放指定端口，取消任何Receive或Listen监听。如果端口未被监听，返回Port_idle。无论如何，此方法返回后即可以在被释放的端口上附加新的监听。
 	Exception ReleasePort(uint8_t Port);
 
-	template <typename T, size_t Plus>
+	template <size_t Plus, typename T>
 	struct _PlusAndPrepend;
 	template <size_t Plus, size_t... Values>
-	struct _PlusAndPrepend<std::index_sequence<Values...>, Plus>
+	struct _PlusAndPrepend<Plus, std::index_sequence<Values...>>
 	{
 		using type = std::index_sequence<Plus, Plus + Values...>;
 	};
@@ -99,7 +98,7 @@ namespace Async_stream_IO
 	template <size_t First, size_t... Rest>
 	struct _CumSum<std::index_sequence<First, Rest...>>
 	{
-		using type = _PlusAndPrepend<First, _CumSum<std::index_sequence<Rest...>>::type>::type;
+		using type = typename _PlusAndPrepend<First, typename _CumSum<std::index_sequence<Rest...>>::type>::type;
 	};
 	template <size_t Only>
 	struct _CumSum<std::index_sequence<Only>>
@@ -154,24 +153,54 @@ namespace Async_stream_IO
 		using type = ReturnType(Args...);
 	};
 
-	// 将任意可调用对象绑定到指定端口上，当收到消息时调用。远程要调用此对象，需要将所有参数序列化拼接称一个连续的内存块，并且头部加上一个uint8_t的端口号用来接收返回值，然后将此消息发送到此函数绑定的端口。
+	/* 将任意可调用对象绑定到指定本地端口上，当收到消息时调用。如果本地端口被占用，返回Port_occupied。
+	远程要调用此对象，需要将所有参数序列化拼接称一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。
+	*/
 	template <typename ReturnType, typename... ArgumentType>
-	inline void BindFunctionToPort(std::move_only_function<ReturnType(ArgumentType...)> &&Function, uint8_t Port, Stream &ToStream = Serial)
+	inline Exception BindFunctionToPort(std::move_only_function<ReturnType(ArgumentType...)> &&Function, uint8_t Port, Stream &ToStream = Serial)
+	{
+		constexpr uint8_t Capacity = _TypesSize<ArgumentType...>() + sizeof(uint8_t);
+		static char Memory[Capacity];
+		return Listen(Memory, Capacity, [Function = std::move(Function), Memory, Port, &ToStream](uint8_t MessageSize)
+					  {
+			if (MessageSize == Capacity)
+			{
+				// Memory的第一个字段是返回端口
+				const ReturnType ReturnValue = _InvokeWithMemoryOffsets<typename _CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>::Invoke(std::move(Function), Memory + sizeof(uint8_t));
+				Send(&ReturnValue, sizeof(ReturnValue), *reinterpret_cast<uint8_t *>(Memory), ToStream);
+			} }, Port, ToStream);
+	}
+	/* 将任意可调用对象绑定到指定本地端口上，当收到消息时调用。如果本地端口被占用，返回Port_occupied。
+	远程要调用此对象，需要将所有参数序列化拼接称一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。
+	*/
+	template <typename T>
+	inline Exception BindFunctionToPort(const T &Function, uint8_t Port, Stream &ToStream = Serial)
+	{
+		return BindFunctionToPort(std::move_only_function<typename _FunctionSignature<T>::type>(Function), Port, ToStream);
+	}
+	/* 将任意可调用对象绑定到流，当收到消息时调用。返回远程要调用此对象需要发送消息到的本地端口号。
+	远程要调用此对象，需要将所有参数序列化拼接称一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。
+	*/
+	template <typename ReturnType, typename... ArgumentType>
+	inline uint8_t BindFunctionToPort(std::move_only_function<ReturnType(ArgumentType...)> &&Function, Stream &ToStream = Serial)
 	{
 		constexpr size_t Capacity = _TypesSize<ArgumentType...>() + sizeof(uint8_t);
 		static char Memory[Capacity];
-		Listen(Memory, Capacity, [Function = std::move(Function), Memory, &ToStream](Exception Result)
-			   {
+		return Listen(Memory, Capacity, [Function = std::move(Function), Memory, &ToStream](Exception Result)
+					  {
 			if (Result == Exception::Success)
 			{
 				// Memory的第一个字段是返回端口
-				const ReturnType ReturnValue = _InvokeWithMemoryOffsets<_CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>::Invoke(std::move(Function), Memory + sizeof(uint8_t));
+				const ReturnType ReturnValue = _InvokeWithMemoryOffsets<typename _CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>::Invoke(std::move(Function), Memory + sizeof(uint8_t));
 				Send(&ReturnValue, sizeof(ReturnValue), *reinterpret_cast<uint8_t *>(Memory), ToStream);
-			} });
+			} }, ToStream);
 	}
+	/* 将任意可调用对象绑定到流，当收到消息时调用。返回远程要调用此对象需要发送消息到的本地端口号。
+	远程要调用此对象，需要将所有参数序列化拼接称一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。
+	*/
 	template <typename T>
-	inline void BindFunctionToPort(const T &Function, uint8_t Port, Stream &ToStream = Serial)
+	inline uint8_t BindFunctionToPort(const T &Function, Stream &ToStream = Serial)
 	{
-		BindFunctionToPort(std::move_only_function<typename _FunctionSignature<T>::type>(Function), Port, ToStream);
+		return BindFunctionToPort(std::move_only_function<typename _FunctionSignature<T>::type>(Function), ToStream);
 	}
 }

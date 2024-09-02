@@ -136,30 +136,6 @@ namespace Async_stream_IO
 		return sizeof(Only);
 	}
 
-	// 主模板，同时也是针对可调用对象（包括lambda）的特化
-	template <typename T>
-	struct _FunctionSignature : _FunctionSignature<decltype(&T::operator())>
-	{
-	};
-	// 针对函数指针的特化
-	template <typename ReturnType, typename... Args>
-	struct _FunctionSignature<ReturnType (*)(Args...)>
-	{
-		using type = ReturnType(Args...);
-	};
-	// 针对成员函数指针的特化
-	template <typename ReturnType, typename ClassType, typename... Args>
-	struct _FunctionSignature<ReturnType (ClassType::*)(Args...)>
-	{
-		using type = ReturnType(Args...);
-	};
-	// 针对const成员函数指针的特化
-	template <typename ReturnType, typename ClassType, typename... Args>
-	struct _FunctionSignature<ReturnType (ClassType::*)(Args...) const>
-	{
-		using type = ReturnType(Args...);
-	};
-
 	template <typename Signature>
 	struct _FunctionListener;
 	template <typename ReturnType, typename... ArgumentType>
@@ -200,7 +176,7 @@ namespace Async_stream_IO
 		Stream &ToStream;
 	};
 	template <typename T>
-	_FunctionListener(T &&, Stream &) -> _FunctionListener<typename _FunctionSignature<T>::type>;
+	_FunctionListener(T &&, Stream &) -> _FunctionListener<typename std::_FunctionSignature<T>::type>;
 
 	/* 将任意可调用对象绑定到指定本地端口上，当收到消息时调用。如果本地端口被占用，返回Port_occupied。
 	远程要调用此对象，需要将所有参数序列化拼接称一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。

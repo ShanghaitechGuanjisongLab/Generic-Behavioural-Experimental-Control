@@ -3,6 +3,11 @@
 #include <dynarray>
 #include <functional>
 #include <Arduino.h>
+namespace std
+{
+	template<typename T>
+	move_only_function(T &&)->move_only_function<std::remove_reference_t<T>>;
+}
 namespace Async_stream_IO
 {
 	enum class Exception
@@ -10,6 +15,7 @@ namespace Async_stream_IO
 		Success,
 		Port_occupied,
 		Port_idle,
+		Parameter_message_incomplete,
 	};
 
 	/*一般应在loop中调用此方法。它将实际执行所有排队中的事务，包括发送消息和调用监听器。此方法执行过程中会允许中断，即使调用前处于不可中断状态。此方法返回之前会恢复调用前的中断状态。
@@ -75,12 +81,18 @@ namespace Async_stream_IO
 	如果FromPort已被监听，那么新的监听将失败，返回Port_occupied。
 	 */
 	Exception Listen(std::move_only_function<void(std::dynarray<char> &&Message) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial);
+	/*持续监听FromStream流的FromPort端口。每当远程传来指向FromPort的消息时，调用Callback，并提供消息内容Message。此Message引用的内容在Callback返回后不再可用，调用方不应保存该引用。
+	如果FromPort已被监听，那么新的监听将失败，返回Port_occupied。
+	 */
+	Exception Listen(std::move_only_function<void(const std::vector<char> &Message) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial);
 	/*自动分配一个空闲端口返回，并持续监听FromStream流的那个端口。每当远程传来指向该端口的消息时，那个消息都将被拷贝到Message指针最多Capacity字节，并调用Callback，提供消息字节数。在停止监听前，调用方有义务维持Message指针有效。
 	如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，并提供存储该消息所需的字节数，监听仍然继续。
 	 */
 	uint8_t Listen(void *Message, uint8_t Capacity, std::move_only_function<void(uint8_t MessageSize) const> &&Callback, Stream &FromStream = Serial);
 	// 自动分配一个空闲端口返回，并持续监听FromStream流的那个端口。每当远程传来指向该端口的消息时，调用Callback，并提供消息内容Message。
 	uint8_t Listen(std::move_only_function<void(std::dynarray<char> &&Message) const> &&Callback, Stream &FromStream = Serial);
+	// 自动分配一个空闲端口返回，并持续监听FromStream流的那个端口。每当远程传来指向该端口的消息时，调用Callback，并提供消息内容Message。此Message引用的内容在Callback返回后不再可用，调用方不应保存该引用。
+	uint8_t Listen(std::move_only_function<void(const std::vector<char> &Message) const> &&Callback, Stream &FromStream = Serial);
 
 	// 释放指定端口，取消任何Receive或Listen监听。如果端口未被监听，返回Port_idle。无论如何，此方法返回后即可以在被释放的端口上附加新的监听。
 	Exception ReleasePort(uint8_t Port);
@@ -112,7 +124,7 @@ namespace Async_stream_IO
 	struct _InvokeWithMemoryOffsets<std::index_sequence<Offsets...>>
 	{
 		template <typename ReturnType, typename... ArgumentType>
-		static ReturnType Invoke(std::move_only_function<ReturnType(ArgumentType...)> Function, const char *Memory)
+		static ReturnType Invoke(const std::move_only_function<ReturnType(ArgumentType...) const> &Function, const char *Memory)
 		{
 			return Function(*reinterpret_cast<const ArgumentType *>(Memory + Offsets)...);
 		}
@@ -153,54 +165,65 @@ namespace Async_stream_IO
 		using type = ReturnType(Args...);
 	};
 
-	/* 将任意可调用对象绑定到指定本地端口上，当收到消息时调用。如果本地端口被占用，返回Port_occupied。
-	远程要调用此对象，需要将所有参数序列化拼接称一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。
-	*/
+	template <typename Signature>
+	struct _FunctionListener;
 	template <typename ReturnType, typename... ArgumentType>
-	inline Exception BindFunctionToPort(std::move_only_function<ReturnType(ArgumentType...)> &&Function, uint8_t Port, Stream &ToStream = Serial)
+	struct _FunctionListener<ReturnType(ArgumentType...)>
 	{
-		constexpr uint8_t Capacity = _TypesSize<ArgumentType...>() + sizeof(uint8_t);
-		static char Memory[Capacity];
-		return Listen(Memory, Capacity, [Function = std::move(Function), Memory, Port, &ToStream](uint8_t MessageSize)
-					  {
-			if (MessageSize == Capacity)
+		_FunctionListener(std::move_only_function<ReturnType(ArgumentType...) const> &&Function, Stream &ToStream) : Function(std::move(Function)), ToStream(ToStream) {}
+		void operator()(const std::vector<char> &Message)
+		{
+			if (Message.size() >= _TypesSize<ArgumentType...>() + sizeof(uint8_t))
 			{
-				// Memory的第一个字段是返回端口
-				const ReturnType ReturnValue = _InvokeWithMemoryOffsets<typename _CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>::Invoke(std::move(Function), Memory + sizeof(uint8_t));
-				Send(&ReturnValue, sizeof(ReturnValue), *reinterpret_cast<uint8_t *>(Memory), ToStream);
-			} }, Port, ToStream);
-	}
+#pragma pack(push, 1)
+				struct ReturnMessage
+				{
+					constexpr ReturnMessage(ReturnType ReturnValue) : ReturnValue(ReturnValue) {}
+
+				protected:
+					const Exception Result = Exception::Success;
+					ReturnType ReturnValue;
+				};
+#pragma pack(pop)
+				std::dynarray<char> ReturnMessageBuffer(sizeof(ReturnMessage));
+				*reinterpret_cast<ReturnMessage *>(ReturnMessageBuffer.data()) = {_InvokeWithMemoryOffsets<typename _CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>::Invoke(Function, Message.data() + sizeof(uint8_t))};
+				Send(std::move(ReturnMessageBuffer), *reinterpret_cast<uint8_t *>(Message.data()), ToStream);
+			}
+			else
+			{
+				static constexpr Exception Parameter_message_incomplete = Exception::Parameter_message_incomplete;
+				Send(&Parameter_message_incomplete, sizeof(Parameter_message_incomplete), *reinterpret_cast<uint8_t *>(Message.data()), ToStream);
+			}
+		}
+		operator std::move_only_function<void(const std::vector<char> &) const>() &&
+		{
+			return std::move_only_function<void(const std::vector<char> &) const>(std::move(*this));
+		}
+
+	protected:
+		const std::move_only_function<ReturnType(ArgumentType...) const> Function;
+		Stream &ToStream;
+	};
+	template <typename T>
+	_FunctionListener(T &&, Stream &) -> _FunctionListener<typename _FunctionSignature<T>::type>;
+
 	/* 将任意可调用对象绑定到指定本地端口上，当收到消息时调用。如果本地端口被占用，返回Port_occupied。
 	远程要调用此对象，需要将所有参数序列化拼接称一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。
 	*/
 	template <typename T>
-	inline Exception BindFunctionToPort(const T &Function, uint8_t Port, Stream &ToStream = Serial)
+	inline Exception BindFunctionToPort(T &&Function, uint8_t Port, Stream &ToStream = Serial)
 	{
-		return BindFunctionToPort(std::move_only_function<typename _FunctionSignature<T>::type>(Function), Port, ToStream);
-	}
-	/* 将任意可调用对象绑定到流，当收到消息时调用。返回远程要调用此对象需要发送消息到的本地端口号。
-	远程要调用此对象，需要将所有参数序列化拼接称一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。
-	*/
-	template <typename ReturnType, typename... ArgumentType>
-	inline uint8_t BindFunctionToPort(std::move_only_function<ReturnType(ArgumentType...)> &&Function, Stream &ToStream = Serial)
-	{
-		constexpr size_t Capacity = _TypesSize<ArgumentType...>() + sizeof(uint8_t);
-		static char Memory[Capacity];
-		return Listen(Memory, Capacity, [Function = std::move(Function), Memory, &ToStream](Exception Result)
-					  {
-			if (Result == Exception::Success)
-			{
-				// Memory的第一个字段是返回端口
-				const ReturnType ReturnValue = _InvokeWithMemoryOffsets<typename _CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>::Invoke(std::move(Function), Memory + sizeof(uint8_t));
-				Send(&ReturnValue, sizeof(ReturnValue), *reinterpret_cast<uint8_t *>(Memory), ToStream);
-			} }, ToStream);
+		return Listen(_FunctionListener(std::move(Function), ToStream), Port, ToStream);
 	}
 	/* 将任意可调用对象绑定到流，当收到消息时调用。返回远程要调用此对象需要发送消息到的本地端口号。
 	远程要调用此对象，需要将所有参数序列化拼接称一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。
 	*/
 	template <typename T>
-	inline uint8_t BindFunctionToPort(const T &Function, Stream &ToStream = Serial)
+	inline uint8_t BindFunctionToPort(T &&Function, Stream &ToStream = Serial)
 	{
-		return BindFunctionToPort(std::move_only_function<typename _FunctionSignature<T>::type>(Function), ToStream);
+		return Listen(_FunctionListener(std::move(Function), ToStream), ToStream);
 	}
+
+template<typename ReturnType,typename...ArgumentType>
+	Exception RemoteCall(uint8_t RemotePort, std::move_only_function);
 }

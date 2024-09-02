@@ -63,6 +63,24 @@ void AddReceiveListener(std::move_only_function<void(std::dynarray<char> &&Messa
 		Callback(std::move(Message));
 	};
 }
+template <bool Once>
+void AddReceiveListener(std::move_only_function<void(const std::vector<char> &Message) const> &&Callback, Stream &FromStream, uint8_t FromPort)
+{
+	FromStream.setTimeout(-1);
+	StreamsInvolved.insert(&FromStream);
+	Listeners[FromPort] = [Callback = std::move(Callback), &FromStream, FromPort]()
+	{
+		if _CONSTEXPR14 ()
+			(Once)
+				Listeners.erase(FromPort);
+		interrupts();
+		uint8_t Length;
+		FromStream.readBytes(&Length, sizeof(Length));
+		CommonCache.resize(Length);
+		FromStream.readBytes(CommonCache.data(), Length);
+		Callback(CommonCache);
+	};
+}
 #define InterruptiveReturn(Result) \
 	{                              \
 		if (HasInterrupts)         \
@@ -75,7 +93,7 @@ void AddReceiveListener(std::move_only_function<void(std::dynarray<char> &&Messa
 		InterruptiveReturn(Exception::Port_occupied);
 // 用于查找一个有效消息的起始
 constexpr uint8_t MagicByte = 0x5A;
-namespace Async_stream_message_queue
+namespace Async_stream_IO
 {
 	void Send(const void *Message, uint8_t Length, uint8_t ToPort, std::move_only_function<void() const> &&Callback, Stream &ToStream)
 	{
@@ -124,7 +142,7 @@ namespace Async_stream_message_queue
 		StreamsInvolved.insert(&ToStream);
 		ToStream.setTimeout(-1);
 		TransactionQueue.emplace([Message = std::move(Message), &ToStream, ToPort]()
-							  { 
+								 { 
 								ToStream.write(MagicByte);
 						ToStream.write(ToPort); 
 						ToStream.write(static_cast<uint8_t>(Message.size()));
@@ -144,6 +162,12 @@ namespace Async_stream_message_queue
 		AddReceiveListener<true>(std::move(Callback), FromStream, FromPort);
 		InterruptiveReturn(Exception::Success);
 	}
+	Exception Receive(std::move_only_function<void(const std::vector<char> &Message) const> &&Callback, uint8_t FromPort, Stream &FromStream)
+	{
+		InterruptiveCheckPort;
+		AddReceiveListener<true>(std::move(Callback), FromStream, FromPort);
+		InterruptiveReturn(Exception::Success);
+	}
 	uint8_t Receive(void *Message, uint8_t Capacity, std::move_only_function<void(uint8_t MessageSize) const> &&Callback, Stream &FromStream)
 	{
 		const bool HasInterrupts = SaveAndDisableInterrupts();
@@ -152,6 +176,13 @@ namespace Async_stream_message_queue
 		InterruptiveReturn(FromPort);
 	}
 	uint8_t Receive(std::move_only_function<void(std::dynarray<char> &&Message) const> &&Callback, Stream &FromStream)
+	{
+		const bool HasInterrupts = SaveAndDisableInterrupts();
+		const uint8_t FromPort = AllocatePort();
+		AddReceiveListener<true>(std::move(Callback), FromStream, FromPort);
+		InterruptiveReturn(FromPort);
+	}
+	uint8_t Receive(std::move_only_function<void(const std::vector<char> &Message) const> &&Callback, Stream &FromStream)
 	{
 		const bool HasInterrupts = SaveAndDisableInterrupts();
 		const uint8_t FromPort = AllocatePort();
@@ -170,6 +201,12 @@ namespace Async_stream_message_queue
 		AddReceiveListener<false>(std::move(Callback), FromStream, FromPort);
 		InterruptiveReturn(Exception::Success);
 	}
+	Exception Listen(std::move_only_function<void(const std::vector<char> &Message) const> &&Callback, uint8_t FromPort, Stream &FromStream)
+	{
+		InterruptiveCheckPort;
+		AddReceiveListener<false>(std::move(Callback), FromStream, FromPort);
+		InterruptiveReturn(Exception::Success);
+	}
 	uint8_t Listen(void *Message, uint8_t Capacity, std::move_only_function<void(uint8_t MessageSize) const> &&Callback, Stream &FromStream)
 	{
 		const bool HasInterrupts = SaveAndDisableInterrupts();
@@ -178,6 +215,13 @@ namespace Async_stream_message_queue
 		InterruptiveReturn(FromPort);
 	}
 	uint8_t Listen(std::move_only_function<void(std::dynarray<char> &&Message) const> &&Callback, Stream &FromStream)
+	{
+		const bool HasInterrupts = SaveAndDisableInterrupts();
+		const uint8_t FromPort = AllocatePort();
+		AddReceiveListener<false>(std::move(Callback), FromStream, FromPort);
+		InterruptiveReturn(FromPort);
+	}
+	uint8_t Listen(std::move_only_function<void(const std::vector<char> &Message) const> &&Callback, Stream &FromStream)
 	{
 		const bool HasInterrupts = SaveAndDisableInterrupts();
 		const uint8_t FromPort = AllocatePort();

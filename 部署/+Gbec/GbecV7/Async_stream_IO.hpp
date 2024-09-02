@@ -3,11 +3,6 @@
 #include <dynarray>
 #include <functional>
 #include <Arduino.h>
-namespace std
-{
-	template<typename T>
-	move_only_function(T &&)->move_only_function<std::remove_reference_t<T>>;
-}
 namespace Async_stream_IO
 {
 	enum class Exception
@@ -224,6 +219,15 @@ namespace Async_stream_IO
 		return Listen(_FunctionListener(std::move(Function), ToStream), ToStream);
 	}
 
-template<typename ReturnType,typename...ArgumentType>
-	Exception RemoteCall(uint8_t RemotePort, std::move_only_function);
+	template <typename ReturnType, typename... ArgumentType>
+	inline Exception RemoteCall(uint8_t RemotePort, std::move_only_function<void(ReturnType) const> &&Callback, Stream &ToStream, ArgumentType... Arguments)
+	{
+		//TODO: Serialize Arguments
+	}
+
+	template <typename ReturnType, typename... ArgumentType>
+	inline Exception RemoteCall(uint8_t RemotePort, std::move_only_function<void(ReturnType) const> &&Callback,  ArgumentType... Arguments)
+	{
+		return RemoteCall(RemotePort, std::move(Callback), Serial, Arguments...);
+	}
 }

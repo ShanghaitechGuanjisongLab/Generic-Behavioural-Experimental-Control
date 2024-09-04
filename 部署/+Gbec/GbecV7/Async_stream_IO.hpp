@@ -11,6 +11,7 @@ namespace Async_stream_IO
 		Port_occupied,
 		Port_idle,
 		Parameter_message_incomplete,
+		Corrupted_object_received,
 	};
 
 	/*一般应在loop中调用此方法。它将实际执行所有排队中的事务，包括发送消息和调用监听器。此方法执行过程中会允许中断，即使调用前处于不可中断状态。此方法返回之前会恢复调用前的中断状态。
@@ -176,10 +177,10 @@ namespace Async_stream_IO
 		Stream &ToStream;
 	};
 	template <typename T>
-	_FunctionListener(T &&, Stream &) -> _FunctionListener<typename std::_FunctionSignature<T>::type>;
+	_FunctionListener(const T &, Stream &) -> _FunctionListener<typename std::_FunctionSignature<T>::type>;
 
 	/* 将任意可调用对象绑定到指定本地端口上，当收到消息时调用。如果本地端口被占用，返回Port_occupied。
-	远程要调用此对象，需要将所有参数序列化拼接称一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。
+	远程要调用此对象，需要将所有参数序列化拼接称一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。如果消息字节数不足，将向远程调用方发送Parameter_message_incomplete。
 	*/
 	template <typename T>
 	inline Exception BindFunctionToPort(T &&Function, uint8_t Port, Stream &ToStream = Serial)
@@ -187,7 +188,7 @@ namespace Async_stream_IO
 		return Listen(_FunctionListener(std::move(Function), ToStream), Port, ToStream);
 	}
 	/* 将任意可调用对象绑定到流，当收到消息时调用。返回远程要调用此对象需要发送消息到的本地端口号。
-	远程要调用此对象，需要将所有参数序列化拼接称一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。
+	远程要调用此对象，需要将所有参数序列化拼接称一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。如果消息字节数不足，将向远程调用方发送Parameter_message_incomplete。
 	*/
 	template <typename T>
 	inline uint8_t BindFunctionToPort(T &&Function, Stream &ToStream = Serial)
@@ -195,15 +196,53 @@ namespace Async_stream_IO
 		return Listen(_FunctionListener(std::move(Function), ToStream), ToStream);
 	}
 
+	/* 向指定流ToStream远程调用指定RemotePort上的函数，传入参数Arguments。当远程函数返回时，调用Callback，提供调用结果Result和返回值ReturnValue。
+	如果远程端口未被监听，Callback将不会被调用。
+	如果Result为Corrupted_object_received，说明收到了意外的返回值。这可能是因为远程函数返回值的类型与预期不符，或者有其它远程对象向本地端口发送了垃圾信息。此次远程调用将被废弃。
+	如果Result为Parameter_message_incomplete，说明远程函数接收到的参数不完整。这可能是因为远程函数的参数类型与预期不符，或者有其它本地对象向远程端口发送了垃圾信息。此次远程调用将被废弃。
+	*/
 	template <typename ReturnType, typename... ArgumentType>
-	inline Exception RemoteCall(uint8_t RemotePort, std::move_only_function<void(ReturnType) const> &&Callback, Stream &ToStream, ArgumentType... Arguments)
+	void RemoteInvoke(uint8_t RemotePort, std::move_only_function<void(Exception Result, ReturnType ReturnValue) const> &&Callback, Stream &ToStream, ArgumentType... Arguments)
 	{
-		//TODO: Serialize Arguments
+		std::dynarray<char> MessageBuffer(sizeof(uint8_t) + _TypesSize<ArgumentType...>());
+		*reinterpret_cast<uint8_t *>(MessageBuffer.data()) = Receive([Callback = std::move(Callback)](const std::vector<char> &Message)
+																	 {
+			if (Message.size() >= sizeof(Exception) + sizeof(ReturnType))
+				Callback(*reinterpret_cast<const Exception *>(Message.data()), *reinterpret_cast<const ReturnType *>(Message.data() + sizeof(Exception)));
+			else
+				Callback(Exception::Corrupted_object_received, {}); }, ToStream);
+		char *Pointer = MessageBuffer.data() + sizeof(uint8_t);
+		char *_[] = {(*reinterpret_cast<ArgumentType *>(Pointer) = Arguments, Pointer += sizeof(Arguments))...};
+		Send(std::move(MessageBuffer), RemotePort, ToStream);
 	}
-
-	template <typename ReturnType, typename... ArgumentType>
-	inline Exception RemoteCall(uint8_t RemotePort, std::move_only_function<void(ReturnType) const> &&Callback,  ArgumentType... Arguments)
+	/* 向指定流ToStream远程调用指定RemotePort上的函数，传入参数Arguments。当远程函数返回时，调用Callback，提供调用结果Result和返回值ReturnValue。
+	如果远程端口未被监听，Callback将不会被调用。
+	如果Result为Corrupted_object_received，说明收到了意外的返回值。这可能是因为远程函数返回值的类型与预期不符，或者有其它远程对象向本地端口发送了垃圾信息。此次远程调用将被废弃。
+	如果Result为Parameter_message_incomplete，说明远程函数接收到的参数不完整。这可能是因为远程函数的参数类型与预期不符，或者有其它本地对象向远程端口发送了垃圾信息。此次远程调用将被废弃。
+	*/
+	template <typename CallbackType, typename... ArgumentType>
+	inline void RemoteInvoke(uint8_t RemotePort, const CallbackType &Callback, Stream &ToStream, ArgumentType... Arguments)
 	{
-		return RemoteCall(RemotePort, std::move(Callback), Serial, Arguments...);
+		RemoteInvoke(RemotePort, std::move_only_function<std::_FunctionSignature_t<CallbackType>>(Callback), ToStream, Arguments...);
+	}
+	/* 向Serial远程调用指定RemotePort上的函数，传入参数Arguments。当远程函数返回时，调用Callback，提供调用结果Result和返回值ReturnValue。
+	如果远程端口未被监听，Callback将不会被调用。
+	如果Result为Corrupted_object_received，说明收到了意外的返回值。这可能是因为远程函数返回值的类型与预期不符，或者有其它远程对象向本地端口发送了垃圾信息。此次远程调用将被废弃。
+	如果Result为Parameter_message_incomplete，说明远程函数接收到的参数不完整。这可能是因为远程函数的参数类型与预期不符，或者有其它本地对象向远程端口发送了垃圾信息。此次远程调用将被废弃。
+	*/
+	template <typename ReturnType, typename... ArgumentType>
+	inline void RemoteInvoke(uint8_t RemotePort, std::move_only_function<void(Exception Result, ReturnType ReturnValue) const> &&Callback, ArgumentType... Arguments)
+	{
+		RemoteInvoke(RemotePort, std::move(Callback), Serial, Arguments...);
+	}
+	/* 向Serial远程调用指定RemotePort上的函数，传入参数Arguments。当远程函数返回时，调用Callback，提供调用结果Result和返回值ReturnValue。
+	如果远程端口未被监听，Callback将不会被调用。
+	如果Result为Corrupted_object_received，说明收到了意外的返回值。这可能是因为远程函数返回值的类型与预期不符，或者有其它远程对象向本地端口发送了垃圾信息。此次远程调用将被废弃。
+	如果Result为Parameter_message_incomplete，说明远程函数接收到的参数不完整。这可能是因为远程函数的参数类型与预期不符，或者有其它本地对象向远程端口发送了垃圾信息。此次远程调用将被废弃。
+	*/
+	template <typename CallbackType, typename... ArgumentType>
+	inline void RemoteInvoke(uint8_t RemotePort, const CallbackType &Callback, ArgumentType... Arguments)
+	{
+		RemoteInvoke(RemotePort, std::move_only_function<std::_FunctionSignature_t<CallbackType>>(Callback), Serial, Arguments...);
 	}
 }

@@ -181,6 +181,7 @@ namespace Async_stream_IO
 
 	/* 将任意可调用对象绑定到指定本地端口上，当收到消息时调用。如果本地端口被占用，返回Port_occupied。
 	远程要调用此对象，需要将所有参数序列化拼接称一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。如果消息字节数不足，将向远程调用方发送Parameter_message_incomplete。
+	Function的参数和返回值必须是平凡类型。
 	*/
 	template <typename T>
 	inline Exception BindFunctionToPort(T &&Function, uint8_t Port, Stream &ToStream = Serial)
@@ -189,6 +190,7 @@ namespace Async_stream_IO
 	}
 	/* 将任意可调用对象绑定到流，当收到消息时调用。返回远程要调用此对象需要发送消息到的本地端口号。
 	远程要调用此对象，需要将所有参数序列化拼接称一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。如果消息字节数不足，将向远程调用方发送Parameter_message_incomplete。
+	Function的参数和返回值必须是平凡类型。
 	*/
 	template <typename T>
 	inline uint8_t BindFunctionToPort(T &&Function, Stream &ToStream = Serial)
@@ -200,6 +202,7 @@ namespace Async_stream_IO
 	如果远程端口未被监听，Callback将不会被调用。
 	如果Result为Corrupted_object_received，说明收到了意外的返回值。这可能是因为远程函数返回值的类型与预期不符，或者有其它远程对象向本地端口发送了垃圾信息。此次远程调用将被废弃。
 	如果Result为Parameter_message_incomplete，说明远程函数接收到的参数不完整。这可能是因为远程函数的参数类型与预期不符，或者有其它本地对象向远程端口发送了垃圾信息。此次远程调用将被废弃。
+	ReturnType和ArgumentType必须是平凡类型。
 	*/
 	template <typename ReturnType, typename... ArgumentType>
 	void RemoteInvoke(uint8_t RemotePort, std::move_only_function<void(Exception Result, ReturnType ReturnValue) const> &&Callback, Stream &ToStream, ArgumentType... Arguments)
@@ -219,6 +222,7 @@ namespace Async_stream_IO
 	如果远程端口未被监听，Callback将不会被调用。
 	如果Result为Corrupted_object_received，说明收到了意外的返回值。这可能是因为远程函数返回值的类型与预期不符，或者有其它远程对象向本地端口发送了垃圾信息。此次远程调用将被废弃。
 	如果Result为Parameter_message_incomplete，说明远程函数接收到的参数不完整。这可能是因为远程函数的参数类型与预期不符，或者有其它本地对象向远程端口发送了垃圾信息。此次远程调用将被废弃。
+	ReturnType和ArgumentType必须是平凡类型。
 	*/
 	template <typename CallbackType, typename... ArgumentType>
 	inline void RemoteInvoke(uint8_t RemotePort, const CallbackType &Callback, Stream &ToStream, ArgumentType... Arguments)
@@ -229,6 +233,7 @@ namespace Async_stream_IO
 	如果远程端口未被监听，Callback将不会被调用。
 	如果Result为Corrupted_object_received，说明收到了意外的返回值。这可能是因为远程函数返回值的类型与预期不符，或者有其它远程对象向本地端口发送了垃圾信息。此次远程调用将被废弃。
 	如果Result为Parameter_message_incomplete，说明远程函数接收到的参数不完整。这可能是因为远程函数的参数类型与预期不符，或者有其它本地对象向远程端口发送了垃圾信息。此次远程调用将被废弃。
+	ReturnType和ArgumentType必须是平凡类型。
 	*/
 	template <typename ReturnType, typename... ArgumentType>
 	inline void RemoteInvoke(uint8_t RemotePort, std::move_only_function<void(Exception Result, ReturnType ReturnValue) const> &&Callback, ArgumentType... Arguments)
@@ -239,6 +244,7 @@ namespace Async_stream_IO
 	如果远程端口未被监听，Callback将不会被调用。
 	如果Result为Corrupted_object_received，说明收到了意外的返回值。这可能是因为远程函数返回值的类型与预期不符，或者有其它远程对象向本地端口发送了垃圾信息。此次远程调用将被废弃。
 	如果Result为Parameter_message_incomplete，说明远程函数接收到的参数不完整。这可能是因为远程函数的参数类型与预期不符，或者有其它本地对象向远程端口发送了垃圾信息。此次远程调用将被废弃。
+	ReturnType和ArgumentType必须是平凡类型。
 	*/
 	template <typename CallbackType, typename... ArgumentType>
 	inline void RemoteInvoke(uint8_t RemotePort, const CallbackType &Callback, ArgumentType... Arguments)

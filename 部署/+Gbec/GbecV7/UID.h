@@ -2,9 +2,12 @@
 #include <stdint.h>
 enum class UID : uint8_t
 {
-	//固定的内置函数端口
-	Port_CreateProcess,
-	Port_ThrowException,
-	//异常代码
-	Exception_UndecipherableMessage
+	Port_PointerSize,
+	Port_ObjectCreate,
+	Port_ObjectPause,
+	Port_ObjectContinue,
+	Port_ObjectStop,
+	Port_ObjectGetInformation,
+	Port_ObjectDestroy,
+	Port_AllObjects,
 };

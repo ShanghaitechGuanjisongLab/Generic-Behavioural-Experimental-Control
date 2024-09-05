@@ -1,5 +1,4 @@
 #include "Objects.h"
-#include "Async_stream_IO.hpp"
 #include <set>
 template <typename T>
 inline void BindFunctionToPort(T &&Function, UID Port)
@@ -21,15 +20,53 @@ void setup()
 		Object*const NewObject=Iterator->second();
 		AllObjects.insert(NewObject);
 		return NewObject; }, UID::Port_ObjectCreate);
-	BindFunctionToPort([](Object*O)
-	{
-		if(AllObjects.con)
-	}, UID::Port_ObjectPause);
-	BindFunctionToPort(Object::Continue, UID::Port_ObjectContinue);
-	BindFunctionToPort(Object::Stop, UID::Port_ObjectStop);
-	BindFunctionToPort(Object::GetInformation, UID::Port_ObjectGetInformation);
-	BindFunctionToPort(Object::Destroy, UID::Port_ObjectDestroy);
-	BindFunctionToPort(Object::AllObjects, UID::Port_AllObjects);
+	BindFunctionToPort([](Object *O)
+					   {
+		if(AllObjects.contains(O))
+			return O->Pause();
+		else
+			return UID::Exception_InvalidObject; }, UID::Port_ObjectPause);
+	BindFunctionToPort([](Object *O)
+					   {
+		if(AllObjects.contains(O))
+			return O->Continue();
+		else
+			return UID::Exception_InvalidObject; }, UID::Port_ObjectContinue);
+	BindFunctionToPort([](Object *O)
+					   {
+		if(AllObjects.contains(O))
+			return O->Abort();
+		else
+			return UID::Exception_InvalidObject; }, UID::Port_ObjectAbort);
+	BindFunctionToPort([](Object *O, uint8_t ToPort)
+					   {
+		if(AllObjects.contains(O))
+		{
+			O->GetInformation(ToPort);
+			return UID::Exception_Success;
+		}
+		else
+			return UID::Exception_InvalidObject; }, UID::Port_ObjectGetInformation);
+	BindFunctionToPort([](Object *O)
+					   {
+		if(AllObjects.erase(O))
+		{
+			delete O;
+			return UID::Exception_Success;
+		}
+		else
+			return UID::Exception_InvalidObject; }, UID::Port_ObjectDestroy);
+	BindFunctionToPort([](uint8_t ToPort)
+					   {
+		std::dynarray<char> Message(sizeof(Object*)*AllObjects.size()+sizeof(uint8_t));
+		*reinterpret_cast<uint8_t*>(Message.data())=AllObjects.size();
+		std::copy(AllObjects.cbegin(),AllObjects.cend(),reinterpret_cast<Object**>(Message.data()+sizeof(uint8_t)));
+		Async_stream_IO::Send(std::move(Message),ToPort); },
+					   UID::Port_AllObjects);
+#ifdef ARDUINO_ARCH_AVR
+	Async_stream_IO::RemoteInvoke(static_cast<uint8_t>(UID::Port_RandomSeed), [](Async_stream_IO::Exception, uint32_t RandomSeed)
+								  { std::ArduinoUrng::seed(RandomSeed); });
+#endif
 }
 void loop()
 {

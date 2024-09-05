@@ -6,8 +6,17 @@ enum class UID : uint8_t
 	Port_ObjectCreate,
 	Port_ObjectPause,
 	Port_ObjectContinue,
-	Port_ObjectStop,
+	Port_ObjectAbort,
 	Port_ObjectGetInformation,
 	Port_ObjectDestroy,
 	Port_AllObjects,
+	Port_RandomSeed,
+
+	Exception_Success,
+	Exception_InvalidObject,
+	Exception_ObjectFinished,
+
+	Object_Placeholder,
+
+	Property_ObjectType,
 };

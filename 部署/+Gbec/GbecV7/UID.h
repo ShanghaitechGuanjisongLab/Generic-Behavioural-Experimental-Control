@@ -4,6 +4,8 @@ enum class UID : uint8_t
 {
 	Port_PointerSize,
 	Port_ObjectCreate,
+	Port_ObjectStart,
+	Port_ObjectRepeat,
 	Port_ObjectPause,
 	Port_ObjectContinue,
 	Port_ObjectAbort,
@@ -15,6 +17,7 @@ enum class UID : uint8_t
 	Exception_Success,
 	Exception_InvalidObject,
 	Exception_ObjectFinished,
+	Exception_MethodNotSupported,
 
 	Object_Placeholder,
 

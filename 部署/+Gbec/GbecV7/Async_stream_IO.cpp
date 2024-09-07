@@ -122,31 +122,37 @@ namespace Async_stream_IO
 						ToStream.write(reinterpret_cast<const char*>(Message),Length); });
 		InterruptiveReturn();
 	}
-	void Send(std::dynarray<char> &&Message, uint8_t ToPort, std::move_only_function<void() const> &&Callback, Stream &ToStream)
+	void Send(std::move_only_function<void(const void *&, uint8_t &) const> &&MessageGetter, uint8_t ToPort, std::move_only_function<void() const> &&Callback, Stream &ToStream)
 	{
 		const bool HasInterrupts = SaveAndDisableInterrupts();
 		StreamsInvolved.insert(&ToStream);
 		ToStream.setTimeout(-1);
-		TransactionQueue.push([Message = std::move(Message), &ToStream, ToPort, Callback = std::move(Callback)]()
+		TransactionQueue.push([MessageGetter = std::move(MessageGetter), &ToStream, ToPort, Callback = std::move(Callback)]()
 							  { 
 								ToStream.write(MagicByte);
-						ToStream.write(ToPort); 
-						ToStream.write(static_cast<uint8_t>(Message.size()));
-						ToStream.write(Message.data(),Message.size()); 
+						ToStream.write(ToPort);
+						const void *Message;
+						uint8_t Length;
+						MessageGetter(Message, Length);
+						ToStream.write(Length);
+						ToStream.write(reinterpret_cast<const char*>(Message),Length); 
 						Callback(); });
 		InterruptiveReturn();
 	}
-	void Send(std::dynarray<char> &&Message, uint8_t ToPort, Stream &ToStream)
+	void Send(std::move_only_function<void(const void *&, uint8_t &) const> &&MessageGetter, uint8_t ToPort, Stream &ToStream)
 	{
 		const bool HasInterrupts = SaveAndDisableInterrupts();
 		StreamsInvolved.insert(&ToStream);
 		ToStream.setTimeout(-1);
-		TransactionQueue.emplace([Message = std::move(Message), &ToStream, ToPort]()
+		TransactionQueue.emplace([MessageGetter = std::move(MessageGetter), &ToStream, ToPort]()
 								 { 
 								ToStream.write(MagicByte);
 						ToStream.write(ToPort); 
-						ToStream.write(static_cast<uint8_t>(Message.size()));
-						ToStream.write(Message.data(),Message.size()); });
+						const void *Message;
+						uint8_t Length;
+						MessageGetter(Message, Length);
+						ToStream.write(Length);
+						ToStream.write(reinterpret_cast<const char*>(Message),Length); });
 		InterruptiveReturn();
 	}
 
@@ -238,16 +244,17 @@ namespace Async_stream_IO
 
 	void ExecuteTransactionsInQueue()
 	{
-		const bool HasInterrupts = SaveAndDisableInterrupts();
+		static std::queue<std::move_only_function<void() const>> TransactionQueueSwap;
+		noInterrupts();
+		std::swap(TransactionQueue, TransactionQueueSwap); // 交换到局部，确保执行期间新产生的事务延迟到下一次执行
+		interrupts();
 		while (TransactionQueue.size())
 		{
-			const std::move_only_function<void() const> Transaction = std::move(TransactionQueue.front());
+			TransactionQueue.front()();
 			TransactionQueue.pop();
-			interrupts();
-			Transaction();
-			noInterrupts();
 		}
 		std::set<Stream *> StreamsSwap;
+		noInterrupts();
 		std::swap(StreamsInvolved, StreamsSwap); // 交换到局部，避免在遍历时被修改
 		interrupts();
 		for (Stream *STL : StreamsSwap)
@@ -283,6 +290,6 @@ namespace Async_stream_IO
 		for (Stream *STL : StreamsInvolved) // StreamsInvolved中大概率不会有新的Stream加入，因此这个循环很少真正运行
 			StreamsSwap.insert(STL);
 		std::swap(StreamsInvolved, StreamsSwap);
-		InterruptiveReturn();
+		interrupts();
 	}
 }

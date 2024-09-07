@@ -14,83 +14,77 @@ namespace Async_stream_IO
 		Corrupted_object_received,
 	};
 
-	/*一般应在loop中调用此方法。它将实际执行所有排队中的事务，包括发送消息和调用监听器。此方法执行过程中会允许中断，即使调用前处于不可中断状态。此方法返回之前会恢复调用前的中断状态。
-	不应在此方法执行期间存在任何可能会直接调用Stream读写操作的中断，可能破坏数据结构。只能使用此命名空间中的方法进行委托。
-	*/
+	/*一般应在loop中调用此方法。它将实际执行所有排队中的事务，包括发送消息和调用监听器。
+	所有被委托的Stream在此方法中实际被读写。那些Stream的所有操作都应当托管给此方法，用户不应再直接访问那些Stream，否则行为未定义。
+	用户在本库其它方法中提供的回调，将被此方法实际调用。调用这些函数时，中断将处于启用状态。即使在调用此方法前禁用了中断，也会被此方法重新启用。即使在回调中禁用了中断，也仅适用于本次回调，返回后又将重新启用中断。这是因为串口操作需要中断支持，因此必须启用中断。
+	 */
 	void ExecuteTransactionsInQueue();
 
-	/* 委托下次ExecuteTransactionsInQueue时，向指定目标发送指定长度的消息。调用方应确保那时Message指针仍然有效。消息发送后，调用Callback通知委托完成。
-	写串口操作依赖中断，在不允许中断的状态下使用Stream原生方法写出可能会永不返回，因此需要调用此方法委托延迟写出。反之则可以直接调用Stream提供的写出方法，无需委托。
-	如果在Callback中再次调用Send要非常小心，因为那个委托会直接在本次ExecuteTransactionsInQueue中执行而不等到下一次，然后再次调用Callback，如果那个Callback中又有Send，这样就存在形成无限循环的风险。
+	// 委托下次ExecuteTransactionsInQueue时，向远程ToPort发送指定Length的Message。调用方应确保那时Message指针仍然有效。
+	void Send(const void *Message, uint8_t Length, uint8_t ToPort, Stream &ToStream = Serial);
+	/* 委托下次ExecuteTransactionsInQueue时，向远程ToPort发送指定Length的Message。调用方应确保那时Message指针仍然有效。消息发送后，调用Callback通知委托完成。
+	如果在Callback中再次调用Send，那个委托不会直接在本次ExecuteTransactionsInQueue中执行，而是等到下一次。这通常用于实时监控并向远程不断发送某个状态值。
 	*/
 	void Send(const void *Message, uint8_t Length, uint8_t ToPort, std::move_only_function<void() const> &&Callback, Stream &ToStream = Serial);
-	/* 委托下次ExecuteTransactionsInQueue时，向指定目标发送指定长度的消息。调用方应确保那时Message指针仍然有效。
-	写串口操作依赖中断，在不允许中断的状态下使用Stream原生方法写出可能会永不返回，因此需要调用此方法委托延迟写出。反之则可以直接调用Stream提供的写出方法，无需委托。
-	*/
-	void Send(const void *Message, uint8_t Length, uint8_t ToPort, Stream &ToStream = Serial);
-	/* 委托下次ExecuteTransactionsInQueue时，向指定目标发送消息。Message的所有权将被转移到内部，调用方不应再使用它。消息发送后，可选调用Callback通知委托完成。
-	写串口操作依赖中断，在不允许中断的状态下使用Stream原生方法写出可能会永不返回，因此需要调用此方法委托延迟写出。反之则可以直接调用Stream提供的写出方法，无需委托。
-	如果在Callback中再次调用Send要非常小心，因为那个委托会直接在本次ExecuteTransactionsInQueue中执行而不等到下一次，然后再次调用Callback，如果那个Callback中又有Send，这样就存在形成无限循环的风险。
-	*/
-	void Send(std::dynarray<char> &&Message, uint8_t ToPort, std::move_only_function<void() const> &&Callback, Stream &ToStream = Serial);
-	/* 委托下次ExecuteTransactionsInQueue时，向指定目标发送消息。Message的所有权将被转移到内部，调用方不应再使用它。
-	写串口操作依赖中断，在不允许中断的状态下使用Stream原生方法写出可能会永不返回，因此需要调用此方法委托延迟写出。反之则可以直接调用Stream提供的写出方法，无需委托。
-	*/
-	void Send(std::dynarray<char> &&Message, uint8_t ToPort, Stream &ToStream = Serial);
+	/* 委托下次ExecuteTransactionsInQueue时，调用Callback，提供一个临时接口MessageSender，用于向远程发送消息。MessageSender在Callback返回后失效，因此调用方不应试图保存MessageSender。
+	调用方可以多次使用该接口，向远程ToPort发送任意Size的Message任意多条。但请注意，每次调用MessageSender，在逻辑上都将视为发送一条单独的消息，而不会合并成一条发送。如果需要合并成一条发送，请在Callback中自行实现消息合并逻辑。
+	此方法是最灵活的发送方法，可用于发送临时生成的消息，而不必将消息持久存储以等待发送。
+	 */
+	void Send(std::move_only_function<void(const std::move_only_function<void(const void *Message, uint8_t Size) const> &MessageSender) const> &&Callback, uint8_t ToPort, Stream &ToStream = Serial);
 
-	/*监听FromStream流的FromPort端口。当远程传来指向FromPort的消息时，那个消息将被拷贝到Message指针最多Capacity字节，并调用Callback，提供消息字节数。在那之前，调用方有义务维持Message指针有效。
+	/*监听FromStream流的本地FromPort端口。当远程传来指向FromPort的消息时，那个消息将被拷贝到Message指针最多Capacity字节，并调用Callback，提供消息字节数。在那之前，调用方有义务维持Message指针有效。
 	如果FromPort已被监听，那么新的监听将失败，返回Port_occupied。
-	此监听是一次性的。一旦收到消息，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
+	此监听是一次性的。一旦收到消息，在调用Callback之前，监听就会结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
 	如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，并提供存储该消息所需的字节数。
 	 */
 	Exception Receive(void *Message, uint8_t Capacity, std::move_only_function<void(uint8_t MessageSize) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial);
-	/*监听FromStream流的FromPort端口。当远程传来指向FromPort的消息时，调用Callback，消息内容Message所有权移交给调用方。
+	/*监听FromStream流的本地FromPort端口。当远程传来指向FromPort的消息时，调用Callback，提供一个临时接口MessageReader和MessageSize，用于读取消息内容。MessageReader在Callback返回后失效，因此调用方不应试图保存MessageReader。
+	可以多次调用MessageReader，将消息拆分读取到不同的内存位置。但在Callback返回之前，必须不多不少恰好读入全部MessageSize字节，否则行为未定义。
 	如果FromPort已被监听，那么新的监听将失败，返回Port_occupied。
-	此监听是一次性的。一旦收到消息，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
-	 */
-	Exception Receive(std::move_only_function<void(std::dynarray<char> &&Message) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial);
-	/*监听FromStream流的FromPort端口。当远程传来指向FromPort的消息时，调用Callback，提供消息内容Message。此Message引用的内容在Callback返回后不再可用，调用方不应保存该引用。
-	如果FromPort已被监听，那么新的监听将失败，返回Port_occupied。
-	此监听是一次性的。一旦收到消息，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
-	 */
-	Exception Receive(std::move_only_function<void(const std::vector<char> &Message) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial);
-	/*自动分配一个空闲端口返回，并监听FromStream流的那个端口。当远程传来指向该端口的消息时，那个消息将被拷贝到Message指针最多Capacity字节，并调用Callback，提供消息字节数。在那之前，调用方有义务维持Message指针有效。
-	此监听是一次性的。一旦收到消息，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
+	此监听是一次性的。一旦收到消息，在调用Callback之前，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
+	此方法是最灵活的接收方法，可以在消息实际到来时再进行任何处理，而不必提前分配接收缓冲区。
+	*/
+	Exception Receive(std::move_only_function<void(const std::move_only_function<void(void *Message, uint8_t Size) const> &MessageReader, uint8_t MessageSize) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial);
+	/*自动分配一个空闲本地端口返回，监听FromStream流的那个端口。当远程传来指向FromPort的消息时，那个消息将被拷贝到Message指针最多Capacity字节，并调用Callback，提供消息字节数。在那之前，调用方有义务维持Message指针有效。
+	此监听是一次性的。一旦收到消息，在调用Callback之前，监听就会结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
 	如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，并提供存储该消息所需的字节数。
 	 */
 	uint8_t Receive(void *Message, uint8_t Capacity, std::move_only_function<void(uint8_t MessageSize) const> &&Callback, Stream &FromStream = Serial);
-	/*自动分配一个空闲端口返回，并监听FromStream流的那个端口。当远程传来指向该端口的消息时，调用Callback，消息内容Message所有权移交给调用方。
-	此监听是一次性的。一旦收到消息，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
-	 */
-	uint8_t Receive(std::move_only_function<void(std::dynarray<char> &&Message) const> &&Callback, Stream &FromStream = Serial);
-	/*自动分配一个空闲端口返回，并监听FromStream流的那个端口。当远程传来指向该端口的消息时，调用Callback，提供消息内容Message。此Message引用的内容在Callback返回后不再可用，调用方不应保存该引用。
-	此监听是一次性的。一旦收到消息，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
-	 */
-	uint8_t Receive(std::move_only_function<void(const std::vector<char> &Message) const> &&Callback, Stream &FromStream = Serial);
+	/*自动分配一个空闲本地端口返回，监听FromStream流的那个端口。当远程传来指向FromPort的消息时，调用Callback，提供一个临时接口MessageReader和MessageSize，用于读取消息内容。MessageReader在Callback返回后失效，因此调用方不应试图保存MessageReader。
+	可以多次调用MessageReader，将消息拆分读取到不同的内存位置。但在Callback返回之前，必须不多不少恰好读入全部MessageSize字节，否则行为未定义。
+	此监听是一次性的。一旦收到消息，在调用Callback之前，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
+	此方法是最灵活的接收方法，可以在消息实际到来时再进行任何处理，而不必提前分配接收缓冲区。
+	*/
+	uint8_t Receive(std::move_only_function<void(const std::move_only_function<void(void *Message, uint8_t Size) const> &MessageReader, uint8_t MessageSize) const> &&Callback, Stream &FromStream = Serial);
 
-	/*持续监听FromStream流的FromPort端口。每当远程传来指向FromPort的消息时，那个消息都将被拷贝到Message指针最多Capacity字节，并调用Callback，提供消息字节数。在停止监听前，调用方有义务维持Message指针有效。
+	/*持续监听FromStream流的本地FromPort端口。当远程传来指向FromPort的消息时，那个消息将被拷贝到Message指针最多Capacity字节，并调用Callback，提供消息字节数。在那之前，调用方有义务维持Message指针有效。
 	如果FromPort已被监听，那么新的监听将失败，返回Port_occupied。
-	如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，并提供存储该消息所需的字节数，监听仍然继续。
+	此监听是持续性的。无论收到多少消息，端口都不会被释放。这意味着，只有在调用方主动ReleasePort时，监听才会结束。
+	如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，并提供存储该消息所需的字节数。
 	 */
 	Exception Listen(void *Message, uint8_t Capacity, std::move_only_function<void(uint8_t MessageSize) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial);
-	/*持续监听FromStream流的FromPort端口。每当远程传来指向FromPort的消息时，调用Callback，并提供消息内容Message。
+	/*持续监听FromStream流的本地FromPort端口。当远程传来指向FromPort的消息时，调用Callback，提供一个临时接口MessageReader和MessageSize，用于读取消息内容。MessageReader在Callback返回后失效，因此调用方不应试图保存MessageReader。
+	可以多次调用MessageReader，将消息拆分读取到不同的内存位置。但在Callback返回之前，必须不多不少恰好读入全部MessageSize字节，否则行为未定义。
 	如果FromPort已被监听，那么新的监听将失败，返回Port_occupied。
-	 */
-	Exception Listen(std::move_only_function<void(std::dynarray<char> &&Message) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial);
-	/*持续监听FromStream流的FromPort端口。每当远程传来指向FromPort的消息时，调用Callback，并提供消息内容Message。此Message引用的内容在Callback返回后不再可用，调用方不应保存该引用。
-	如果FromPort已被监听，那么新的监听将失败，返回Port_occupied。
-	 */
-	Exception Listen(std::move_only_function<void(const std::vector<char> &Message) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial);
-	/*自动分配一个空闲端口返回，并持续监听FromStream流的那个端口。每当远程传来指向该端口的消息时，那个消息都将被拷贝到Message指针最多Capacity字节，并调用Callback，提供消息字节数。在停止监听前，调用方有义务维持Message指针有效。
-	如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，并提供存储该消息所需的字节数，监听仍然继续。
+	此监听是持续性的。无论收到多少消息，端口都不会被释放。这意味着，只有在调用方主动ReleasePort时，监听才会结束。
+	此方法是最灵活的接收方法，可以在消息实际到来时再进行任何处理，而不必提前分配接收缓冲区。
+	*/
+	Exception Listen(std::move_only_function<void(const std::move_only_function<void(void *Message, uint8_t Size) const> &MessageReader, uint8_t MessageSize) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial);
+	/*自动分配一个空闲本地端口返回，持续监听FromStream流的那个端口。当远程传来指向FromPort的消息时，那个消息将被拷贝到Message指针最多Capacity字节，并调用Callback，提供消息字节数。在那之前，调用方有义务维持Message指针有效。
+	此监听是持续性的。无论收到多少消息，端口都不会被释放。这意味着，只有在调用方主动ReleasePort时，监听才会结束。
+	如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，并提供存储该消息所需的字节数。
 	 */
 	uint8_t Listen(void *Message, uint8_t Capacity, std::move_only_function<void(uint8_t MessageSize) const> &&Callback, Stream &FromStream = Serial);
-	// 自动分配一个空闲端口返回，并持续监听FromStream流的那个端口。每当远程传来指向该端口的消息时，调用Callback，并提供消息内容Message。
-	uint8_t Listen(std::move_only_function<void(std::dynarray<char> &&Message) const> &&Callback, Stream &FromStream = Serial);
-	// 自动分配一个空闲端口返回，并持续监听FromStream流的那个端口。每当远程传来指向该端口的消息时，调用Callback，并提供消息内容Message。此Message引用的内容在Callback返回后不再可用，调用方不应保存该引用。
-	uint8_t Listen(std::move_only_function<void(const std::vector<char> &Message) const> &&Callback, Stream &FromStream = Serial);
+	/*自动分配一个空闲本地端口返回，持续监听FromStream流的那个端口。当远程传来指向FromPort的消息时，调用Callback，提供一个临时接口MessageReader和MessageSize，用于读取消息内容。MessageReader在Callback返回后失效，因此调用方不应试图保存MessageReader。
+	可以多次调用MessageReader，将消息拆分读取到不同的内存位置。但在Callback返回之前，必须不多不少恰好读入全部MessageSize字节，否则行为未定义。
+	此监听是持续性的。无论收到多少消息，端口都不会被释放。这意味着，只有在调用方主动ReleasePort时，监听才会结束。
+	此方法是最灵活的接收方法，可以在消息实际到来时再进行任何处理，而不必提前分配接收缓冲区。
+	*/
+	uint8_t Listen(std::move_only_function<void(const std::move_only_function<void(void *Message, uint8_t Size) const> &MessageReader, uint8_t MessageSize) const> &&Callback, Stream &FromStream = Serial);
 
-	// 释放指定端口，取消任何Receive或Listen监听。如果端口未被监听，返回Port_idle。无论如何，此方法返回后即可以在被释放的端口上附加新的监听。
+	/*释放指定本地端口，取消任何Receive或Listen监听。如果端口未被监听，返回Port_idle。无论如何，此方法返回后即可以在被释放的本地端口上附加新的监听。
+	此方法不能用于取消挂起的Send委托。本库不支持取消Send委托。
+	 */
 	Exception ReleasePort(uint8_t Port);
 
 	template <size_t Plus, typename T>
@@ -157,7 +151,7 @@ namespace Async_stream_IO
 					ReturnType ReturnValue;
 				};
 #pragma pack(pop)
-				std::dynarray<char> ReturnMessageBuffer(sizeof(ReturnMessage));
+				std::array<char, sizeof(ReturnMessage)> ReturnMessageBuffer;
 				*reinterpret_cast<ReturnMessage *>(ReturnMessageBuffer.data()) = {_InvokeWithMemoryOffsets<typename _CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>::Invoke(Function, Message.data() + sizeof(uint8_t))};
 				Send(std::move(ReturnMessageBuffer), *reinterpret_cast<uint8_t *>(Message.data()), ToStream);
 			}

@@ -23,6 +23,18 @@ void setup()
 	BindFunctionToPort([](Object *O)
 					   {
 		if(AllObjects.contains(O))
+			return O->Start();
+		else
+			return UID::Exception_InvalidObject; }, UID::Port_ObjectStart);
+	BindFunctionToPort([](Object *O,uint16_t Times)
+					   {
+		if(AllObjects.contains(O))
+			return O->Repeat(Times);
+		else
+			return UID::Exception_InvalidObject; }, UID::Port_ObjectRepeat);
+	BindFunctionToPort([](Object *O)
+					   {
+		if(AllObjects.contains(O))
 			return O->Pause();
 		else
 			return UID::Exception_InvalidObject; }, UID::Port_ObjectPause);
@@ -42,7 +54,9 @@ void setup()
 					   {
 		if(AllObjects.contains(O))
 		{
-			O->GetInformation(ToPort);
+			std::vector<char>Information;
+			O->GetInformation(Information);
+			Async_stream_IO::Send(std::move(Information),ToPort);
 			return UID::Exception_Success;
 		}
 		else

@@ -5,9 +5,11 @@
 #include <random>
 struct Object
 {
-	virtual UID Pause() = 0;
-	virtual UID Continue() = 0;
-	virtual UID Abort() = 0;
+	virtual UID Start() = 0;
+	virtual UID Repeat(uint16_t Times) { return UID::Exception_MethodNotSupported; }
+	virtual UID Pause() { return UID::Exception_MethodNotSupported; }
+	virtual UID Continue() { return UID::Exception_MethodNotSupported; }
+	virtual UID Abort() { return UID::Exception_MethodNotSupported; }
 	virtual void GetInformation(std::vector<char> &) = 0;
 	virtual ~Object();
 };

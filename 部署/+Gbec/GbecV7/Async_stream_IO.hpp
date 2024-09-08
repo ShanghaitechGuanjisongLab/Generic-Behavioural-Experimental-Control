@@ -1,7 +1,6 @@
 #pragma once
 #include <Cpp_Standard_Library.h>
-#include <dynarray>
-#include <functional>
+#include <memory>
 #include <Arduino.h>
 namespace Async_stream_IO
 {
@@ -10,7 +9,7 @@ namespace Async_stream_IO
 		Success,
 		Port_occupied,
 		Port_idle,
-		Parameter_message_incomplete,
+		Argument_message_incomplete,
 		Corrupted_object_received,
 	};
 
@@ -92,7 +91,7 @@ namespace Async_stream_IO
 	template <size_t Plus, size_t... Values>
 	struct _PlusAndPrepend<Plus, std::index_sequence<Values...>>
 	{
-		using type = std::index_sequence<Plus, Plus + Values...>;
+		using type = std::index_sequence<0, Plus + Values...>;
 	};
 
 	template <typename T>
@@ -102,10 +101,10 @@ namespace Async_stream_IO
 	{
 		using type = typename _PlusAndPrepend<First, typename _CumSum<std::index_sequence<Rest...>>::type>::type;
 	};
-	template <size_t Only>
-	struct _CumSum<std::index_sequence<Only>>
+	template <>
+	struct _CumSum<std::index_sequence<>>
 	{
-		using type = std::index_sequence<Only>;
+		using type = std::index_sequence<>;
 	};
 
 	template <typename Offsets>
@@ -114,7 +113,7 @@ namespace Async_stream_IO
 	struct _InvokeWithMemoryOffsets<std::index_sequence<Offsets...>>
 	{
 		template <typename ReturnType, typename... ArgumentType>
-		static ReturnType Invoke(const std::move_only_function<ReturnType(ArgumentType...) const> &Function, const char *Memory)
+		static ReturnType Invoke(const std::move_only_function<ReturnType(ArgumentType...) const> &Function, const uint8_t *Memory)
 		{
 			return Function(*reinterpret_cast<const ArgumentType *>(Memory + Offsets)...);
 		}
@@ -137,33 +136,32 @@ namespace Async_stream_IO
 	struct _FunctionListener<ReturnType(ArgumentType...)>
 	{
 		_FunctionListener(std::move_only_function<ReturnType(ArgumentType...) const> &&Function, Stream &ToStream) : Function(std::move(Function)), ToStream(ToStream) {}
-		void operator()(const std::vector<char> &Message)
+		void operator()(const std::move_only_function<void(void *Message, uint8_t Size) const> &MessageReader, uint8_t MessageSize)
 		{
-			if (Message.size() >= _TypesSize<ArgumentType...>() + sizeof(uint8_t))
+			const std::unique_ptr<uint8_t[]> Arguments = std::make_unique_for_overwrite<uint8_t[]>(MessageSize);
+			MessageReader(Arguments.get(), MessageSize);
+			constexpr uint8_t ArgumentSize = _TypesSize<ArgumentType...>() + sizeof(uint8_t);
+			if (MessageSize == ArgumentSize)
 			{
 #pragma pack(push, 1)
 				struct ReturnMessage
 				{
-					constexpr ReturnMessage(ReturnType ReturnValue) : ReturnValue(ReturnValue) {}
-
-				protected:
 					const Exception Result = Exception::Success;
-					ReturnType ReturnValue;
+					const ReturnType ReturnValue;
+					void operator()(const std::move_only_function<void(const void *Message, uint8_t Size) const> &MessageSender) const
+					{
+						MessageSender(this, sizeof(*this));
+					}
+					constexpr ReturnMessage(ReturnType ReturnValue) : ReturnValue(std::move(ReturnValue)) {}
 				};
 #pragma pack(pop)
-				std::array<char, sizeof(ReturnMessage)> ReturnMessageBuffer;
-				*reinterpret_cast<ReturnMessage *>(ReturnMessageBuffer.data()) = {_InvokeWithMemoryOffsets<typename _CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>::Invoke(Function, Message.data() + sizeof(uint8_t))};
-				Send(std::move(ReturnMessageBuffer), *reinterpret_cast<uint8_t *>(Message.data()), ToStream);
+				Send(ReturnMessage{_InvokeWithMemoryOffsets<typename _CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>::Invoke<ReturnType,ArgumentType...>(Function, Arguments.get() + 1)}, Arguments[0], ToStream);
 			}
 			else
 			{
-				static constexpr Exception Parameter_message_incomplete = Exception::Parameter_message_incomplete;
-				Send(&Parameter_message_incomplete, sizeof(Parameter_message_incomplete), *reinterpret_cast<uint8_t *>(Message.data()), ToStream);
+				static constexpr Exception Argument_message_incomplete = Exception::Argument_message_incomplete;
+				Send(&Argument_message_incomplete, sizeof(Exception), *Arguments.data(), ToStream);
 			}
-		}
-		operator std::move_only_function<void(const std::vector<char> &) const>() &&
-		{
-			return std::move_only_function<void(const std::vector<char> &) const>(std::move(*this));
 		}
 
 	protected:
@@ -201,7 +199,7 @@ namespace Async_stream_IO
 	template <typename ReturnType, typename... ArgumentType>
 	void RemoteInvoke(uint8_t RemotePort, std::move_only_function<void(Exception Result, ReturnType ReturnValue) const> &&Callback, Stream &ToStream, ArgumentType... Arguments)
 	{
-		std::dynarray<char> MessageBuffer(sizeof(uint8_t) + _TypesSize<ArgumentType...>());
+		std::array<char> MessageBuffer(sizeof(uint8_t) + _TypesSize<ArgumentType...>());
 		*reinterpret_cast<uint8_t *>(MessageBuffer.data()) = Receive([Callback = std::move(Callback)](const std::vector<char> &Message)
 																	 {
 			if (Message.size() >= sizeof(Exception) + sizeof(ReturnType))

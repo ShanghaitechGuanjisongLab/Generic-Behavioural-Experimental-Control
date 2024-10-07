@@ -16,12 +16,10 @@
                 "ARDUINO_ARCH_AVR=1",
                 "VSCODE"
             ],
-            "forcedInclude": [
-                "Arduino.h"
-            ],
             "compilerPath": "${LOCALAPPDATA}/Arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/avr-g++.exe",
             "cStandard": "c11",
-            "cppStandard": "c++17"
+            "cppStandard": "c++17",
+            "intelliSenseMode": "gcc-x86"
         },
         {
             "name": "sam",

@@ -5,6 +5,7 @@ enum class UID : uint8_t
 	Port_PointerSize,
 	Port_ObjectCreate,
 	Port_ObjectStart,
+	Port_ObjectRestore,
 	Port_ObjectRepeat,
 	Port_ObjectPause,
 	Port_ObjectContinue,
@@ -16,10 +17,27 @@ enum class UID : uint8_t
 
 	Exception_Success,
 	Exception_InvalidObject,
-	Exception_ObjectFinished,
 	Exception_MethodNotSupported,
+	Exception_StillRunning,
+	Exception_ObjectNotIdle,
 
-	Object_Placeholder,
+	Property_TemplateID,
+	Property_Subobjects,
 
-	Property_ObjectType,
+	TemplateID_Sequential,
+
+	Type_Bool,
+	Type_UInt8,
+	Type_UInt16,
+	Type_UID,
+	Type_Array,
+	Type_Cell,
+	Type_Struct,
+
+	State_ObjectRunning,
+	State_ObjectIdle,
+
+	Progress_Exception,
+	Progress_Custom,
+	Progress_Trial,
 };

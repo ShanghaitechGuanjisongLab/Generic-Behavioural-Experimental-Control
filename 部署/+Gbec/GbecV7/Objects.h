@@ -269,6 +269,28 @@ struct Sequential : ChildObject
 		Running = Result == UID::Exception_StillRunning;
 		return Result;
 	}
+	UID Repeat(uint16_t Times) override
+	{
+		return UID::Exception_MethodNotSupported;
+	}
+	UID Pause() override
+	{
+		return Running ? SubObjects[Progress]->Pause() : UID::Exception_ObjectNotRunning;
+	}
+	UID Continue() override
+	{
+		return Running ? SubObjects[Progress]->Continue() : UID::Exception_ObjectNotPaused;
+	}
+	UID Abort() override
+	{
+		if (Running)
+		{
+			Running = false;
+			return SubObjects[Progress]->Abort();
+		}
+		else
+			return UID::Exception_ObjectNotRunning;
+	}
 	virtual ~Sequential()
 	{
 		for (Object *O : SubObjects)
@@ -325,4 +347,108 @@ protected:
 			}
 		return UID::Exception_Success;
 	}
+	template <uint8_t... Times>
+	struct WithRepeat : ChildObject
+	{
+		WithRepeat(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel), SubObjects{new ObjectType(ProgressPort, this, StackLevel + 1)...} {}
+		UID Start() override
+		{
+			if (Running)
+				return UID::Exception_ObjectNotIdle;
+			Progress = 0;
+			const UID Result = Iterate();
+			Running = Result == UID::Exception_StillRunning;
+			return Result;
+		}
+		UID Restore(std::span<const char> ProgressInfo) override
+		{
+			if (Running)
+				return UID::Exception_ObjectNotIdle;
+			Progress = *reinterpret_cast<const uint8_t *>(ProgressInfo.data());
+			if (Progress >= sizeof...(ObjectType))
+				return UID::Exception_Success;
+			ProgressInfo = ProgressInfo.subspan(sizeof(Progress));
+			const UID Result = ProgressInfo.empty() ? Iterate() : SubObjects[Progress]->Restore(ProgressInfo);
+			Running = Result == UID::Exception_StillRunning;
+			return Result;
+		}
+		UID Repeat(uint16_t Times) override
+		{
+			return UID::Exception_MethodNotSupported;
+		}
+		UID Pause() override
+		{
+			return Running ? SubObjects[Progress]->Pause() : UID::Exception_ObjectNotRunning;
+		}
+		UID Continue() override
+		{
+			return Running ? SubObjects[Progress]->Continue() : UID::Exception_ObjectNotPaused;
+		}
+		UID Abort() override
+		{
+			if (Running)
+			{
+				Running = false;
+				return SubObjects[Progress]->Abort();
+			}
+			else
+				return UID::Exception_ObjectNotRunning;
+		}
+		virtual ~Sequential()
+		{
+			for (Object *O : SubObjects)
+				delete O;
+		}
+		OverrideGetInformation;
+
+	protected:
+		uint8_t Progress;
+		Object *SubObjects[sizeof...(ObjectType)];
+		static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, UID::TemplateID_Sequential, UID::Property_Subobjects, InfoCell(ObjectType::Information...));
+		bool Running = false;
+		void FinishCallback(std::unique_ptr<CallbackMessage> ChildResult) override
+		{
+			if (ChildResult->Exception == UID::Exception_Success)
+			{
+				Progress++;
+				if (StackLevel < UINT8_MAX)
+					Async_stream_IO::Send(CustomProgress(StackLevel, Progress), ProgressPort);
+				switch (const UID Result = Iterate())
+				{
+				case UID::Exception_StillRunning:
+					Running = true;
+					break;
+				case UID::Exception_Success:
+					Running = false;
+					Parent->FinishCallback(std::move(ChildResult));
+					break;
+				default:
+					Running = false;
+					ChildResult->Exception = Result;
+					ChildResult->StackTrace = {{StackLevel, UID::TemplateID_Sequential, Progress}};
+					Parent->FinishCallback(std::move(ChildResult));
+				}
+			}
+			else
+			{
+				Running = false;
+				ChildResult->StackTrace.push_back({StackLevel, UID::TemplateID_Sequential, Progress});
+				Parent->FinishCallback(std::move(ChildResult));
+			}
+		}
+		UID Iterate()
+		{
+			while (Progress < sizeof...(ObjectType))
+				switch (const UID Result = SubObjects[Progress]->Start();)
+				{
+				default:
+					return Result;
+				case UID::Exception_StillRunning:
+					return UID::Exception_StillRunning;
+				case UID::Exception_Success:
+					Progress++;
+				}
+			return UID::Exception_Success;
+		}
+	};
 };

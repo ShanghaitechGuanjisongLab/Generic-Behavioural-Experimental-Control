@@ -20,6 +20,8 @@ enum class UID : uint8_t
 	Exception_MethodNotSupported,
 	Exception_StillRunning,
 	Exception_ObjectNotIdle,
+	Exception_ObjectNotRunning,
+	Exception_ObjectNotPaused,
 
 	Property_TemplateID,
 	Property_Subobjects,
@@ -35,6 +37,7 @@ enum class UID : uint8_t
 	Type_Struct,
 
 	State_ObjectRunning,
+	State_ObjectPaused,
 	State_ObjectIdle,
 
 	Progress_Exception,

@@ -5,6 +5,9 @@
 #include <random>
 #include <dynarray>
 #include <span>
+
+// 进度与异常回调
+
 #pragma pack(push, 1)
 struct StackFrame
 {
@@ -32,6 +35,9 @@ struct CallbackMessage
 	UID Exception;
 	std::vector<StackFrame> StackTrace;
 };
+
+// 对象基础
+
 // 所有派生类应当支持无参构造，以便在ObjectCreators中注册。
 struct Object
 {
@@ -132,6 +138,9 @@ inline RootObject *New(uint8_t ProgressPort)
 	Root->Child = new ObjectType(ProgressPort, Root, 0);
 	return Root;
 }
+
+// 信息架构
+
 #define OverrideGetInformation                                         \
 	UID GetInformation(std::dynarray<char> &Container) override        \
 	{                                                                  \
@@ -243,6 +252,32 @@ struct InfoStruct<UID, T, Ts...>
 template <typename... Ts>
 InfoStruct(UID, Ts...) -> InfoStruct<UID, Ts...>;
 #pragma pack(pop)
+
+// 编译期计算
+
+template <uint8_t... V>
+struct SumHelper;
+
+template <uint8_t First, uint8_t... Rest>
+struct SumHelper<First, Rest...>
+{
+	static constexpr uint8_t value = First + SumHelper<Rest...>::value;
+};
+
+template <>
+struct SumHelper<>
+{
+	static constexpr uint8_t value = 0;
+};
+
+template <uint8_t... V>
+constexpr uint8_t Sum()
+{
+	return SumHelper<V...>::value;
+}
+
+// 常用对象模板
+
 // 顺序依次执行所有的Object
 template <typename... ObjectType>
 struct Sequential : ChildObject
@@ -350,7 +385,9 @@ protected:
 	template <uint8_t... Times>
 	struct WithRepeat : ChildObject
 	{
-		WithRepeat(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel), SubObjects{new ObjectType(ProgressPort, this, StackLevel + 1)...} {}
+		WithRepeat(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel)
+		{
+		}
 		UID Start() override
 		{
 			if (Running)

@@ -27,6 +27,7 @@ enum class UID : uint8_t
 	Property_Subobjects,
 
 	TemplateID_Sequential,
+	TemplateID_SequentialRepeat,
 
 	Type_Bool,
 	Type_UInt8,

@@ -248,7 +248,7 @@ struct InfoStruct<UID, T, Ts...>
 	constexpr InfoStruct(UID Name, T Value, Ts... NameValues)
 		: Fields(InfoFields<UID, T, Ts...>(Name, Value, NameValues...)) {}
 };
-// 只有主模板能推断，特化模板必须加推断向导
+// 只有主模板能推断，特化模板必须加推断向导（或者直接限定模板参数不能为空）
 template <typename... Ts>
 InfoStruct(UID, Ts...) -> InfoStruct<UID, Ts...>;
 #pragma pack(pop)
@@ -382,11 +382,14 @@ protected:
 			}
 		return UID::Exception_Success;
 	}
-	template <uint8_t... Times>
+	template <uint16_t... Times>
 	struct WithRepeat : ChildObject
 	{
 		WithRepeat(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel)
 		{
+			const Object **Pointer = SubObjects;
+			const uint8_t ChildStackLevel = StackLevel + 1;
+			const Object *const *const _[] = {Pointer = std::fill_n(Pointer, Times, new ObjectType(ProgressPort, this, ChildStackLevel))...};
 		}
 		UID Start() override
 		{
@@ -401,7 +404,7 @@ protected:
 		{
 			if (Running)
 				return UID::Exception_ObjectNotIdle;
-			Progress = *reinterpret_cast<const uint8_t *>(ProgressInfo.data());
+			Progress = *reinterpret_cast<const uint16_t *>(ProgressInfo.data());
 			if (Progress >= sizeof...(ObjectType))
 				return UID::Exception_Success;
 			ProgressInfo = ProgressInfo.subspan(sizeof(Progress));
@@ -431,17 +434,17 @@ protected:
 			else
 				return UID::Exception_ObjectNotRunning;
 		}
-		virtual ~Sequential()
+		virtual ~WithRepeat()
 		{
-			for (Object *O : SubObjects)
-				delete O;
+			Object *const *Pointer = SubObjects;
+			const Object *const *const _[] = {(delete *Pointer, Pointer += Times)...};
 		}
 		OverrideGetInformation;
 
 	protected:
-		uint8_t Progress;
-		Object *SubObjects[sizeof...(ObjectType)];
-		static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, UID::TemplateID_Sequential, UID::Property_Subobjects, InfoCell(ObjectType::Information...));
+		uint16_t Progress;
+		Object *SubObjects[Sum<Times...>()];
+		static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, UID::TemplateID_SequentialRepeat, UID::Property_Subobjects, InfoCell(ObjectType::Information...));
 		bool Running = false;
 		void FinishCallback(std::unique_ptr<CallbackMessage> ChildResult) override
 		{

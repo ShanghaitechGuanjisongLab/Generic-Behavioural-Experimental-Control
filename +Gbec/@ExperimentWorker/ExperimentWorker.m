@@ -377,9 +377,12 @@ classdef ExperimentWorker<handle
 			SP=obj.oSavePath;
 		end
 		function set.SavePath(obj,SP)
-			if isfile(SP)
+			FileExists=isfile(SP);
+			if FileExists
 				if isempty(which('UniExp.Version'))
-					if questdlg('未找到统一实验分析作图工具箱，无法合并已存在的文件','是否覆盖？','是','否','否')=="否"
+					if questdlg('未找到统一实验分析作图工具箱，无法合并已存在的文件','是否覆盖？','是','否','否')=="是"
+						obj.MergeData=missing;
+					else
 						obj.FeedDog;
 						Gbec.Exception.Failure_to_merge_existing_dataset.Throw;
 					end
@@ -387,29 +390,30 @@ classdef ExperimentWorker<handle
 					obj.LogPrint("目标文件已存在，将尝试合并");
 					try
 						obj.MergeData=UniExp.DataSet(SP);
-						[Directory,Filename]=fileparts(SP);
-						movefile(SP,fullfile(Directory,Filename+".将合并.mat"));
 					catch ME
-						if questdlg('合并失败，是否要覆盖文件？',ME.identifier,'是','否','否')=="否"
+						if questdlg('合并失败，是否要覆盖文件？',ME.identifier,'是','否','否')=="是"
+							obj.MergeData=missing;
+						else
 							obj.FeedDog;
 							Gbec.Exception.Failure_to_merge_existing_dataset.Throw;
-						else
-							obj.MergeData=missing;
 						end
 					end
 				end
 			else
 				obj.MergeData=missing;
 			end
-			Fid=fopen(SP,'w');
+			Fid=fopen(SP,'a');
 			if Fid==-1
 				mkdir(fileparts(SP));
-				Fid=fopen(SP,'w');
+				Fid=fopen(SP,'a');
 			end
 			if Fid==-1
 				Gbec.Exception.No_right_to_write_SavePath.Throw;
 			end
 			fclose(Fid);
+			if ~FileExists
+				delete(SP);%如不删除，下次修改SavePath时会出错
+			end
 			obj.oSavePath=SP;
 		end
 	end

@@ -22,6 +22,7 @@ enum class UID : uint8_t
 	Exception_ObjectNotIdle,
 	Exception_ObjectNotRunning,
 	Exception_ObjectNotPaused,
+	Exception_ProgressObjectNotFound,
 
 	Property_TemplateID,
 	Property_Subobjects,

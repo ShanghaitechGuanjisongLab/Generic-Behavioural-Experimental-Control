@@ -35,6 +35,8 @@ classdef ExperimentWorker<handle
 		%必须安装统一实验分析作图才能使用此属性。会话后，将调用UniExp.TrialwiseEventPlot，将本会话的事件记录表作为第一个参数，此属性值元胞展开作为后续参数。
 		%See also UniExp.TrialwiseEventPlot
 		TepArguments
+		%在输出日志中要前缀的名称
+		LogName
 	end
 	properties(Access=protected)
 		Serial internal.Serialport
@@ -61,7 +63,7 @@ classdef ExperimentWorker<handle
 		function AbortAndSave(obj)
 			%此方法将负责启用看门狗
 			obj.EventRecorder.LogEvent(Gbec.UID.State_SessionAborted);
-			obj.ComPrint('会话已放弃');
+			obj.LogPrint('会话已放弃');
 			if ~isempty(obj.VideoInput)
 				stop(obj.VideoInput);
 			end
@@ -151,13 +153,13 @@ classdef ExperimentWorker<handle
 			else
 				SR=1;
 			end
-			obj.ComPrint('%s：%u\n',Gbec.LogTranslate(Signal),SR);
+			obj.LogPrint('%s：%u\n',Gbec.LogTranslate(Signal),SR);
 			SignalRecord(Signal)=SR;
 		end
 		function HandleSignal(obj,Signal)
 			if isempty(obj.SignalHandler)
 				% Gbec.Exception.Unexpected_response_from_Arduino.Throw;
-				obj.ComPrint(Gbec.UID(Signal));
+				obj.LogPrint(Gbec.UID(Signal));
 			else
 				obj.SignalHandler(Signal);
 			end
@@ -178,13 +180,13 @@ classdef ExperimentWorker<handle
 			end
 		end
 		function ReleaseSerial(obj,~,~)
-			%必须先发消息，因为ComPrint依赖Serial
-			obj.ComPrint('释放串口');
+			%必须先发消息，因为LogPrint依赖Serial
+			obj.LogPrint('释放串口');
 			%此函数不能作为文件内私有函数，因为被文件外函数调用
 			delete(obj.Serial);
 		end
-		function ComPrint(obj,Formatter,varargin)
-			fprintf("\n%s："+Formatter,obj.Serial.Port,varargin{:});
+		function LogPrint(obj,Formatter,varargin)
+			fprintf("\n%s："+Formatter,obj.LogName,varargin{:});
 		end
 	end
 	methods(Static)
@@ -225,13 +227,13 @@ classdef ExperimentWorker<handle
 				Signal=obj.WaitForSignal;
 				switch Signal
 					case UID.Signal_TestStopped
-						obj.ComPrint('测试结束');
+						obj.LogPrint('测试结束');
 						obj.Serial.configureCallback('off');
 						obj.SignalHandler=function_handle.empty;
 						obj.WatchDog.start;
 						break;
 					case UID.State_SessionRunning
-						obj.ComPrint('测试结束');
+						obj.LogPrint('测试结束');
 						break;
 					case UID.Signal_NoLastTest
 						Gbec.Exception.Last_test_not_running_or_unstoppable.Throw;
@@ -258,7 +260,7 @@ classdef ExperimentWorker<handle
 						Exception.No_sessions_are_running.Throw;
 					case UID.State_SessionPaused
 						obj.EventRecorder.LogEvent(UID.State_SessionPaused);
-						obj.ComPrint('会话暂停');
+						obj.LogPrint('会话暂停');
 						obj.Serial.configureCallback('off');
 						obj.SignalHandler=function_handle.empty;
 						obj.State=UID.State_SessionPaused;
@@ -369,7 +371,7 @@ classdef ExperimentWorker<handle
 			%观察会话当前的运行状态
 			obj.FeedDog;
 			EW.ApiCall(Gbec.UID.API_Peek);
-			obj.ComPrint(Gbec.UID(EW.WaitForSignal));
+			obj.LogPrint(Gbec.UID(EW.WaitForSignal));
 		end
 		function SP=get.SavePath(obj)
 			SP=obj.oSavePath;

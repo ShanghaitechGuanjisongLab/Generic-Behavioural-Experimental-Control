@@ -18,12 +18,12 @@ switch Signal
 		if TrialMod==1&&TrialIndex>1
 			cprintf([1,0,1],'\n%s：已过%u回合，请检查实验状态',TrialIndex-1,obj.Serial.Port);
 		end
-		obj.ComPrint('%s：回合%u-%s：',obj.Serial.Port,TrialIndex,TrialUID);
+		obj.LogPrint('%s：回合%u-%s：',obj.Serial.Port,TrialIndex,TrialUID);
 	case UID.State_SessionFinished
 		if ~isempty(obj.VideoInput)
 			stop(obj.VideoInput);
 		end
-		obj.ComPrint('\n会话完成\n');
+		obj.LogPrint('\n会话完成\n');
 
 		obj.Serial.configureCallback('off');
 		warning off MATLAB:callback:DynamicPropertyEventError
@@ -31,7 +31,7 @@ switch Signal
 		if obj.SaveFile
 			obj.SaveInformation;
 		else
-			obj.ComPrint(" 数据未保存");
+			obj.LogPrint(" 数据未保存");
 		end
 
 		obj.State=UID.State_SessionFinished;
@@ -58,7 +58,7 @@ switch Signal
 		end
 		obj.TimeOffset=Time-seconds(toc(obj.TIC));
 		obj.PreciseRecorder.PushBack(struct(Time=Time,Event=Event));
-		obj.ComPrint('%s（%s）',Gbec.LogTranslate(Event),Time);
+		obj.LogPrint('%s（%s）',Gbec.LogTranslate(Event),Time);
 	otherwise
 		%为了与TrialUID保持一致，这里也记录UID而不是字符串
 		obj.EventRecorder.LogEvent(UID(Signal));

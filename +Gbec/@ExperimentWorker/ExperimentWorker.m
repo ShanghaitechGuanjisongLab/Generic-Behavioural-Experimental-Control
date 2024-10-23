@@ -56,7 +56,8 @@ classdef ExperimentWorker<handle
 	properties(Dependent)
 		%设置多少秒无操作后自动关闭串口，默认3分钟
 		ShutdownSerialAfter
-		% 如果那个路径已经有数据库文件，将尝试合并，然后为多天的行为做学习曲线图。
+		%数据保存路径
+		% 如果那个路径已经有数据库文件，将尝试合并，然后为多天的行为做学习曲线图。文件存在性和可写性将会在设置该属性时立即检查，如果失败则此属性值不变。
 		SavePath(1,1)string
 	end
 	methods(Access=protected)

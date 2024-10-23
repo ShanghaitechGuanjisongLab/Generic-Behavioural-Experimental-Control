@@ -290,7 +290,7 @@ classdef ExperimentWorker<handle
 					catch ME
 						if ME.identifier=="MATLAB:class:InvalidHandle"
 							obj.State=UID.State_SessionInvalid;
-							Gbec.Exception.Serialport_disconnected.Throw(obj.Serial.Port+'：串口已断开，请重新初始化');
+							Gbec.Exception.Serialport_disconnected.Throw(obj.LogName+'：串口已断开，请重新初始化');
 						end
 					end
 					while true
@@ -384,7 +384,7 @@ classdef ExperimentWorker<handle
 						Gbec.Exception.Failure_to_merge_existing_dataset.Throw;
 					end
 				else
-					fprintf("%s：目标文件已存在，将尝试合并",obj.Serial.Port);
+					obj.LogPrint("目标文件已存在，将尝试合并");
 					try
 						obj.MergeData=UniExp.DataSet(SP);
 						[Directory,Filename]=fileparts(SP);

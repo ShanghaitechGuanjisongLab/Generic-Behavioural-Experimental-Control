@@ -16,9 +16,13 @@ switch Signal
 			end
 		end
 		if TrialMod==1&&TrialIndex>1
-			cprintf([1,0,1],'\n%s：已过%u回合，请检查实验状态',TrialIndex-1,obj.Serial.Port);
+			cprintf([1,0,1],'\n%s：已过%u回合，请检查实验状态',TrialIndex-1,obj.LogName);
 		end
-		obj.LogPrint('%s：回合%u-%s：',obj.Serial.Port,TrialIndex,TrialUID);
+		if feature('SuppressCommandLineOutput')
+			timer(StartDelay=0.1,TimerFcn=@(~,~)obj.LogPrint('回合%u-%s：',TrialIndex,TrialUID)).start;
+		else
+			obj.LogPrint('回合%u-%s：',TrialIndex,TrialUID);
+		end
 	case UID.State_SessionFinished
 		if ~isempty(obj.VideoInput)
 			stop(obj.VideoInput);

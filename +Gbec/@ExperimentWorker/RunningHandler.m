@@ -16,14 +16,14 @@ switch Signal
 			end
 		end
 		if TrialMod==1&&TrialIndex>1
-			cprintf([1,0,1],'\n已过%u回合，请检查实验状态',TrialIndex-1);
+			cprintf([1,0,1],'\n%s：已过%u回合，请检查实验状态',TrialIndex-1,obj.Serial.Port);
 		end
-		obj.FprintfInCommandWindow('\n回合%u-%s：',TrialIndex,TrialUID);
+		obj.ComPrint('%s：回合%u-%s：',obj.Serial.Port,TrialIndex,TrialUID);
 	case UID.State_SessionFinished
 		if ~isempty(obj.VideoInput)
 			stop(obj.VideoInput);
 		end
-		obj.FprintfInCommandWindow('\n会话完成\n');
+		obj.ComPrint('\n会话完成\n');
 
 		obj.Serial.configureCallback('off');
 		warning off MATLAB:callback:DynamicPropertyEventError
@@ -31,7 +31,7 @@ switch Signal
 		if obj.SaveFile
 			obj.SaveInformation;
 		else
-			obj.FprintfInCommandWindow(" 数据未保存");
+			obj.ComPrint(" 数据未保存");
 		end
 
 		obj.State=UID.State_SessionFinished;
@@ -58,11 +58,11 @@ switch Signal
 		end
 		obj.TimeOffset=Time-seconds(toc(obj.TIC));
 		obj.PreciseRecorder.PushBack(struct(Time=Time,Event=Event));
-		obj.FprintfInCommandWindow('%s（%s）',Gbec.LogTranslate(Event),Time);
+		obj.ComPrint('%s（%s）',Gbec.LogTranslate(Event),Time);
 	otherwise
 		%为了与TrialUID保持一致，这里也记录UID而不是字符串
 		obj.EventRecorder.LogEvent(UID(Signal));
-		obj.FprintfInCommandWindow(' %s',Gbec.LogTranslate(Signal));
+		fprintf(' %s',Gbec.LogTranslate(Signal));%频繁信号不前缀COM号了
 end
 end
 function SendMiao(Note,HttpRetryTimes,MiaoCode)

@@ -61,7 +61,7 @@ classdef ExperimentWorker<handle
 		function AbortAndSave(obj)
 			%此方法将负责启用看门狗
 			obj.EventRecorder.LogEvent(Gbec.UID.State_SessionAborted);
-			obj.FprintfInCommandWindow('会话已放弃');
+			obj.ComPrint('会话已放弃');
 			if ~isempty(obj.VideoInput)
 				stop(obj.VideoInput);
 			end
@@ -151,13 +151,13 @@ classdef ExperimentWorker<handle
 			else
 				SR=1;
 			end
-			obj.FprintfInCommandWindow('%s：%u\n',Gbec.LogTranslate(Signal),SR);
+			obj.ComPrint('%s：%u\n',Gbec.LogTranslate(Signal),SR);
 			SignalRecord(Signal)=SR;
 		end
 		function HandleSignal(obj,Signal)
 			if isempty(obj.SignalHandler)
 				% Gbec.Exception.Unexpected_response_from_Arduino.Throw;
-				obj.FprintfInCommandWindow(Gbec.UID(Signal));
+				obj.ComPrint(Gbec.UID(Signal));
 			else
 				obj.SignalHandler(Signal);
 			end
@@ -178,17 +178,13 @@ classdef ExperimentWorker<handle
 			end
 		end
 		function ReleaseSerial(obj,~,~)
+			%必须先发消息，因为ComPrint依赖Serial
+			obj.ComPrint('释放串口');
 			%此函数不能作为文件内私有函数，因为被文件外函数调用
 			delete(obj.Serial);
-			obj.FprintfInCommandWindow('串口已释放');
 		end
-		function FprintfInCommandWindow(obj,Formatter,varargin)
-			Formatter=obj.Serial.Port+"："+Formatter;
-			if feature('SuppressCommandLineOutput')
-				timer(StartDelay=0.1,TimerFcn=@(~,~)fprintf(Formatter,varargin{:})).start;
-			else
-				fprintf(Formatter,varargin{:});
-			end
+		function ComPrint(obj,Formatter,varargin)
+			fprintf("\n%s："+Formatter,obj.Serial.Port,varargin{:});
 		end
 	end
 	methods(Static)
@@ -229,13 +225,13 @@ classdef ExperimentWorker<handle
 				Signal=obj.WaitForSignal;
 				switch Signal
 					case UID.Signal_TestStopped
-						obj.FprintfInCommandWindow('测试结束');
+						obj.ComPrint('测试结束');
 						obj.Serial.configureCallback('off');
 						obj.SignalHandler=function_handle.empty;
 						obj.WatchDog.start;
 						break;
 					case UID.State_SessionRunning
-						obj.FprintfInCommandWindow('测试结束');
+						obj.ComPrint('测试结束');
 						break;
 					case UID.Signal_NoLastTest
 						Gbec.Exception.Last_test_not_running_or_unstoppable.Throw;
@@ -262,7 +258,7 @@ classdef ExperimentWorker<handle
 						Exception.No_sessions_are_running.Throw;
 					case UID.State_SessionPaused
 						obj.EventRecorder.LogEvent(UID.State_SessionPaused);
-						obj.FprintfInCommandWindow('会话暂停');
+						obj.ComPrint('会话暂停');
 						obj.Serial.configureCallback('off');
 						obj.SignalHandler=function_handle.empty;
 						obj.State=UID.State_SessionPaused;
@@ -373,7 +369,7 @@ classdef ExperimentWorker<handle
 			%观察会话当前的运行状态
 			obj.FeedDog;
 			EW.ApiCall(Gbec.UID.API_Peek);
-			obj.FprintfInCommandWindow(Gbec.UID(EW.WaitForSignal));
+			obj.ComPrint(Gbec.UID(EW.WaitForSignal));
 		end
 		function SP=get.SavePath(obj)
 			SP=obj.oSavePath;
@@ -386,7 +382,7 @@ classdef ExperimentWorker<handle
 						Gbec.Exception.Failure_to_merge_existing_dataset.Throw;
 					end
 				else
-					obj.FprintfInCommandWindow("目标文件已存在，将尝试合并");
+					fprintf("%s：目标文件已存在，将尝试合并",obj.Serial.Port);
 					try
 						obj.MergeData=UniExp.DataSet(SP);
 						[Directory,Filename]=fileparts(SP);

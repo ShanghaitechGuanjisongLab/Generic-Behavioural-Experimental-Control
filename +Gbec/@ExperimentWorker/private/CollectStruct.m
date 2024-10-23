@@ -21,7 +21,7 @@ for F=1:NumFields
 		case UID.Type_Struct
 			Value=CollectStruct(Serial);
 		otherwise
-			Gbec.Exceptions.Unexpected_response_from_Arduino.Throw;
+			Gbec.Exception.Unexpected_response_from_Arduino.Throw;
 	end
 	Struct.(Name(strlength('Info_')+1:end))=Value;
 end
@@ -39,7 +39,7 @@ switch UID(Serial.read(1,'uint8'))
 	case UID.Type_UInt16
 		Array=Serial.read(NumElements,'uint16');
 	otherwise
-		Gbec.Exceptions.Unexpected_response_from_Arduino.Throw;
+		Gbec.Exception.Unexpected_response_from_Arduino.Throw;
 end
 end
 function Cell=CollectCell(Serial)
@@ -63,7 +63,7 @@ for C=1:NumCells
 		case UID.Type_Struct
 			Value=CollectStruct(Serial);
 		otherwise
-			Gbec.Exceptions.Unexpected_response_from_Arduino.Throw;
+			Gbec.Exception.Unexpected_response_from_Arduino.Throw;
 	end
 	Cell{C}=Value;
 end

@@ -1,13 +1,13 @@
 function InterruptRetry(obj,~,~)
 import Gbec.UID
-import Gbec.Exceptions
+import Gbec.Exception
 RunningOrPaused=obj.State==UID.State_SessionRunning||obj.State==UID.State_SessionPaused;
 if RunningOrPaused
 	obj.EventRecorder.LogEvent(UID.Event_SerialInterrupt);
 end
 Suffix="/"+string(obj.MaxRetryTimes)+"次";
 SerialPort=obj.Serial.Port;
-fprintf("串口连接中断");
+obj.FprintfInCommandWindow("串口连接中断");
 ReconnectFail=true;
 for a=1:obj.MaxRetryTimes
 	disp("，正尝试恢复连接第"+string(a)+Suffix);
@@ -17,13 +17,13 @@ for a=1:obj.MaxRetryTimes
 		ReconnectFail=false;
 		break;
 	catch
-		fprintf("串口同步失败");
+		obj.FprintfInCommandWindow("串口同步失败");
 	end
 end
 if ReconnectFail
-	Exceptions.Disconnection_reconnection_failed.Throw;
+	Exception.Disconnection_reconnection_failed.Throw;
 end
-disp("重新连接成功");
+obj.FprintfInCommandWindow("重新连接成功");
 if RunningOrPaused
 	obj.EventRecorder.LogEvent(UID.Event_SerialReconnect);
 	if obj.State==UID.State_SessionRunning

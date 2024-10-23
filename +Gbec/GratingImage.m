@@ -67,7 +67,7 @@ classdef GratingImage<Gbec.IHostAction
 			if isscalar(Field)
 				obj.(Field)=options.(Field);
 			else
-				Gbec.Exceptions.Grating_properties_invalid.Throw(sprintf('必须指定 %s 之一',join(Fields,' ')));
+				Gbec.Exception.Grating_properties_invalid.Throw(sprintf('%s：必须指定 %s 之一',obj.Serial.Port,join(Fields,' ')));
 			end
 			obj.Logger=MATLAB.DataTypes.EventLogger;
 		end

@@ -18,12 +18,12 @@ switch Signal
 		if TrialMod==1&&TrialIndex>1
 			cprintf([1,0,1],'\n已过%u回合，请检查实验状态',TrialIndex-1);
 		end
-		FprintfInCommandWindow('\n回合%u-%s：',TrialIndex,TrialUID);
+		obj.FprintfInCommandWindow('\n回合%u-%s：',TrialIndex,TrialUID);
 	case UID.State_SessionFinished
 		if ~isempty(obj.VideoInput)
 			stop(obj.VideoInput);
 		end
-		FprintfInCommandWindow('\n会话完成\n');
+		obj.FprintfInCommandWindow('\n会话完成\n');
 
 		obj.Serial.configureCallback('off');
 		warning off MATLAB:callback:DynamicPropertyEventError
@@ -31,14 +31,14 @@ switch Signal
 		if obj.SaveFile
 			obj.SaveInformation;
 		else
-			FprintfInCommandWindow(" 数据未保存");
+			obj.FprintfInCommandWindow(" 数据未保存");
 		end
 
 		obj.State=UID.State_SessionFinished;
 		obj.WatchDog.start;
 	case UID.Signal_StartRecord
 		if isempty(obj.VideoInput)
-			Gbec.Exceptions.Cannot_record_without_VideoInput.Throw;
+			Gbec.Exception.Cannot_record_without_VideoInput.Throw;
 		else
 			if obj.VideoInput.Logging=="off"
 				trigger(obj.VideoInput);
@@ -46,7 +46,7 @@ switch Signal
 		end
 	case UID.Signal_HostAction
 		if isempty(obj.HostAction)
-			Gbec.Exceptions.Arduino_requires_undefined_HostAction.Throw;
+			Gbec.Exception.Arduino_requires_undefined_HostAction.Throw;
 		else
 			obj.HostAction.Run(obj.Serial,obj.EventRecorder);
 		end
@@ -58,11 +58,11 @@ switch Signal
 		end
 		obj.TimeOffset=Time-seconds(toc(obj.TIC));
 		obj.PreciseRecorder.PushBack(struct(Time=Time,Event=Event));
-		FprintfInCommandWindow('%s（%s）',Gbec.LogTranslate(Event),Time);
+		obj.FprintfInCommandWindow('%s（%s）',Gbec.LogTranslate(Event),Time);
 	otherwise
 		%为了与TrialUID保持一致，这里也记录UID而不是字符串
 		obj.EventRecorder.LogEvent(UID(Signal));
-		FprintfInCommandWindow(' %s',Gbec.LogTranslate(Signal));
+		obj.FprintfInCommandWindow(' %s',Gbec.LogTranslate(Signal));
 end
 end
 function SendMiao(Note,HttpRetryTimes,MiaoCode)
@@ -79,12 +79,5 @@ for a=0:HttpRetryTimes
 		end
 	end
 	break;
-end
-end
-function FprintfInCommandWindow(varargin)
-if feature('SuppressCommandLineOutput')
-	timer(StartDelay=0.1,TimerFcn=@(~,~)fprintf(varargin{:})).start;
-else
-	fprintf(varargin{:});
 end
 end

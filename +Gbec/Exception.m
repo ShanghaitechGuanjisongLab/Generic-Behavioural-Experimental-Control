@@ -1,4 +1,5 @@
-classdef Exceptions<MATLAB.Lang.IEnumerableException
+
+classdef Exception<MATLAB.Lang.IEnumerableException
 	enumeration
 		Serial_handshake_failed
 		Test_not_found_on_Arduino
@@ -31,5 +32,6 @@ classdef Exceptions<MATLAB.Lang.IEnumerableException
 		No_right_to_write_SavePath
 		User_canceled_operation
 		Serialport_disconnected
+		Failure_to_merge_existing_dataset
 	end
 end

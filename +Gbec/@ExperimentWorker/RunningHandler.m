@@ -27,7 +27,7 @@ switch Signal
 		if ~isempty(obj.VideoInput)
 			stop(obj.VideoInput);
 		end
-		obj.LogPrint('\n会话完成\n');
+		obj.LogPrint('会话完成');
 
 		obj.Serial.configureCallback('off');
 		warning off MATLAB:callback:DynamicPropertyEventError

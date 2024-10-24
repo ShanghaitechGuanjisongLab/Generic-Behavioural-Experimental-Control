@@ -369,6 +369,8 @@ classdef ExperimentWorker<handle
 		end
 		function set.SavePath(obj,SP)
 			FileExists=isfile(SP);
+			%判断是否应该覆盖保存数据。文件不存在，或虽然存在但用户确认覆盖的情况应该覆盖；文件存在但可以执行UniExp合并时不覆盖；文件存在但无法合并，用户也拒绝覆盖则
+			% 报错，拒绝此次SavePath修改。
 			if FileExists
 				if isempty(which('UniExp.Version'))
 					if questdlg('未找到统一实验分析作图工具箱，无法合并已存在的文件','是否覆盖？','是','否','否')=="是"

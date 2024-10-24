@@ -6,6 +6,7 @@
 #include <dynarray>
 #include <span>
 #include <utility>
+#include <numeric>
 
 // 进度与异常回调
 
@@ -379,12 +380,12 @@ protected:
 		if (ChildResult->Exception == UID::Exception_Success)
 		{
 			Progress++;
-			if (StackLevel < UINT8_MAX)
-				Async_stream_IO::Send(CustomProgress(StackLevel, Progress), ProgressPort);
 			switch (const UID Result = Iterate())
 			{
 			case UID::Exception_StillRunning:
 				Running = true;
+				if (StackLevel < UINT8_MAX)
+					Async_stream_IO::Send(CustomProgress(StackLevel, Progress), ProgressPort);
 				break;
 			case UID::Exception_Success:
 				Running = false;
@@ -479,11 +480,11 @@ protected:
 			if (ChildResult->Exception == UID::Exception_Success)
 			{
 				Progress++;
-				if (StackLevel < UINT8_MAX)
-					Async_stream_IO::Send(CustomProgress(StackLevel, Progress), ProgressPort);
 				switch (const UID Result = Iterate())
 				{
 				case UID::Exception_StillRunning:
+					if (StackLevel < UINT8_MAX)
+						Async_stream_IO::Send(CustomProgress(StackLevel, Progress), ProgressPort);
 					break;
 				case UID::Exception_Success:
 					Running = false;
@@ -548,9 +549,9 @@ struct Random : ChildObject
 	{
 		if (Running)
 			return UID::Exception_ObjectNotIdle;
-		Progress = *reinterpret_cast<const uint8_t *>(ProgressInfo.data());
+		Progress = *reinterpret_cast<const uint8_t *>(ProgressInfo.data()) + 1;
 		ProgressInfo = ProgressInfo.subspan(sizeof(Progress));
-		const UID *Pointer = reinterpret_cast<const UID *>(ProgressInfo.data());
+		const UID *const Pointer = reinterpret_cast<const UID *>(ProgressInfo.data());
 		for (uint8_t P1 = 0; P1 < Progress; P1++)
 		{
 			uint8_t P2;
@@ -564,7 +565,7 @@ struct Random : ChildObject
 				return UID::Exception_ProgressObjectNotFound;
 		}
 		ProgressInfo = ProgressInfo.subspan(Progress * sizeof(UID));
-		std::shuffle(SubPointers + Progress, SubPointers + sizeof...(ObjectType), Urng);
+		std::shuffle(SubPointers + Progress--, SubPointers + sizeof...(ObjectType), Urng);
 		const UID Result = ProgressInfo.empty() ? Iterate() : SubPointers[Progress]->Restore(ProgressInfo);
 		Running = Result == UID::Exception_StillRunning;
 		return Result;
@@ -604,16 +605,24 @@ protected:
 	{
 		if (ChildResult->Exception == UID::Exception_Success)
 		{
-			if (StackLevel < UINT8_MAX)
-			{
-				//TODO：这里需要发送不定长的完整进度信息，因为接收方假定你的进度信息是完整的
-			}
-				Async_stream_IO::Send(CustomProgress(StackLevel, SubPointers[Progress]->ClassID), ProgressPort);
 			Progress++; // 无条件自增，因此不能放在if中
 			switch (const UID Result = Iterate())
 			{
 			case UID::Exception_StillRunning:
 				Running = true;
+				if (StackLevel < UINT8_MAX)
+				{
+					using ProgressType = CustomProgress<decltype(Progress)>;
+					//进度需要额外发送当前SubObject，否则恢复时随机出来可能跟原本不一样
+					const uint8_t ProgressSize = sizeof(ProgressType) + (Progress + 1) * sizeof(UID);
+					std::unique_ptr<char[]> ProgressBuffer = std::make_unique_for_overwrite<char[]>(ProgressSize);
+					*reinterpret_cast<ProgressType *>(ProgressBuffer.get()) = ProgressType(Progress);
+					UID *const Pointer = reinterpret_cast<UID *>(ProgressBuffer.get() + sizeof(ProgressType));
+					for (uint8_t P = 0; P <= Progress; P++)
+						Pointer[P] = SubPointers[P]->ClassID;
+					Async_stream_IO::Send([ProgressSize, ProgressBuffer = std::move(ProgressBuffer)](const std::move_only_function<void(const void *Message, uint8_t Size) const> &MessageSender)
+										  { MessageSender(ProgressBuffer.get(), ProgressSize); }, ProgressPort);
+				}
 				break;
 			case UID::Exception_Success:
 				Running = false;
@@ -650,17 +659,17 @@ protected:
 	template <uint16_t... Times>
 	struct WithRepeat : ChildObject
 	{
-		WithRepeat(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel)
+		WithRepeat(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel, UID::TemplateID_RandomRepeat), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
 		{
-			const Object **Pointer = SubObjects;
-			const uint8_t ChildStackLevel = StackLevel + 1;
-			ParameterPackExpand(Pointer = std::fill_n(Pointer, Times, new ObjectType(ProgressPort, this, ChildStackLevel)));
+			TupleFillArray<decltype(SubObjects), Times...>(SubObjects, SubPointers);
 		}
 		virtual UID Start() override
 		{
 			if (Running)
 				return UID::Exception_ObjectNotIdle;
 			Progress = 0;
+			std::shuffle(std::begin(SubPointers), std::end(SubPointers), Urng);
+			std::fill(std::begin(RepeatsDone), std::end(RepeatsDone), 0);
 			const UID Result = Iterate();
 			Running = Result == UID::Exception_StillRunning;
 			return Result;
@@ -669,10 +678,11 @@ protected:
 		{
 			if (Running)
 				return UID::Exception_ObjectNotIdle;
-			Progress = *reinterpret_cast<const uint16_t *>(ProgressInfo.data());
+			memcpy(RepeatsDone, ProgressInfo.data(), sizeof(RepeatsDone));
+			Progress = std::accumulate(std::begin(RepeatsDone), std::end(RepeatsDone), 0);
 			if (Progress >= Sum<Times...>())
 				return UID::Exception_Success;
-			ProgressInfo = ProgressInfo.subspan(sizeof(Progress));
+			ProgressInfo = ProgressInfo.subspan(sizeof(RepeatsDone));
 			const UID Result = ProgressInfo.empty() ? Iterate() : SubObjects[Progress]->Restore(ProgressInfo);
 			Running = Result == UID::Exception_StillRunning;
 			return Result;
@@ -708,7 +718,9 @@ protected:
 
 	protected:
 		uint16_t Progress;
-		Object *SubObjects[Sum<Times...>()];
+		std::tuple<ObjectType...> SubObjects;
+		ChildObject *SubPointers[Sum<Times...>()];
+		uint16_t RepeatsDone[sizeof...(ObjectType)];
 		static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, UID::TemplateID_SequentialRepeat, UID::Property_Subobjects, InfoCell(InfoStruct(UID::Property_ObjectInfo, ObjectType::Information, UID::Property_RepeatTime, Times)...));
 		bool Running = false;
 		void FinishCallback(std::unique_ptr<CallbackMessage> ChildResult) override

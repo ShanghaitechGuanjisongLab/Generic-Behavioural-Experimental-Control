@@ -29,8 +29,6 @@ classdef ExperimentWorker<handle
 		%主机动作，必须继承Gbec.IHostAction，用于执行Arduino无法执行的主机任务，例如在屏幕上显示图像。
 		%See also Gbec.IHostAction
 		HostAction
-		%将要合并的旧数据路径
-		MergeData=missing
 		%会话后展示事件记录的参数
 		%必须安装统一实验分析作图才能使用此属性。会话后，将调用UniExp.TrialwiseEventPlot，将本会话的事件记录表作为第一个参数，此属性值元胞展开作为后续参数。
 		%See also UniExp.TrialwiseEventPlot
@@ -47,6 +45,7 @@ classdef ExperimentWorker<handle
 		TIC
 		TimeOffset
 		oSavePath
+		OverwriteExisting
 	end
 	properties(GetAccess=protected,SetAccess=immutable)
 		EventRecorder MATLAB.DataTypes.EventLogger
@@ -68,17 +67,8 @@ classdef ExperimentWorker<handle
 			if ~isempty(obj.VideoInput)
 				stop(obj.VideoInput);
 			end
-			if obj.SaveFile
-				if questdlg('是否保存现有数据？','实验已放弃','确定','取消','确定')~="取消"
-					obj.SaveInformation;
-				else
-					if isequaln(obj.MergeData,missing)
-						delete(obj.SavePath);
-					else
-						[Directory,Filename]=fileparts(obj.SavePath);
-						movefile(fullfile(Directory,Filename+".将合并.mat"),obj.SavePath,'f');
-					end
-				end
+			if obj.SaveFile&&questdlg('是否保存现有数据？','实验已放弃','确定','取消','确定')~="取消"
+				obj.SaveInformation;
 			else
 				warning("数据未保存");
 			end
@@ -381,27 +371,21 @@ classdef ExperimentWorker<handle
 			FileExists=isfile(SP);
 			if FileExists
 				if isempty(which('UniExp.Version'))
-					if questdlg('未找到统一实验分析作图工具箱，无法合并已存在的文件','是否覆盖？','是','否','否')=="是"
-						obj.MergeData=missing;
-					else
+					if questdlg('未找到统一实验分析作图工具箱，无法合并已存在的文件','是否覆盖？','是','否','否')~="是"
 						obj.FeedDog;
 						Gbec.Exception.Failure_to_merge_existing_dataset.Throw;
 					end
 				else
 					obj.LogPrint("目标文件已存在，将尝试合并");
 					try
-						obj.MergeData=UniExp.DataSet(SP);
+						UniExp.DataSet(SP);
 					catch ME
-						if questdlg('合并失败，是否要覆盖文件？',ME.identifier,'是','否','否')=="是"
-							obj.MergeData=missing;
-						else
+						if questdlg('合并失败，是否要覆盖文件？',ME.identifier,'是','否','否')~="是"
 							obj.FeedDog;
 							Gbec.Exception.Failure_to_merge_existing_dataset.Throw;
 						end
 					end
 				end
-			else
-				obj.MergeData=missing;
 			end
 			Fid=fopen(SP,'a');
 			if Fid==-1
@@ -409,6 +393,7 @@ classdef ExperimentWorker<handle
 				Fid=fopen(SP,'a');
 			end
 			if Fid==-1
+				obj.FeedDog;
 				Gbec.Exception.No_right_to_write_SavePath.Throw;
 			end
 			fclose(Fid);
@@ -416,6 +401,7 @@ classdef ExperimentWorker<handle
 				delete(SP);%如不删除，下次修改SavePath时会出错
 			end
 			obj.oSavePath=SP;
+			obj.FeedDog;
 		end
 	end
 end

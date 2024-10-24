@@ -45,7 +45,7 @@ classdef ExperimentWorker<handle
 		TIC
 		TimeOffset
 		oSavePath
-		OverwriteExisting
+		OverwriteExisting=true
 	end
 	properties(GetAccess=protected,SetAccess=immutable)
 		EventRecorder MATLAB.DataTypes.EventLogger
@@ -371,7 +371,9 @@ classdef ExperimentWorker<handle
 			FileExists=isfile(SP);
 			if FileExists
 				if isempty(which('UniExp.Version'))
-					if questdlg('未找到统一实验分析作图工具箱，无法合并已存在的文件','是否覆盖？','是','否','否')~="是"
+					if questdlg('未找到统一实验分析作图工具箱，无法合并已存在的文件','是否覆盖？','是','否','否')=="是"
+						obj.OverwriteExisting=true;
+					else
 						obj.FeedDog;
 						Gbec.Exception.Failure_to_merge_existing_dataset.Throw;
 					end
@@ -379,13 +381,18 @@ classdef ExperimentWorker<handle
 					obj.LogPrint("目标文件已存在，将尝试合并");
 					try
 						UniExp.DataSet(SP);
+						obj.OverwriteExisting=false;
 					catch ME
-						if questdlg('合并失败，是否要覆盖文件？',ME.identifier,'是','否','否')~="是"
+						if questdlg('合并失败，是否要覆盖文件？',ME.identifier,'是','否','否')=="是"
+							obj.OverwriteExisting=true;
+						else
 							obj.FeedDog;
 							Gbec.Exception.Failure_to_merge_existing_dataset.Throw;
 						end
 					end
 				end
+			else
+				obj.OverwriteExisting=true;
 			end
 			Fid=fopen(SP,'a');
 			if Fid==-1

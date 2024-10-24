@@ -1,5 +1,5 @@
 <deployment-project plugin="plugin.toolbox" plugin-version="1.0">
-  <configuration build-checksum="1434849013" file="C:\Users\vhtmf\Documents\MATLAB\通用行为实验控制\打包.prj" location="C:\Users\vhtmf\Documents\MATLAB\通用行为实验控制" name="打包" target="target.toolbox" target-name="打包为工具箱">
+  <configuration build-checksum="1434849013" file="C:\Users\vhtmf\Documents\MATLAB\Generic-Behavioural-Experimental-Control\打包.prj" location="C:\Users\vhtmf\Documents\MATLAB\Generic-Behavioural-Experimental-Control" name="打包" target="target.toolbox" target-name="打包为工具箱">
     <param.appname>通用行为实验控制</param.appname>
     <param.authnamewatermark>张天夫</param.authnamewatermark>
     <param.email>vhtmfu@outlook.com</param.email>
@@ -21,7 +21,7 @@ MATLAB工具箱并不能将MATLAB代码编译成Arduino二进制代码，而是�
 随时暂停、放弃实验，不需要拔插头；
 实验过程中意外掉线自动重连，不会丢失进度</param.description>
     <param.screenshot>${PROJECT_ROOT}\工具箱图像.png</param.screenshot>
-    <param.version>6.3.1</param.version>
+    <param.version>6.4.0</param.version>
     <param.output>${PROJECT_ROOT}\通用行为实验控制.mltbx</param.output>
     <param.products.name>
       <item>Image Acquisition Toolbox</item>
@@ -125,16 +125,13 @@ Debug.mlx</param.exclude.filters>
       <file>${PROJECT_ROOT}\工具箱图像.png</file>
       <file>${PROJECT_ROOT}\部署</file>
     </fileset.rootfiles>
-    <fileset.depfun.included>
-      <file>C:\Users\vhtmf\Documents\MATLAB\+Gbec\LogTranslate.mlx</file>
-      <file>C:\Users\vhtmf\Documents\MATLAB\+Gbec\UID.m</file>
-    </fileset.depfun.included>
+    <fileset.depfun.included />
     <fileset.depfun.excluded>
       <file>${MATLAB_ROOT}\toolbox\local\userpath.m</file>
     </fileset.depfun.excluded>
     <fileset.package />
     <build-deliverables>
-      <file location="${PROJECT_ROOT}" name="通用行为实验控制.mltbx" optional="false">C:\Users\vhtmf\Documents\MATLAB\通用行为实验控制\通用行为实验控制.mltbx</file>
+      <file location="${PROJECT_ROOT}" name="通用行为实验控制.mltbx" optional="false">C:\Users\vhtmf\Documents\MATLAB\Generic-Behavioural-Experimental-Control\通用行为实验控制.mltbx</file>
     </build-deliverables>
     <workflow />
     <matlab>

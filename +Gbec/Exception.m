@@ -1,4 +1,3 @@
-
 classdef Exception<MATLAB.Lang.IEnumerableException
 	enumeration
 		Serial_handshake_failed
@@ -33,5 +32,6 @@ classdef Exception<MATLAB.Lang.IEnumerableException
 		User_canceled_operation
 		Serialport_disconnected
 		Failure_to_merge_existing_dataset
+		Serialport_not_found_in_list
 	end
 end

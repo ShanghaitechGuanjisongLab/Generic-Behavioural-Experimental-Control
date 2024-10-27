@@ -680,9 +680,8 @@ protected:
 				return UID::Exception_ObjectNotIdle;
 			memcpy(RepeatsDone, ProgressInfo.data(), sizeof(RepeatsDone));
 			Progress = std::accumulate(std::begin(RepeatsDone), std::end(RepeatsDone), 0);
-			if (Progress >= Sum<Times...>())
-				return UID::Exception_Success;
 			ProgressInfo = ProgressInfo.subspan(sizeof(RepeatsDone));
+			
 			const UID Result = ProgressInfo.empty() ? Iterate() : SubObjects[Progress]->Restore(ProgressInfo);
 			Running = Result == UID::Exception_StillRunning;
 			return Result;

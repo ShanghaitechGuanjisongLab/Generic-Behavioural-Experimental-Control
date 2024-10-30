@@ -47,6 +47,7 @@ enum class UID : uint8_t
 	State_ObjectIdle,
 
 	Progress_Exception,
-	Progress_Custom,
+	Progress_Overwrite,
 	Progress_Trial,
+	Progress_Append
 };

@@ -26,10 +26,10 @@ struct ExceptionProgress
 template <typename T>
 struct CustomProgress
 {
-	UID Type = UID::Progress_Custom;
+	UID Type;
 	uint8_t StackLevel;
 	T Progress;
-	constexpr CustomProgress(uint8_t StackLevel, T Progress) : StackLevel(StackLevel), Progress(Progress) {}
+	constexpr CustomProgress(uint8_t StackLevel, T Progress, UID Type = UID::Progress_Overwrite) : Type(Type), StackLevel(StackLevel), Progress(Progress) {}
 };
 #pragma pack(pop)
 struct CallbackMessage
@@ -50,7 +50,7 @@ struct Object
 	如果
 	*/
 	virtual UID Start() { return UID::Exception_Success; }
-	virtual UID Restore(std::span<const char> ProgressInfo) { return UID::Exception_Success; }
+	virtual UID Restore(std::span<const uint8_t> ProgressInfo) { return UID::Exception_Success; }
 	// 支持重复的Object应override此方法，重复执行Times次，返回Exception_Success。
 	virtual UID Repeat(uint16_t Times) { return UID::Exception_Success; }
 	// 支持暂停的Object应override此方法，暂停当前执行，返回Exception_Success。调用方应检查返回值判断当前Object是否支持暂停，在不支持暂停的情况下采取其它措施实现暂停。
@@ -77,7 +77,14 @@ struct RootObject : Object
 	{
 		return Child->Start();
 	};
-	UID Restore(std::span<const char> ProgressInfo) override
+	/*ProgressInfo线性紧密排列每个栈位的自定义进度信息：
+	{
+		uint8_t NumBytes;//本栈位的自定义进度信息字节数
+		char Data[NumBytes];//本栈位的自定义进度信息
+	}
+	每个栈位应当负责将ProgressInfo=ProgressInfo.subspan(NumBytes+1)再传递给下一个栈位。
+	*/
+	UID Restore(std::span<const uint8_t> ProgressInfo) override
 	{
 		return Child->Restore(ProgressInfo);
 	}
@@ -278,7 +285,7 @@ constexpr uint8_t Sum()
 {
 	return SumHelper<V...>::value;
 }
-#define ParameterPackExpand(Expression) int _[] = {(Expression, 0)...};
+#define ParameterPackExpand(...) int __CONCAT(_, __LINE__)[] = {(__VA_ARGS__, 0)...};
 
 template <typename TupleType, uint16_t... Repeat>
 struct TupleFillArray_A
@@ -295,7 +302,7 @@ struct TupleFillArray_A
 	};
 };
 template <typename TupleType, uint16_t... Repeat>
-inline void TupleFillArray(const TupleType &Tuple, const Object **Array)
+inline void TupleFillArray(const TupleType &Tuple, const ChildObject **Array)
 {
 	TupleFillArray_A<TupleType, Repeat...>::TupleFillArray_B<>::Fill(Tuple, Array);
 }
@@ -305,15 +312,25 @@ template <size_t... Index>
 struct TupleFillArray_C<std::index_sequence<Index...>>
 {
 	template <typename TupleType>
-	static void Fill(const TupleType &Tuple, const Object **Array)
+	static void Fill(const TupleType &Tuple, const ChildObject **Array)
 	{
 		ParameterPackExpand(Array[Index] = &std::get<Index>(Tuple));
 	}
+	template <typename TupleType>
+	static void Fill(const TupleType &Tuple, const ChildObject **Array, const uint16_t *Repeat)
+	{
+		ParameterPackExpand(Array = std::fill_n(Array, Repeat[Index], &std::get<Index>(Tuple)));
+	}
 };
 template <typename... T>
-inline void TupleFillArray(const std::tuple<T...> &Tuple, const Object **Array)
+inline void TupleFillArray(const std::tuple<T...> &Tuple, const ChildObject **Array)
 {
 	TupleFillArray_C<std::index_sequence_for<T...>>::Fill(Tuple, Array);
+}
+template <typename... T>
+inline void TupleFillArray(const std::tuple<T...> &Tuple, const ChildObject **Array, const uint16_t *Repeat)
+{
+	TupleFillArray_C<std::index_sequence_for<T...>>::Fill(Tuple, Array, Repeat);
 }
 
 // 常用对象模板
@@ -335,12 +352,12 @@ struct Sequential : ChildObject
 		Running = Result == UID::Exception_StillRunning;
 		return Result;
 	}
-	UID Restore(std::span<const char> ProgressInfo) override
+	UID Restore(std::span<const uint8_t> ProgressInfo) override
 	{
 		if (Running)
 			return UID::Exception_ObjectNotIdle;
-		Progress = *reinterpret_cast<const uint8_t *>(ProgressInfo.data());
-		ProgressInfo = ProgressInfo.subspan(sizeof(Progress));
+		Progress = *(ProgressInfo.data() + 1);
+		ProgressInfo = ProgressInfo.subspan(2);
 		const UID Result = ProgressInfo.empty() ? Iterate() : SubPointers[Progress]->Restore(ProgressInfo);
 		Running = Result == UID::Exception_StillRunning;
 		return Result;
@@ -435,12 +452,12 @@ protected:
 			Running = Result == UID::Exception_StillRunning;
 			return Result;
 		}
-		UID Restore(std::span<const char> ProgressInfo) override
+		UID Restore(std::span<const uint8_t> ProgressInfo) override
 		{
 			if (Running)
 				return UID::Exception_ObjectNotIdle;
-			Progress = *reinterpret_cast<const uint16_t *>(ProgressInfo.data());
-			ProgressInfo = ProgressInfo.subspan(sizeof(Progress));
+			Progress = *reinterpret_cast<const uint16_t *>(ProgressInfo.data() + 1);
+			ProgressInfo = ProgressInfo.subspan(sizeof(Progress) + 1);
 			const UID Result = ProgressInfo.empty() ? Iterate() : SubPointers[Progress]->Restore(ProgressInfo);
 			Running = Result == UID::Exception_StillRunning;
 			return Result;
@@ -545,27 +562,26 @@ struct Random : ChildObject
 		Running = Result == UID::Exception_StillRunning;
 		return Result;
 	}
-	UID Restore(std::span<const char> ProgressInfo) override
+	UID Restore(std::span<const uint8_t> ProgressInfo) override
 	{
 		if (Running)
 			return UID::Exception_ObjectNotIdle;
-		Progress = *reinterpret_cast<const uint8_t *>(ProgressInfo.data()) + 1;
-		ProgressInfo = ProgressInfo.subspan(sizeof(Progress));
-		const UID *const Pointer = reinterpret_cast<const UID *>(ProgressInfo.data());
-		for (uint8_t P1 = 0; P1 < Progress; P1++)
+		Progress = *ProgressInfo.data();
+		const UID *ObjectsDone = reinterpret_cast<const UID *>(ProgressInfo.data() + 1);
+		for (uint8_t P1 = 0; P1 < Progress; ++P1)
 		{
 			uint8_t P2;
-			for (P2 = P1; P2 < sizeof...(ObjectType); P2++)
-				if (Pointer[P1] == SubPointers[P2]->ClassID)
+			for (P2 = P1; P2 < sizeof...(ObjectType); ++P2)
+				if (ObjectsDone[P1] == SubPointers[P2]->ClassID)
 				{
 					std::swap(SubPointers[P1], SubPointers[P2]);
 					break;
 				}
-			if (P2 >= sizeof...(ObjectType))
+			if (P2 == sizeof...(ObjectType))
 				return UID::Exception_ProgressObjectNotFound;
 		}
-		ProgressInfo = ProgressInfo.subspan(Progress * sizeof(UID));
-		std::shuffle(SubPointers + Progress--, SubPointers + sizeof...(ObjectType), Urng);
+		ProgressInfo = ProgressInfo.subspan(Progress + 1);
+		std::shuffle(std::begin(SubPointers) + Progress--, std::end(SubPointers), Urng);
 		const UID Result = ProgressInfo.empty() ? Iterate() : SubPointers[Progress]->Restore(ProgressInfo);
 		Running = Result == UID::Exception_StillRunning;
 		return Result;
@@ -599,7 +615,7 @@ protected:
 	uint8_t Progress;
 	std::tuple<ObjectType...> SubObjects;
 	ChildObject *SubPointers[sizeof...(ObjectType)];
-	static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, UID::TemplateID_Sequential, UID::Property_Subobjects, InfoCell(ObjectType::Information...));
+	static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, UID::TemplateID_Random, UID::Property_Subobjects, InfoCell(ObjectType::Information...));
 	bool Running = false;
 	void FinishCallback(std::unique_ptr<CallbackMessage> ChildResult) override
 	{
@@ -609,20 +625,7 @@ protected:
 			switch (const UID Result = Iterate())
 			{
 			case UID::Exception_StillRunning:
-				Running = true;
-				if (StackLevel < UINT8_MAX)
-				{
-					using ProgressType = CustomProgress<decltype(Progress)>;
-					//进度需要额外发送当前SubObject，否则恢复时随机出来可能跟原本不一样
-					const uint8_t ProgressSize = sizeof(ProgressType) + (Progress + 1) * sizeof(UID);
-					std::unique_ptr<char[]> ProgressBuffer = std::make_unique_for_overwrite<char[]>(ProgressSize);
-					*reinterpret_cast<ProgressType *>(ProgressBuffer.get()) = ProgressType(Progress);
-					UID *const Pointer = reinterpret_cast<UID *>(ProgressBuffer.get() + sizeof(ProgressType));
-					for (uint8_t P = 0; P <= Progress; P++)
-						Pointer[P] = SubPointers[P]->ClassID;
-					Async_stream_IO::Send([ProgressSize, ProgressBuffer = std::move(ProgressBuffer)](const std::move_only_function<void(const void *Message, uint8_t Size) const> &MessageSender)
-										  { MessageSender(ProgressBuffer.get(), ProgressSize); }, ProgressPort);
-				}
+				// 进度信息在Iterate中已经发送过了
 				break;
 			case UID::Exception_Success:
 				Running = false;
@@ -644,18 +647,41 @@ protected:
 	}
 	UID Iterate()
 	{
+		uint8_t Start = Progress;
 		while (Progress < sizeof...(ObjectType))
+		{
 			switch (const UID Result = SubPointers[Progress]->Start();)
 			{
 			default:
 				return Result;
 			case UID::Exception_StillRunning:
+			{
+				if (Progress == Start)
+					Async_stream_IO::Send(CustomProgress(StackLevel, SubPointers[Progress]->ClassID, Start ? UID::Progress_Append : UID::Progress_Overwrite), ProgressPort);
+				else
+				{
+					const uint8_t ProgressSize = sizeof(CustomProgress<UID>) + Progress - Start;
+					std::unique_ptr<char[]> Buffer = std::make_unique_for_overwrite<char[]>(ProgressSize);
+					*reinterpret_cast<CustomProgress<UID> *>(Buffer.get()) = CustomProgress(StackLevel, SubPointers[Progress]->ClassID, Start ? UID::Progress_Append : UID::Progress_Overwrite);
+					UID *Pointer = reinterpret_cast<UID *>(Buffer.get() + sizeof(CustomProgress<UID>));
+					while (++Start <= Progress)
+						*Pointer++ = SubPointers[Start]->ClassID;
+					Async_stream_IO::Send([Buffer = std::move(Buffer), ProgressSize](const std::move_only_function<void(const void *Message, uint8_t Size) const> &MessageSender)
+										  { MessageSender(Buffer.get(), ProgressSize); }, ProgressPort);
+				}
 				return UID::Exception_StillRunning;
+			}
 			case UID::Exception_Success:
 				Progress++;
 			}
+		}
 		return UID::Exception_Success;
 	}
+	/*随机重复对象运行，每次开始时打乱顺序。
+	进度格式：
+	uint16_t RepeatsDone[sizeof...(ObjectType)]，每个对象已完成的次数
+
+	*/
 	template <uint16_t... Times>
 	struct WithRepeat : ChildObject
 	{
@@ -674,15 +700,20 @@ protected:
 			Running = Result == UID::Exception_StillRunning;
 			return Result;
 		}
-		UID Restore(std::span<const char> ProgressInfo) override
+		UID Restore(std::span<const uint8_t> ProgressInfo) override
 		{
 			if (Running)
 				return UID::Exception_ObjectNotIdle;
 			memcpy(RepeatsDone, ProgressInfo.data(), sizeof(RepeatsDone));
 			Progress = std::accumulate(std::begin(RepeatsDone), std::end(RepeatsDone), 0);
+			TupleFillArray(SubObjects, SubPointers, RepeatsDone);
+			uint16_t RepeatsLeft[sizeof...(ObjectType)];
+			uint8_t Index = 0;
+			ParameterPackExpand(RepeatsLeft[Index] = Times - RepeatsDone[Index], Index++);
+			TupleFillArray(SubObjects, SubPointers + Progress, RepeatsLeft);
+			std::shuffle(std::begin(SubPointers) + Progress, std::end(SubPointers), Urng);
 			ProgressInfo = ProgressInfo.subspan(sizeof(RepeatsDone));
-			
-			const UID Result = ProgressInfo.empty() ? Iterate() : SubObjects[Progress]->Restore(ProgressInfo);
+			const UID Result = ProgressInfo.empty() ? Iterate() : SubPointers[Progress]->Restore(ProgressInfo);
 			Running = Result == UID::Exception_StillRunning;
 			return Result;
 		}
@@ -692,26 +723,21 @@ protected:
 		}
 		UID Pause() override
 		{
-			return Running ? SubObjects[Progress]->Pause() : UID::Exception_ObjectNotRunning;
+			return Running ? SubPointers[Progress]->Pause() : UID::Exception_ObjectNotRunning;
 		}
 		UID Continue() override
 		{
-			return Running ? SubObjects[Progress]->Continue() : UID::Exception_ObjectNotPaused;
+			return Running ? SubPointers[Progress]->Continue() : UID::Exception_ObjectNotPaused;
 		}
 		UID Abort() override
 		{
 			if (Running)
 			{
 				Running = false;
-				return SubObjects[Progress]->Abort();
+				return SubPointers[Progress]->Abort();
 			}
 			else
 				return UID::Exception_ObjectNotRunning;
-		}
-		virtual ~WithRepeat()
-		{
-			Object *const *Pointer = SubObjects;
-			const Object *const *const _[] = {(delete *Pointer, Pointer += Times)...};
 		}
 		OverrideGetInformation;
 

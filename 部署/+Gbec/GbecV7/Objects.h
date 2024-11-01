@@ -287,51 +287,45 @@ constexpr uint8_t Sum()
 }
 #define ParameterPackExpand(...) int __CONCAT(_, __LINE__)[] = {(__VA_ARGS__, 0)...};
 
-template <typename TupleType, uint16_t... Repeat>
-struct TupleFillArray_A
+template <typename>
+struct ExpandSequence;
+template <size_t... Index>
+struct ExpandSequence<std::index_sequence<Index...>>
 {
-	template <typename = std::make_index_sequence<sizeof...(Repeat)>>
-	struct TupleFillArray_B;
-	template <size_t... Index>
-	struct TupleFillArray_B<std::index_sequence<Index...>>
+	template <uint16_t... Repeat>
+	struct ExpandRepeat
 	{
-		static void Fill(const TupleType &Tuple, const Object **Array)
+		template <typename TupleType>
+		static void TupleFillArray(const TupleType &Tuple, const ChildObject **Array)
 		{
 			ParameterPackExpand(Array = std::fill_n(Array, Repeat, &std::get<Index>(Tuple)));
 		}
 	};
-};
-template <typename TupleType, uint16_t... Repeat>
-inline void TupleFillArray(const TupleType &Tuple, const ChildObject **Array)
-{
-	TupleFillArray_A<TupleType, Repeat...>::TupleFillArray_B<>::Fill(Tuple, Array);
-}
-template <typename>
-struct TupleFillArray_C;
-template <size_t... Index>
-struct TupleFillArray_C<std::index_sequence<Index...>>
-{
 	template <typename TupleType>
-	static void Fill(const TupleType &Tuple, const ChildObject **Array)
+	static void TupleFillArray(const TupleType &Tuple, const ChildObject **Array)
 	{
 		ParameterPackExpand(Array[Index] = &std::get<Index>(Tuple));
 	}
 	template <typename TupleType>
-	static void Fill(const TupleType &Tuple, const ChildObject **Array, const uint16_t *Repeat)
+	static void TupleFillArray(const TupleType &Tuple, const ChildObject **Array, const uint16_t *Repeat)
 	{
 		ParameterPackExpand(Array = std::fill_n(Array, Repeat[Index], &std::get<Index>(Tuple)));
 	}
 };
-template <typename... T>
-inline void TupleFillArray(const std::tuple<T...> &Tuple, const ChildObject **Array)
+template <uint8_t... Index>
+struct ExpandSequence<std::integer_sequence<uint8_t, Index...>>
 {
-	TupleFillArray_C<std::index_sequence_for<T...>>::Fill(Tuple, Array);
-}
-template <typename... T>
-inline void TupleFillArray(const std::tuple<T...> &Tuple, const ChildObject **Array, const uint16_t *Repeat)
-{
-	TupleFillArray_C<std::index_sequence_for<T...>>::Fill(Tuple, Array, Repeat);
-}
+	template <uint16_t... Times>
+	static void TimesFillIndex(uint8_t *IndexArray)
+	{
+		ParameterPackExpand(IndexArray = std::fill_n(IndexArray, Times, Index));
+	}
+	template <uint16_t... Times>
+	static void LeftFillIndex(uint8_t *IndexArray, const uint16_t *Done)
+	{
+		ParameterPackExpand(IndexArray = std::fill_n(IndexArray, Times - Done[Index], Index));
+	}
+};
 
 // 常用对象模板
 
@@ -341,7 +335,7 @@ struct Sequential : ChildObject
 {
 	Sequential(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel, UID::TemplateID_Sequential), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
 	{
-		TupleFillArray(SubObjects, SubPointers);
+		ExpandSequence<std::index_sequence_for<ObjectType...>>::TupleFillArray(SubObjects, SubPointers);
 	}
 	UID Start() override
 	{
@@ -400,7 +394,6 @@ protected:
 			switch (const UID Result = Iterate())
 			{
 			case UID::Exception_StillRunning:
-				Running = true;
 				if (StackLevel < UINT8_MAX)
 					Async_stream_IO::Send(CustomProgress(StackLevel, Progress), ProgressPort);
 				break;
@@ -441,7 +434,7 @@ protected:
 	{
 		WithRepeat(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel, UID::TemplateID_SequentialRepeat), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
 		{
-			TupleFillArray<decltype(SubObjects), Times...>(SubObjects, SubPointers);
+			ExpandSequence<std::index_sequence_for<ObjectType...>>::ExpandRepeat<Times...>::TupleFillArray(SubObjects, SubPointers);
 		}
 		virtual UID Start() override
 		{
@@ -550,7 +543,7 @@ struct Random : ChildObject
 {
 	Random(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel, UID::TemplateID_Random), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
 	{
-		TupleFillArray(SubObjects, SubPointers);
+		ExpandSequence<std::index_sequence_for<ObjectType...>>::TupleFillArray(SubObjects, SubPointers);
 	}
 	UID Start() override
 	{
@@ -609,7 +602,6 @@ struct Random : ChildObject
 			return UID::Exception_ObjectNotRunning;
 	}
 	OverrideGetInformation;
-	static constexpr UID TemplateID = UID::TemplateID_Random;
 
 protected:
 	uint8_t Progress;
@@ -625,7 +617,7 @@ protected:
 			switch (const UID Result = Iterate())
 			{
 			case UID::Exception_StillRunning:
-				// 进度信息在Iterate中已经发送过了
+				// 进度信息在Iterate中发送，而不在此处发，因为第一个子任务开始时不会运行到这里，但又必须在任务开始时发送当前进度。
 				break;
 			case UID::Exception_Success:
 				Running = false;
@@ -634,14 +626,14 @@ protected:
 			default:
 				Running = false;
 				ChildResult->Exception = Result;
-				ChildResult->StackTrace = {{StackLevel, UID::TemplateID_Sequential, Progress}};
+				ChildResult->StackTrace = {{StackLevel, UID::TemplateID_Random, Progress}};
 				Parent->FinishCallback(std::move(ChildResult));
 			}
 		}
 		else
 		{
 			Running = false;
-			ChildResult->StackTrace.push_back({StackLevel, UID::TemplateID_Sequential, Progress});
+			ChildResult->StackTrace.push_back({StackLevel, UID::TemplateID_Random, Progress});
 			Parent->FinishCallback(std::move(ChildResult));
 		}
 	}
@@ -677,25 +669,22 @@ protected:
 		}
 		return UID::Exception_Success;
 	}
-	/*随机重复对象运行，每次开始时打乱顺序。
-	进度格式：
-	uint16_t RepeatsDone[sizeof...(ObjectType)]，每个对象已完成的次数
-
-	*/
+	// 随机重复对象运行，每次开始时打乱顺序。
 	template <uint16_t... Times>
 	struct WithRepeat : ChildObject
 	{
 		WithRepeat(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel, UID::TemplateID_RandomRepeat), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
 		{
-			TupleFillArray<decltype(SubObjects), Times...>(SubObjects, SubPointers);
+			ExpandIndex::TupleFillArray(SubObjects, SubPointers);
+			ExpandIndex::TimesFillIndex<Times...>(ShuffleIndex);
 		}
 		virtual UID Start() override
 		{
 			if (Running)
 				return UID::Exception_ObjectNotIdle;
 			Progress = 0;
-			std::shuffle(std::begin(SubPointers), std::end(SubPointers), Urng);
-			std::fill(std::begin(RepeatsDone), std::end(RepeatsDone), 0);
+			std::shuffle(std::begin(ShuffleIndex), std::end(ShuffleIndex), Urng);
+			std::fill(std::begin(ProgressMessage.RepeatsDone), std::end(ProgressMessage.RepeatsDone), 0);
 			const UID Result = Iterate();
 			Running = Result == UID::Exception_StillRunning;
 			return Result;
@@ -704,16 +693,24 @@ protected:
 		{
 			if (Running)
 				return UID::Exception_ObjectNotIdle;
-			memcpy(RepeatsDone, ProgressInfo.data(), sizeof(RepeatsDone));
-			Progress = std::accumulate(std::begin(RepeatsDone), std::end(RepeatsDone), 0);
-			TupleFillArray(SubObjects, SubPointers, RepeatsDone);
-			uint16_t RepeatsLeft[sizeof...(ObjectType)];
-			uint8_t Index = 0;
-			ParameterPackExpand(RepeatsLeft[Index] = Times - RepeatsDone[Index], Index++);
-			TupleFillArray(SubObjects, SubPointers + Progress, RepeatsLeft);
-			std::shuffle(std::begin(SubPointers) + Progress, std::end(SubPointers), Urng);
-			ProgressInfo = ProgressInfo.subspan(sizeof(RepeatsDone));
-			const UID Result = ProgressInfo.empty() ? Iterate() : SubPointers[Progress]->Restore(ProgressInfo);
+			ProgressMessage = *reinterpret_cast<const ProgressType *>(ProgressInfo.data() + 1);
+			ProgressInfo = ProgressInfo.subspan(sizeof(ProgressMessage) + 1);
+			Progress = std::accumulate(std::begin(ProgressMessage.RepeatsDone), std::end(ProgressMessage.RepeatsDone), 0);
+			uint8_t *Pointer = ShuffleIndex;
+			uint8_t Index;
+			for (Index = 0; Index < sizeof...(ObjectType); ++Index)
+				Pointer = std::fill_n(Pointer, ProgressMessage.RepeatsDone[Index], Index);
+			for (Index = 0; Index < sizeof...(ObjectType); ++Index)
+				if (SubPointers[Index]->ClassID == ProgressMessage.Current)
+				{
+					*Pointer++ = Index;
+					break;
+				}
+			if (Index == sizeof...(ObjectType))
+				return UID::Exception_ProgressObjectNotFound;
+			ExpandIndex::LeftFillIndex<Times...>(Pointer, ProgressMessage.RepeatsDone);
+			std::shuffle(Pointer, std::end(ShuffleIndex), Urng);
+			const UID Result = ProgressInfo.empty() ? Iterate() : SubPointers[ShuffleIndex[Progress]]->Restore(ProgressInfo);
 			Running = Result == UID::Exception_StillRunning;
 			return Result;
 		}
@@ -723,18 +720,18 @@ protected:
 		}
 		UID Pause() override
 		{
-			return Running ? SubPointers[Progress]->Pause() : UID::Exception_ObjectNotRunning;
+			return Running ? SubPointers[ShuffleIndex[Progress]]->Pause() : UID::Exception_ObjectNotRunning;
 		}
 		UID Continue() override
 		{
-			return Running ? SubPointers[Progress]->Continue() : UID::Exception_ObjectNotPaused;
+			return Running ? SubPointers[ShuffleIndex[Progress]]->Continue() : UID::Exception_ObjectNotPaused;
 		}
 		UID Abort() override
 		{
 			if (Running)
 			{
 				Running = false;
-				return SubPointers[Progress]->Abort();
+				return SubPointers[ShuffleIndex[Progress]]->Abort();
 			}
 			else
 				return UID::Exception_ObjectNotRunning;
@@ -742,22 +739,29 @@ protected:
 		OverrideGetInformation;
 
 	protected:
+		using ExpandIndex = ExpandSequence<std::make_integer_sequence<uint8_t, sizeof...(Times)>>;
+#pragma pack(push, 1)
+		struct ProgressType
+		{
+			uint16_t RepeatsDone[sizeof...(ObjectType)];
+			UID Current;
+		} ProgressMessage;
+#pragma pack(pop)
+		const std::tuple<ObjectType...> SubObjects;
+		ChildObject *SubPointers[sizeof...(ObjectType)];
+		uint8_t ShuffleIndex[Sum<Times...>()];
 		uint16_t Progress;
-		std::tuple<ObjectType...> SubObjects;
-		ChildObject *SubPointers[Sum<Times...>()];
-		uint16_t RepeatsDone[sizeof...(ObjectType)];
-		static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, UID::TemplateID_SequentialRepeat, UID::Property_Subobjects, InfoCell(InfoStruct(UID::Property_ObjectInfo, ObjectType::Information, UID::Property_RepeatTime, Times)...));
+		static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, UID::TemplateID_RandomRepeat, UID::Property_Subobjects, InfoCell(InfoStruct(UID::Property_ObjectInfo, ObjectType::Information, UID::Property_RepeatTime, Times)...));
 		bool Running = false;
 		void FinishCallback(std::unique_ptr<CallbackMessage> ChildResult) override
 		{
 			if (ChildResult->Exception == UID::Exception_Success)
 			{
 				Progress++;
-				if (StackLevel < UINT8_MAX)
-					Async_stream_IO::Send(CustomProgress(StackLevel, Progress), ProgressPort);
 				switch (const UID Result = Iterate())
 				{
 				case UID::Exception_StillRunning:
+					// 进度信息在Iterate中发送，而不在此处发，因为第一个子任务开始时不会运行到这里，但又必须在任务开始时发送当前进度。
 					break;
 				case UID::Exception_Success:
 					Running = false;
@@ -766,28 +770,30 @@ protected:
 				default:
 					Running = false;
 					ChildResult->Exception = Result;
-					ChildResult->StackTrace = {{StackLevel, UID::TemplateID_SequentialRepeat, Progress}};
+					ChildResult->StackTrace = {{StackLevel, UID::TemplateID_RandomRepeat, Progress}};
 					Parent->FinishCallback(std::move(ChildResult));
 				}
 			}
 			else
 			{
 				Running = false;
-				ChildResult->StackTrace.push_back({StackLevel, UID::TemplateID_Sequential, Progress});
+				ChildResult->StackTrace.push_back({StackLevel, UID::TemplateID_RandomRepeat, Progress});
 				Parent->FinishCallback(std::move(ChildResult));
 			}
 		}
 		UID Iterate()
 		{
 			while (Progress < Sum<Times...>())
-				switch (const UID Result = SubObjects[Progress]->Start();)
+				switch (const UID Result = SubPointers[ShuffleIndex[Progress]]->Start())
 				{
 				default:
 					return Result;
 				case UID::Exception_StillRunning:
+					ProgressMessage.Current = SubPointers[ShuffleIndex[Progress]]->ClassID;
+					Async_stream_IO::Send(CustomProgress(StackLevel, ProgressMessage), ProgressPort);
 					return UID::Exception_StillRunning;
 				case UID::Exception_Success:
-					Progress++;
+					ProgressMessage.RepeatsDone[ShuffleIndex[Progress++]]++;
 				}
 			return UID::Exception_Success;
 		}

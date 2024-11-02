@@ -31,6 +31,13 @@ struct CustomProgress
 	T Progress;
 	constexpr CustomProgress(uint8_t StackLevel, T Progress, UID Type = UID::Progress_Overwrite) : Type(Type), StackLevel(StackLevel), Progress(Progress) {}
 };
+template <typename T>
+struct SignalProgress
+{
+	UID Type = UID::Progress_Signal;
+	T Signal;
+	constexpr SignalProgress(T Signal) : Signal(Signal) {}
+};
 #pragma pack(pop)
 struct CallbackMessage
 {
@@ -49,10 +56,10 @@ struct Object
 	FinishCallback通常会被中断调用，因此可能会与其访问相同资源的过程通常应当禁用中断。
 	如果
 	*/
-	virtual UID Start() { return UID::Exception_Success; }
-	virtual UID Restore(std::span<const uint8_t> ProgressInfo) { return UID::Exception_Success; }
+	virtual UID Start() { return UID::Exception_MethodNotSupported; }
+	virtual UID Restore(std::span<const uint8_t> ProgressInfo) { return UID::Exception_MethodNotSupported; }
 	// 支持重复的Object应override此方法，重复执行Times次，返回Exception_Success。
-	virtual UID Repeat(uint16_t Times) { return UID::Exception_Success; }
+	virtual UID Repeat(uint16_t Times) { return UID::Exception_MethodNotSupported; }
 	// 支持暂停的Object应override此方法，暂停当前执行，返回Exception_Success。调用方应检查返回值判断当前Object是否支持暂停，在不支持暂停的情况下采取其它措施实现暂停。
 	virtual UID Pause() { return UID::Exception_MethodNotSupported; }
 	// 支持暂停的Object应override此方法，继续上次暂停的执行。
@@ -62,7 +69,7 @@ struct Object
 	// 支持获取信息的Object应override此方法
 	virtual UID GetInformation(std::dynarray<char> &Container) { return UID::Exception_MethodNotSupported; }
 	virtual ~Object() {}
-	virtual void FinishCallback(std::unique_ptr<CallbackMessage> Message) = 0;
+	virtual void FinishCallback(std::unique_ptr<CallbackMessage> Message) {}
 
 protected:
 	const uint8_t ProgressPort;
@@ -133,13 +140,6 @@ struct ChildObject : Object
 	const uint8_t StackLevel;
 	UID ClassID;
 	ChildObject(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel, UID ClassID) : Object(ProgressPort), Parent(Parent), StackLevel(StackLevel), ClassID(ClassID) {}
-	virtual ~ChildObject() {}
-
-protected:
-	void FinishCallback(std::unique_ptr<CallbackMessage> Message) override
-	{
-		Parent->FinishCallback(std::move(Message));
-	}
 };
 template <typename ObjectType>
 inline RootObject *New(uint8_t ProgressPort)
@@ -331,9 +331,9 @@ struct ExpandSequence<std::integer_sequence<uint8_t, Index...>>
 
 // 顺序依次执行所有的Object
 template <typename... ObjectType>
-struct Sequential : ChildObject
+struct _Sequential : ChildObject
 {
-	Sequential(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel, UID::TemplateID_Sequential), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
+	_Sequential(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel, UID ClassID = UID::TemplateID_Sequential) : ChildObject(ProgressPort, Parent, StackLevel, ClassID), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
 	{
 		ExpandSequence<std::index_sequence_for<ObjectType...>>::TupleFillArray(SubObjects, SubPointers);
 	}
@@ -355,10 +355,6 @@ struct Sequential : ChildObject
 		const UID Result = ProgressInfo.empty() ? Iterate() : SubPointers[Progress]->Restore(ProgressInfo);
 		Running = Result == UID::Exception_StillRunning;
 		return Result;
-	}
-	UID Repeat(uint16_t Times) override
-	{
-		return UID::Exception_MethodNotSupported;
 	}
 	UID Pause() override
 	{
@@ -404,14 +400,14 @@ protected:
 			default:
 				Running = false;
 				ChildResult->Exception = Result;
-				ChildResult->StackTrace = {{StackLevel, UID::TemplateID_Sequential, Progress}};
+				ChildResult->StackTrace = {{StackLevel, ClassID, Progress}};
 				Parent->FinishCallback(std::move(ChildResult));
 			}
 		}
 		else
 		{
 			Running = false;
-			ChildResult->StackTrace.push_back({StackLevel, UID::TemplateID_Sequential, Progress});
+			ChildResult->StackTrace.push_back({StackLevel, ClassID, Progress});
 			Parent->FinishCallback(std::move(ChildResult));
 		}
 	}
@@ -432,11 +428,11 @@ protected:
 	template <uint16_t... Times>
 	struct WithRepeat : ChildObject
 	{
-		WithRepeat(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel, UID::TemplateID_SequentialRepeat), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
+		WithRepeat(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel, UID ClassID = UID::TemplateID_SequentialRepeat) : ChildObject(ProgressPort, Parent, StackLevel, ClassID), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
 		{
 			ExpandSequence<std::index_sequence_for<ObjectType...>>::ExpandRepeat<Times...>::TupleFillArray(SubObjects, SubPointers);
 		}
-		virtual UID Start() override
+		UID Start() override
 		{
 			if (Running)
 				return UID::Exception_ObjectNotIdle;
@@ -454,10 +450,6 @@ protected:
 			const UID Result = ProgressInfo.empty() ? Iterate() : SubPointers[Progress]->Restore(ProgressInfo);
 			Running = Result == UID::Exception_StillRunning;
 			return Result;
-		}
-		UID Repeat(uint16_t Times) override
-		{
-			return UID::Exception_MethodNotSupported;
 		}
 		UID Pause() override
 		{
@@ -530,8 +522,42 @@ protected:
 		}
 	};
 };
+// 依次执行多个对象
+template <typename... ObjectType>
+struct Sequential : _Sequential<ObjectType...>
+{
+	using _Sequential<ObjectType...>::_Sequential;
 
-// 随机顺序执行Object。
+	// 为对象附加自定义ID
+	template <UID CustomID>
+	struct WithID : _Sequential<ObjectType...>
+	{
+		WithID(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : _Sequential<ObjectType...>(ProgressPort, Parent, StackLevel, CustomID) {}
+		OverrideGetInformation;
+
+	protected:
+		static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, CustomID, UID::Property_Subobjects, InfoCell(ObjectType::Information...));
+	};
+
+	// 每个对象重复执行特定次数
+	template <uint16_t... Times>
+	struct WithRepeat : _Sequential<ObjectType...>::template WithRepeat<Times...>
+	{
+		using _Sequential<ObjectType...>::template WithRepeat<Times...>::WithRepeat;
+
+		// 为对象附加自定义ID
+		template <UID CustomID>
+		struct WithID : _Sequential<ObjectType...>::template WithRepeat<Times...>
+		{
+			WithID(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : _Sequential<ObjectType...>::template WithRepeat<Times...>(ProgressPort, Parent, StackLevel, CustomID) {}
+			OverrideGetInformation;
+
+		protected:
+			static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, CustomID, UID::Property_Subobjects, InfoCell(InfoStruct(UID::Property_ObjectInfo, ObjectType::Information, UID::Property_RepeatTime, Times)...));
+		};
+	};
+};
+
 #ifdef ARDUINO_ARCH_AVR
 using ArchUrng = std::ArduinoUrng;
 #else
@@ -539,9 +565,9 @@ using ArchUrng = std::TrueUrng;
 #endif
 extern ArchUrng Urng;
 template <typename... ObjectType>
-struct Random : ChildObject
+struct _Random : ChildObject
 {
-	Random(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel, UID::TemplateID_Random), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
+	_Random(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel, UID ClassID = UID::TemplateID_Random) : ChildObject(ProgressPort, Parent, StackLevel, ClassID), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
 	{
 		ExpandSequence<std::index_sequence_for<ObjectType...>>::TupleFillArray(SubObjects, SubPointers);
 	}
@@ -578,10 +604,6 @@ struct Random : ChildObject
 		const UID Result = ProgressInfo.empty() ? Iterate() : SubPointers[Progress]->Restore(ProgressInfo);
 		Running = Result == UID::Exception_StillRunning;
 		return Result;
-	}
-	UID Repeat(uint16_t Times) override
-	{
-		return UID::Exception_MethodNotSupported;
 	}
 	UID Pause() override
 	{
@@ -626,14 +648,14 @@ protected:
 			default:
 				Running = false;
 				ChildResult->Exception = Result;
-				ChildResult->StackTrace = {{StackLevel, UID::TemplateID_Random, Progress}};
+				ChildResult->StackTrace = {{StackLevel, ClassID, Progress}};
 				Parent->FinishCallback(std::move(ChildResult));
 			}
 		}
 		else
 		{
 			Running = false;
-			ChildResult->StackTrace.push_back({StackLevel, UID::TemplateID_Random, Progress});
+			ChildResult->StackTrace.push_back({StackLevel, ClassID, Progress});
 			Parent->FinishCallback(std::move(ChildResult));
 		}
 	}
@@ -673,7 +695,7 @@ protected:
 	template <uint16_t... Times>
 	struct WithRepeat : ChildObject
 	{
-		WithRepeat(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel, UID::TemplateID_RandomRepeat), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
+		WithRepeat(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel, UID ClassID = UID::TemplateID_RandomRepeat) : ChildObject(ProgressPort, Parent, StackLevel, ClassID), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
 		{
 			ExpandIndex::TupleFillArray(SubObjects, SubPointers);
 			ExpandIndex::TimesFillIndex<Times...>(ShuffleIndex);
@@ -713,10 +735,6 @@ protected:
 			const UID Result = ProgressInfo.empty() ? Iterate() : SubPointers[ShuffleIndex[Progress]]->Restore(ProgressInfo);
 			Running = Result == UID::Exception_StillRunning;
 			return Result;
-		}
-		UID Repeat(uint16_t Times) override
-		{
-			return UID::Exception_MethodNotSupported;
 		}
 		UID Pause() override
 		{
@@ -770,14 +788,14 @@ protected:
 				default:
 					Running = false;
 					ChildResult->Exception = Result;
-					ChildResult->StackTrace = {{StackLevel, UID::TemplateID_RandomRepeat, Progress}};
+					ChildResult->StackTrace = {{StackLevel, ClassID, Progress}};
 					Parent->FinishCallback(std::move(ChildResult));
 				}
 			}
 			else
 			{
 				Running = false;
-				ChildResult->StackTrace.push_back({StackLevel, UID::TemplateID_RandomRepeat, Progress});
+				ChildResult->StackTrace.push_back({StackLevel, ClassID, Progress});
 				Parent->FinishCallback(std::move(ChildResult));
 			}
 		}
@@ -799,3 +817,56 @@ protected:
 		}
 	};
 };
+// 按随机顺序执行每个对象各一次
+template <typename... ObjectType>
+struct Random : _Random<ObjectType...>
+{
+	using _Random<ObjectType...>::_Random;
+
+	// 为对象附加自定义ID
+	template <UID CustomID>
+	struct WithID : _Random<ObjectType...>
+	{
+		WithID(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : _Random<ObjectType...>(ProgressPort, Parent, StackLevel, CustomID) {}
+		OverrideGetInformation;
+
+	protected:
+		static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, CustomID, UID::Property_Subobjects, InfoCell(ObjectType::Information...));
+	};
+
+	// 随机穿插地重复执行每个对象指定次数
+	template <uint16_t... Times>
+	struct WithRepeat : _Random<ObjectType...>::template WithRepeat<Times...>
+	{
+		using _Random<ObjectType...>::template WithRepeat<Times...>::WithRepeat;
+
+		// 为对象附加自定义ID
+		template <UID CustomID>
+		struct WithID : _Random<ObjectType...>::template WithRepeat<Times...>
+		{
+			WithID(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : _Random<ObjectType...>::template WithRepeat<Times...>(ProgressPort, Parent, StackLevel, CustomID) {}
+			OverrideGetInformation;
+
+		protected:
+			static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, CustomID, UID::Property_Subobjects, InfoCell(InfoStruct(UID::Property_ObjectInfo, ObjectType::Information, UID::Property_RepeatTime, Times)...));
+		};
+	};
+};
+
+template <typename T, T Value, UID CustomID = UID::TemplateID_Signal>
+struct Signal : ChildObject
+{
+	Signal(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel, CustomID) {}
+	UID Start() override
+	{
+		Async_stream_IO::Send(SignalProgress(Value), ProgressPort);
+		return UID::Exception_Success;
+	}
+	OverrideGetInformation;
+
+protected:
+	static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, CustomID, UID::Property_SignalValue, Value);
+};
+
+template <UID CustomID = UID::TemplateID_TrialStart>
+using TrialStart = Signal<UID, UID::Signal_TrialStart, CustomID>;

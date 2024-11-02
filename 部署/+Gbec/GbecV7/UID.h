@@ -28,11 +28,14 @@ enum class UID : uint8_t
 	Property_Subobjects,
 	Property_ObjectInfo,
 	Property_RepeatTime,
+	Property_SignalValue,
 
 	TemplateID_Sequential,
 	TemplateID_SequentialRepeat,
 	TemplateID_Random,
 	TemplateID_RandomRepeat,
+	TemplateID_Signal,
+	TemplateID_TrialStart,
 
 	Type_Bool,
 	Type_UInt8,
@@ -48,6 +51,8 @@ enum class UID : uint8_t
 
 	Progress_Exception,
 	Progress_Overwrite,
-	Progress_Trial,
-	Progress_Append
+	Progress_Signal,
+	Progress_Append,
+
+	Signal_TrialStart,
 };

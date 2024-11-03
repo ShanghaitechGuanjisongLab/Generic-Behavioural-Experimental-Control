@@ -13,8 +13,8 @@
 #pragma pack(push, 1)
 struct StackFrame
 {
-	uint8_t StackLevel;
-	UID Template;
+	// 不能有StackLevel字段，因为需要支持异步异常，没有StackLevel
+	UID ClassID;
 	uint16_t Progress;
 };
 struct ExceptionProgress
@@ -67,9 +67,9 @@ struct Object
 	// 支持废弃的Object应override此方法，废弃当前执行，返回Exception_Success。调用方应检查返回值判断当前Object是否支持废弃，在不支持废弃的情况下采取其它措施实现废弃。
 	virtual UID Abort() { return UID::Exception_MethodNotSupported; }
 	// 支持获取信息的Object应override此方法
-	virtual UID GetInformation(std::dynarray<char> &Container) { return UID::Exception_MethodNotSupported; }
+	virtual UID GetInformation(std::dynarray<char>& Container) { return UID::Exception_MethodNotSupported; }
 	virtual ~Object() {}
-	virtual void FinishCallback(std::unique_ptr<CallbackMessage> Message) {}
+	virtual void FinishCallback(std::unique_ptr<CallbackMessage> Message) = 0;
 
 protected:
 	const uint8_t ProgressPort;
@@ -77,7 +77,7 @@ protected:
 };
 struct RootObject : Object
 {
-	Object *Child;
+	Object* Child;
 	RootObject(uint8_t ProgressPort) : Object(ProgressPort) {}
 	virtual ~RootObject() { delete Child; }
 	UID Start() override
@@ -111,7 +111,7 @@ struct RootObject : Object
 	{
 		return Child->Abort();
 	}
-	UID GetInformation(std::dynarray<char> &Container) override
+	UID GetInformation(std::dynarray<char>& Container) override
 	{
 		return Child->GetInformation(Container);
 	}
@@ -119,8 +119,8 @@ struct RootObject : Object
 protected:
 	void FinishCallback(std::unique_ptr<CallbackMessage> Message) override
 	{
-		Async_stream_IO::Send([Message = std::move(Message)](const std::move_only_function<void(const void *Message, uint8_t Size) const> &MessageSender)
-							  {
+		Async_stream_IO::Send([Message = std::move(Message)](const std::move_only_function<void(const void* Message, uint8_t Size) const>& MessageSender)
+			{
 				ExceptionProgress Header(Message->Exception);
 				if (Header.Exception == UID::Exception_Success)
 					MessageSender(&Header, sizeof(ExceptionProgress));
@@ -136,15 +136,15 @@ protected:
 };
 struct ChildObject : Object
 {
-	Object *const Parent;
+	Object* const Parent;
 	const uint8_t StackLevel;
 	UID ClassID;
-	ChildObject(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel, UID ClassID) : Object(ProgressPort), Parent(Parent), StackLevel(StackLevel), ClassID(ClassID) {}
+	ChildObject(uint8_t ProgressPort, Object* Parent, uint8_t StackLevel, UID ClassID) : Object(ProgressPort), Parent(Parent), StackLevel(StackLevel), ClassID(ClassID) {}
 };
 template <typename ObjectType>
-inline RootObject *New(uint8_t ProgressPort)
+inline RootObject* New(uint8_t ProgressPort)
 {
-	RootObject *const Root = new RootObject(ProgressPort);
+	RootObject* const Root = new RootObject(ProgressPort);
 	Root->Child = new ObjectType(ProgressPort, Root, 0);
 	return Root;
 }
@@ -187,7 +187,7 @@ struct InfoArray
 	static constexpr UID ID = UID::Type_Array;
 	uint8_t Number = sizeof...(Ts) + 1;
 	UID Type = TypeID<typename T::value_type>::value;
-	typename T::value_type Array[sizeof...(Ts) + 1] = {T::value, Ts::value...};
+	typename T::value_type Array[sizeof...(Ts) + 1] = { T::value, Ts::value... };
 };
 template <typename T, typename... Ts>
 struct CellArray
@@ -196,7 +196,8 @@ struct CellArray
 	T Value;
 	CellArray<Ts...> Values;
 	constexpr CellArray(T Value, Ts... Values)
-		: Value(Value), Values(CellArray<Ts...>(Values...)) {}
+		: Value(Value), Values(CellArray<Ts...>(Values...)) {
+	}
 };
 template <typename T>
 struct CellArray<T>
@@ -204,7 +205,8 @@ struct CellArray<T>
 	UID Type = TypeID<T>::value;
 	T Value;
 	constexpr CellArray(T Value)
-		: Value(Value) {}
+		: Value(Value) {
+	}
 };
 template <typename... T>
 struct InfoCell
@@ -219,7 +221,8 @@ struct InfoCell<T, Ts...>
 	uint8_t NumCells = sizeof...(Ts) + 1;
 	CellArray<T, Ts...> Values;
 	constexpr InfoCell(T Value, Ts... Values)
-		: Values(CellArray<T, Ts...>(Value, Values...)) {}
+		: Values(CellArray<T, Ts...>(Value, Values...)) {
+	}
 };
 // 只有主模板能推断，特化模板必须加推断向导
 template <typename T, typename... Ts>
@@ -232,7 +235,8 @@ struct InfoFields
 	TValue Value;
 	InfoFields<Ts...> FollowingFields;
 	constexpr InfoFields(TName Name, TValue Value, Ts... NameValues)
-		: Name(Name), Value(Value), FollowingFields(InfoFields<Ts...>(NameValues...)) {}
+		: Name(Name), Value(Value), FollowingFields(InfoFields<Ts...>(NameValues...)) {
+	}
 };
 template <typename TName, typename TValue>
 struct InfoFields<TName, TValue>
@@ -241,7 +245,8 @@ struct InfoFields<TName, TValue>
 	UID Type = TypeID<TValue>::value;
 	TValue Value;
 	constexpr InfoFields(TName Name, TValue Value)
-		: Name(Name), Value(Value) {}
+		: Name(Name), Value(Value) {
+	}
 };
 template <typename... Ts>
 struct InfoStruct
@@ -257,7 +262,8 @@ struct InfoStruct<UID, T, Ts...>
 	uint8_t NumFields = sizeof...(Ts) / 2 + 1;
 	InfoFields<UID, T, Ts...> Fields;
 	constexpr InfoStruct(UID Name, T Value, Ts... NameValues)
-		: Fields(InfoFields<UID, T, Ts...>(Name, Value, NameValues...)) {}
+		: Fields(InfoFields<UID, T, Ts...>(Name, Value, NameValues...)) {
+	}
 };
 #ifdef __cpp_deduction_guides
 // 只有主模板能推断，特化模板必须加推断向导（或者直接限定模板参数不能为空）
@@ -296,18 +302,18 @@ struct ExpandSequence<std::index_sequence<Index...>>
 	struct ExpandRepeat
 	{
 		template <typename TupleType>
-		static void TupleFillArray(const TupleType &Tuple, const ChildObject **Array)
+		static void TupleFillArray(const TupleType& Tuple, const ChildObject** Array)
 		{
 			ParameterPackExpand(Array = std::fill_n(Array, Repeat, &std::get<Index>(Tuple)));
 		}
 	};
 	template <typename TupleType>
-	static void TupleFillArray(const TupleType &Tuple, const ChildObject **Array)
+	static void TupleFillArray(const TupleType& Tuple, const ChildObject** Array)
 	{
 		ParameterPackExpand(Array[Index] = &std::get<Index>(Tuple));
 	}
 	template <typename TupleType>
-	static void TupleFillArray(const TupleType &Tuple, const ChildObject **Array, const uint16_t *Repeat)
+	static void TupleFillArray(const TupleType& Tuple, const ChildObject** Array, const uint16_t* Repeat)
 	{
 		ParameterPackExpand(Array = std::fill_n(Array, Repeat[Index], &std::get<Index>(Tuple)));
 	}
@@ -316,12 +322,12 @@ template <uint8_t... Index>
 struct ExpandSequence<std::integer_sequence<uint8_t, Index...>>
 {
 	template <uint16_t... Times>
-	static void TimesFillIndex(uint8_t *IndexArray)
+	static void TimesFillIndex(uint8_t* IndexArray)
 	{
 		ParameterPackExpand(IndexArray = std::fill_n(IndexArray, Times, Index));
 	}
 	template <uint16_t... Times>
-	static void LeftFillIndex(uint8_t *IndexArray, const uint16_t *Done)
+	static void LeftFillIndex(uint8_t* IndexArray, const uint16_t* Done)
 	{
 		ParameterPackExpand(IndexArray = std::fill_n(IndexArray, Times - Done[Index], Index));
 	}
@@ -333,7 +339,7 @@ struct ExpandSequence<std::integer_sequence<uint8_t, Index...>>
 template <typename... ObjectType>
 struct _Sequential : ChildObject
 {
-	_Sequential(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel, UID ClassID = UID::TemplateID_Sequential) : ChildObject(ProgressPort, Parent, StackLevel, ClassID), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
+	_Sequential(uint8_t ProgressPort, Object* Parent, uint8_t StackLevel, UID ClassID = UID::TemplateID_Sequential) : ChildObject(ProgressPort, Parent, StackLevel, ClassID), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
 	{
 		ExpandSequence<std::index_sequence_for<ObjectType...>>::TupleFillArray(SubObjects, SubPointers);
 	}
@@ -379,7 +385,7 @@ struct _Sequential : ChildObject
 protected:
 	uint8_t Progress;
 	std::tuple<ObjectType...> SubObjects;
-	ChildObject *SubPointers[sizeof...(ObjectType)];
+	ChildObject* SubPointers[sizeof...(ObjectType)];
 	static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, UID::TemplateID_Sequential, UID::Property_Subobjects, InfoCell(ObjectType::Information...));
 	bool Running = false;
 	void FinishCallback(std::unique_ptr<CallbackMessage> ChildResult) override
@@ -390,7 +396,7 @@ protected:
 			switch (const UID Result = Iterate())
 			{
 			case UID::Exception_StillRunning:
-				if (StackLevel < UINT8_MAX)
+				if (StackLevel < __UINT8_MAX__)
 					Async_stream_IO::Send(CustomProgress(StackLevel, Progress), ProgressPort);
 				break;
 			case UID::Exception_Success:
@@ -400,14 +406,14 @@ protected:
 			default:
 				Running = false;
 				ChildResult->Exception = Result;
-				ChildResult->StackTrace = {{StackLevel, ClassID, Progress}};
+				ChildResult->StackTrace = { {ClassID, Progress} };
 				Parent->FinishCallback(std::move(ChildResult));
 			}
 		}
 		else
 		{
 			Running = false;
-			ChildResult->StackTrace.push_back({StackLevel, ClassID, Progress});
+			ChildResult->StackTrace.push_back({ ClassID, Progress });
 			Parent->FinishCallback(std::move(ChildResult));
 		}
 	}
@@ -428,7 +434,7 @@ protected:
 	template <uint16_t... Times>
 	struct WithRepeat : ChildObject
 	{
-		WithRepeat(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel, UID ClassID = UID::TemplateID_SequentialRepeat) : ChildObject(ProgressPort, Parent, StackLevel, ClassID), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
+		WithRepeat(uint8_t ProgressPort, Object* Parent, uint8_t StackLevel, UID ClassID = UID::TemplateID_SequentialRepeat) : ChildObject(ProgressPort, Parent, StackLevel, ClassID), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
 		{
 			ExpandSequence<std::index_sequence_for<ObjectType...>>::ExpandRepeat<Times...>::TupleFillArray(SubObjects, SubPointers);
 		}
@@ -445,7 +451,7 @@ protected:
 		{
 			if (Running)
 				return UID::Exception_ObjectNotIdle;
-			Progress = *reinterpret_cast<const uint16_t *>(ProgressInfo.data() + 1);
+			Progress = *reinterpret_cast<const uint16_t*>(ProgressInfo.data() + 1);
 			ProgressInfo = ProgressInfo.subspan(sizeof(Progress) + 1);
 			const UID Result = ProgressInfo.empty() ? Iterate() : SubPointers[Progress]->Restore(ProgressInfo);
 			Running = Result == UID::Exception_StillRunning;
@@ -474,7 +480,7 @@ protected:
 	protected:
 		uint16_t Progress;
 		std::tuple<ObjectType...> SubObjects;
-		ChildObject *SubPointers[Sum<Times...>()];
+		ChildObject* SubPointers[Sum<Times...>()];
 		static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, UID::TemplateID_SequentialRepeat, UID::Property_Subobjects, InfoCell(InfoStruct(UID::Property_ObjectInfo, ObjectType::Information, UID::Property_RepeatTime, Times)...));
 		bool Running = false;
 		void FinishCallback(std::unique_ptr<CallbackMessage> ChildResult) override
@@ -485,7 +491,7 @@ protected:
 				switch (const UID Result = Iterate())
 				{
 				case UID::Exception_StillRunning:
-					if (StackLevel < UINT8_MAX)
+					if (StackLevel < __UINT8_MAX__)
 						Async_stream_IO::Send(CustomProgress(StackLevel, Progress), ProgressPort);
 					break;
 				case UID::Exception_Success:
@@ -495,14 +501,14 @@ protected:
 				default:
 					Running = false;
 					ChildResult->Exception = Result;
-					ChildResult->StackTrace = {{StackLevel, UID::TemplateID_SequentialRepeat, Progress}};
+					ChildResult->StackTrace = { {ClassID, Progress} };
 					Parent->FinishCallback(std::move(ChildResult));
 				}
 			}
 			else
 			{
 				Running = false;
-				ChildResult->StackTrace.push_back({StackLevel, UID::TemplateID_SequentialRepeat, Progress});
+				ChildResult->StackTrace.push_back({ ClassID, Progress });
 				Parent->FinishCallback(std::move(ChildResult));
 			}
 		}
@@ -532,7 +538,7 @@ struct Sequential : _Sequential<ObjectType...>
 	template <UID CustomID>
 	struct WithID : _Sequential<ObjectType...>
 	{
-		WithID(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : _Sequential<ObjectType...>(ProgressPort, Parent, StackLevel, CustomID) {}
+		WithID(uint8_t ProgressPort, Object* Parent, uint8_t StackLevel) : _Sequential<ObjectType...>(ProgressPort, Parent, StackLevel, CustomID) {}
 		OverrideGetInformation;
 
 	protected:
@@ -549,7 +555,7 @@ struct Sequential : _Sequential<ObjectType...>
 		template <UID CustomID>
 		struct WithID : _Sequential<ObjectType...>::template WithRepeat<Times...>
 		{
-			WithID(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : _Sequential<ObjectType...>::template WithRepeat<Times...>(ProgressPort, Parent, StackLevel, CustomID) {}
+			WithID(uint8_t ProgressPort, Object* Parent, uint8_t StackLevel) : _Sequential<ObjectType...>::template WithRepeat<Times...>(ProgressPort, Parent, StackLevel, CustomID) {}
 			OverrideGetInformation;
 
 		protected:
@@ -567,7 +573,7 @@ extern ArchUrng Urng;
 template <typename... ObjectType>
 struct _Random : ChildObject
 {
-	_Random(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel, UID ClassID = UID::TemplateID_Random) : ChildObject(ProgressPort, Parent, StackLevel, ClassID), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
+	_Random(uint8_t ProgressPort, Object* Parent, uint8_t StackLevel, UID ClassID = UID::TemplateID_Random) : ChildObject(ProgressPort, Parent, StackLevel, ClassID), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
 	{
 		ExpandSequence<std::index_sequence_for<ObjectType...>>::TupleFillArray(SubObjects, SubPointers);
 	}
@@ -586,7 +592,7 @@ struct _Random : ChildObject
 		if (Running)
 			return UID::Exception_ObjectNotIdle;
 		Progress = *ProgressInfo.data();
-		const UID *ObjectsDone = reinterpret_cast<const UID *>(ProgressInfo.data() + 1);
+		const UID* ObjectsDone = reinterpret_cast<const UID*>(ProgressInfo.data() + 1);
 		for (uint8_t P1 = 0; P1 < Progress; ++P1)
 		{
 			uint8_t P2;
@@ -628,7 +634,7 @@ struct _Random : ChildObject
 protected:
 	uint8_t Progress;
 	std::tuple<ObjectType...> SubObjects;
-	ChildObject *SubPointers[sizeof...(ObjectType)];
+	ChildObject* SubPointers[sizeof...(ObjectType)];
 	static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, UID::TemplateID_Random, UID::Property_Subobjects, InfoCell(ObjectType::Information...));
 	bool Running = false;
 	void FinishCallback(std::unique_ptr<CallbackMessage> ChildResult) override
@@ -648,14 +654,14 @@ protected:
 			default:
 				Running = false;
 				ChildResult->Exception = Result;
-				ChildResult->StackTrace = {{StackLevel, ClassID, Progress}};
+				ChildResult->StackTrace = { {ClassID, Progress} };
 				Parent->FinishCallback(std::move(ChildResult));
 			}
 		}
 		else
 		{
 			Running = false;
-			ChildResult->StackTrace.push_back({StackLevel, ClassID, Progress});
+			ChildResult->StackTrace.push_back({ ClassID, Progress });
 			Parent->FinishCallback(std::move(ChildResult));
 		}
 	}
@@ -669,22 +675,21 @@ protected:
 			default:
 				return Result;
 			case UID::Exception_StillRunning:
-			{
-				if (Progress == Start)
-					Async_stream_IO::Send(CustomProgress(StackLevel, SubPointers[Progress]->ClassID, Start ? UID::Progress_Append : UID::Progress_Overwrite), ProgressPort);
-				else
-				{
-					const uint8_t ProgressSize = sizeof(CustomProgress<UID>) + Progress - Start;
-					std::unique_ptr<char[]> Buffer = std::make_unique_for_overwrite<char[]>(ProgressSize);
-					*reinterpret_cast<CustomProgress<UID> *>(Buffer.get()) = CustomProgress(StackLevel, SubPointers[Progress]->ClassID, Start ? UID::Progress_Append : UID::Progress_Overwrite);
-					UID *Pointer = reinterpret_cast<UID *>(Buffer.get() + sizeof(CustomProgress<UID>));
-					while (++Start <= Progress)
-						*Pointer++ = SubPointers[Start]->ClassID;
-					Async_stream_IO::Send([Buffer = std::move(Buffer), ProgressSize](const std::move_only_function<void(const void *Message, uint8_t Size) const> &MessageSender)
-										  { MessageSender(Buffer.get(), ProgressSize); }, ProgressPort);
-				}
+				if (StackLevel < __UINT8_MAX__)
+					if (Progress == Start)
+						Async_stream_IO::Send(CustomProgress(StackLevel, SubPointers[Progress]->ClassID, Start ? UID::Progress_Append : UID::Progress_Overwrite), ProgressPort);
+					else
+					{
+						const uint8_t ProgressSize = sizeof(CustomProgress<UID>) + Progress - Start;
+						std::unique_ptr<char[]> Buffer = std::make_unique_for_overwrite<char[]>(ProgressSize);
+						*reinterpret_cast<CustomProgress<UID>*>(Buffer.get()) = CustomProgress(StackLevel, SubPointers[Progress]->ClassID, Start ? UID::Progress_Append : UID::Progress_Overwrite);
+						UID* Pointer = reinterpret_cast<UID*>(Buffer.get() + sizeof(CustomProgress<UID>));
+						while (++Start <= Progress)
+							*Pointer++ = SubPointers[Start]->ClassID;
+						Async_stream_IO::Send([Buffer = std::move(Buffer), ProgressSize](const std::move_only_function<void(const void* Message, uint8_t Size) const>& MessageSender)
+							{ MessageSender(Buffer.get(), ProgressSize); }, ProgressPort);
+					}
 				return UID::Exception_StillRunning;
-			}
 			case UID::Exception_Success:
 				Progress++;
 			}
@@ -695,7 +700,7 @@ protected:
 	template <uint16_t... Times>
 	struct WithRepeat : ChildObject
 	{
-		WithRepeat(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel, UID ClassID = UID::TemplateID_RandomRepeat) : ChildObject(ProgressPort, Parent, StackLevel, ClassID), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
+		WithRepeat(uint8_t ProgressPort, Object* Parent, uint8_t StackLevel, UID ClassID = UID::TemplateID_RandomRepeat) : ChildObject(ProgressPort, Parent, StackLevel, ClassID), SubObjects(ObjectType(ProgressPort, this, StackLevel + 1)...)
 		{
 			ExpandIndex::TupleFillArray(SubObjects, SubPointers);
 			ExpandIndex::TimesFillIndex<Times...>(ShuffleIndex);
@@ -715,10 +720,10 @@ protected:
 		{
 			if (Running)
 				return UID::Exception_ObjectNotIdle;
-			ProgressMessage = *reinterpret_cast<const ProgressType *>(ProgressInfo.data() + 1);
+			ProgressMessage = *reinterpret_cast<const ProgressType*>(ProgressInfo.data() + 1);
 			ProgressInfo = ProgressInfo.subspan(sizeof(ProgressMessage) + 1);
 			Progress = std::accumulate(std::begin(ProgressMessage.RepeatsDone), std::end(ProgressMessage.RepeatsDone), 0);
-			uint8_t *Pointer = ShuffleIndex;
+			uint8_t* Pointer = ShuffleIndex;
 			uint8_t Index;
 			for (Index = 0; Index < sizeof...(ObjectType); ++Index)
 				Pointer = std::fill_n(Pointer, ProgressMessage.RepeatsDone[Index], Index);
@@ -766,7 +771,7 @@ protected:
 		} ProgressMessage;
 #pragma pack(pop)
 		const std::tuple<ObjectType...> SubObjects;
-		ChildObject *SubPointers[sizeof...(ObjectType)];
+		ChildObject* SubPointers[sizeof...(ObjectType)];
 		uint8_t ShuffleIndex[Sum<Times...>()];
 		uint16_t Progress;
 		static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, UID::TemplateID_RandomRepeat, UID::Property_Subobjects, InfoCell(InfoStruct(UID::Property_ObjectInfo, ObjectType::Information, UID::Property_RepeatTime, Times)...));
@@ -788,14 +793,14 @@ protected:
 				default:
 					Running = false;
 					ChildResult->Exception = Result;
-					ChildResult->StackTrace = {{StackLevel, ClassID, Progress}};
+					ChildResult->StackTrace = { {ClassID, Progress} };
 					Parent->FinishCallback(std::move(ChildResult));
 				}
 			}
 			else
 			{
 				Running = false;
-				ChildResult->StackTrace.push_back({StackLevel, ClassID, Progress});
+				ChildResult->StackTrace.push_back({ ClassID, Progress });
 				Parent->FinishCallback(std::move(ChildResult));
 			}
 		}
@@ -807,8 +812,11 @@ protected:
 				default:
 					return Result;
 				case UID::Exception_StillRunning:
-					ProgressMessage.Current = SubPointers[ShuffleIndex[Progress]]->ClassID;
-					Async_stream_IO::Send(CustomProgress(StackLevel, ProgressMessage), ProgressPort);
+					if (StackLevel < __UINT8_MAX__)
+					{
+						ProgressMessage.Current = SubPointers[ShuffleIndex[Progress]]->ClassID;
+						Async_stream_IO::Send(CustomProgress(StackLevel, ProgressMessage), ProgressPort);
+					}
 					return UID::Exception_StillRunning;
 				case UID::Exception_Success:
 					ProgressMessage.RepeatsDone[ShuffleIndex[Progress++]]++;
@@ -827,7 +835,7 @@ struct Random : _Random<ObjectType...>
 	template <UID CustomID>
 	struct WithID : _Random<ObjectType...>
 	{
-		WithID(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : _Random<ObjectType...>(ProgressPort, Parent, StackLevel, CustomID) {}
+		WithID(uint8_t ProgressPort, Object* Parent, uint8_t StackLevel) : _Random<ObjectType...>(ProgressPort, Parent, StackLevel, CustomID) {}
 		OverrideGetInformation;
 
 	protected:
@@ -844,7 +852,7 @@ struct Random : _Random<ObjectType...>
 		template <UID CustomID>
 		struct WithID : _Random<ObjectType...>::template WithRepeat<Times...>
 		{
-			WithID(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : _Random<ObjectType...>::template WithRepeat<Times...>(ProgressPort, Parent, StackLevel, CustomID) {}
+			WithID(uint8_t ProgressPort, Object* Parent, uint8_t StackLevel) : _Random<ObjectType...>::template WithRepeat<Times...>(ProgressPort, Parent, StackLevel, CustomID) {}
 			OverrideGetInformation;
 
 		protected:
@@ -853,10 +861,47 @@ struct Random : _Random<ObjectType...>
 	};
 };
 
+// 异步执行一个对象。无论该对象返回Success还是StillRunning，都会立即返回Success，不会等待对象执行完毕。异步执行的对象不能暂停、放弃，也不能从中断中恢复。异步对象出错不会导致主线程失败。
+template <typename T, UID CustomUID = UID::TemplateID_Async>
+struct StartAsync : ChildObject
+{
+	StartAsync(uint8_t ProgressPort, Object* Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel, CustomUID), SubObject{ ProgressPort, this, -1 } {}
+	UID Start() override
+	{
+		switch (const UID Result = SubObject.Start())
+		{
+		case UID::Exception_Success:
+		case UID::Exception_StillRunning:
+			return UID::Exception_Success;
+		default:
+			return Result;
+		}
+	}
+	OverrideGetInformation;
+
+protected:
+	T SubObject;
+	static constexpr auto Information PROGMEM = InfoStruct(UID::Property_TemplateID, CustomUID, UID::Property_Subobjects, T::Information);
+	void FinishCallback(std::unique_ptr<CallbackMessage> Exception) override
+	{
+		if (Exception->Exception != UID::Exception_Success)
+		{
+			Async_stream_IO::Send([Message = std::move(Exception)](const std::move_only_function<void(const void* Message, uint8_t Size) const>& MessageSender)
+				{
+					const uint8_t Size = sizeof(ExceptionProgress) + sizeof(StackFrame) * Message->StackTrace.size();
+					std::unique_ptr<char[]> Buffer = std::make_unique_for_overwrite<char[]>(Size);
+					*reinterpret_cast<ExceptionProgress*>(Buffer.get()) = Message->Exception;
+					std::copy(Message->StackTrace.cbegin(), Message->StackTrace.cend(), reinterpret_cast<StackFrame*>(reinterpret_cast<ExceptionProgress*>(Buffer.get()) + 1));
+					MessageSender(Buffer.get(), Size);
+				}, ProgressPort);
+		}
+	}
+};
+
 template <typename T, T Value, UID CustomID = UID::TemplateID_Signal>
 struct Signal : ChildObject
 {
-	Signal(uint8_t ProgressPort, Object *Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel, CustomID) {}
+	Signal(uint8_t ProgressPort, Object* Parent, uint8_t StackLevel) : ChildObject(ProgressPort, Parent, StackLevel, CustomID) {}
 	UID Start() override
 	{
 		Async_stream_IO::Send(SignalProgress(Value), ProgressPort);
@@ -870,3 +915,4 @@ protected:
 
 template <UID CustomID = UID::TemplateID_TrialStart>
 using TrialStart = Signal<UID, UID::Signal_TrialStart, CustomID>;
+

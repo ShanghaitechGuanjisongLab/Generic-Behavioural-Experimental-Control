@@ -36,6 +36,7 @@ enum class UID : uint8_t
 	TemplateID_RandomRepeat,
 	TemplateID_Signal,
 	TemplateID_TrialStart,
+	TemplateID_Async,
 
 	Type_Bool,
 	Type_UInt8,

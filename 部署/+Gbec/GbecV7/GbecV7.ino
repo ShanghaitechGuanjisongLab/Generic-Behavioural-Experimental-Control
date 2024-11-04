@@ -8,6 +8,7 @@ inline void BindFunctionToPort(T&& Function, UID Port)
 }
 // 此全局对象不上锁，禁止使用中断处理方法访问
 std::set<RootObject*> AllObjects;
+std::unordered_map<UID, ChildObject*>AsyncObjects;
 // 此全局对象可以被中断处理方法访问，因此在中断启用时禁止访问。从此容器中删除的任务，仍可能会被执行最后一次，因此任务的资源应当由任务本身负责释放
 std::set<const std::shared_ptr<const std::move_only_function<void() const>>> IdleTasks;
 extern const std::unordered_map<UID, RootObject* (*)()> ObjectCreators;

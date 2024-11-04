@@ -23,12 +23,14 @@ enum class UID : uint8_t
 	Exception_ObjectNotRunning,
 	Exception_ObjectNotPaused,
 	Exception_ProgressObjectNotFound,
+	Exception_AsyncObjectNotFound,
 
-	Property_TemplateID,
+	Property_ClassID,
 	Property_Subobjects,
 	Property_ObjectInfo,
 	Property_RepeatTime,
 	Property_SignalValue,
+	Property_StarterID,
 
 	TemplateID_Sequential,
 	TemplateID_SequentialRepeat,
@@ -36,7 +38,8 @@ enum class UID : uint8_t
 	TemplateID_RandomRepeat,
 	TemplateID_Signal,
 	TemplateID_TrialStart,
-	TemplateID_Async,
+	TemplateID_StartAsync,
+	TemplateID_StopAsync,
 
 	Type_Bool,
 	Type_UInt8,
@@ -54,6 +57,7 @@ enum class UID : uint8_t
 	Progress_Overwrite,
 	Progress_Signal,
 	Progress_Append,
+	Progress_Warning,
 
 	Signal_TrialStart,
 };

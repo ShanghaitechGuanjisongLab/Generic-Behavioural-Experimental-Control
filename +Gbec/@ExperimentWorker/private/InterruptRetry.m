@@ -21,6 +21,7 @@ for a=1:obj.MaxRetryTimes
 	end
 end
 if ReconnectFail
+	obj.State=UID.State_SessionInvalid;
 	Exception.Disconnection_reconnection_failed.Throw;
 end
 obj.LogPrint("重新连接成功");

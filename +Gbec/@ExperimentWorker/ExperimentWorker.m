@@ -134,7 +134,7 @@ classdef ExperimentWorker<handle
 				obj.SignalHandler(obj.Serial.read(1,'uint8'));
 			end
 		end
-		function TestHandler(~,Signal)
+		function TestHandler(obj,Signal)
 			persistent SignalRecord
 			if isempty(SignalRecord)
 				SignalRecord=dictionary;

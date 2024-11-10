@@ -75,8 +75,9 @@ FromPaths=NewPaths(Index);
 ToPaths=arrayfun(@(FP)fullfile(OldDirectory,string(System.IO.Path.GetRelativePath(NewDirectory,FP))),FromPaths);
 end
 function OverwriteInstall(DeployToUser,DeployToWorking,WorkingDirectory,VerFile)
-MATLAB.IO.CopyFile(DeployToUser,userpath);
-MATLAB.IO.CopyFile(fullfile(DeployToWorking,'*'),WorkingDirectory);
+if MATLAB.IO.CopyFile(DeployToUser,userpath)||MATLAB.IO.CopyFile(fullfile(DeployToWorking,'*'),WorkingDirectory)
+	Gbec.Exception.User_canceled_operation.Throw;
+end
 Gbec.GenerateMatlabUIDs;
 Fid=fopen(VerFile,'w');
 fwrite(Fid,Gbec.Version().Deploy,'uint8');

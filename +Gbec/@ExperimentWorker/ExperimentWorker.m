@@ -54,7 +54,7 @@ classdef ExperimentWorker<handle
 	end
 	properties(Dependent)
 		%设置多少秒无操作后自动关闭串口，默认3分钟
-		ShutdownSerialAfter
+		ReleaseSerialAfter
 		%数据保存路径
 		% 如果那个路径已经有数据库文件，将尝试合并，然后为多天的行为做学习曲线图。文件存在性和可写性将会在设置该属性时立即检查，如果失败则此属性值不变。
 		SavePath(1,1)string
@@ -170,6 +170,11 @@ classdef ExperimentWorker<handle
 				obj.WatchDog.start;
 			end
 		end
+		function ShutdownSerial(obj)
+			obj.Serial.configureCallback('off');
+			obj.flush('input');
+			obj.SignalHandler=function_handle.empty;
+		end
 		function ReleaseSerial(obj,~,~)
 			%必须先发消息，因为LogPrint依赖Serial
 			obj.LogPrint('释放串口');
@@ -219,8 +224,7 @@ classdef ExperimentWorker<handle
 				switch Signal
 					case UID.Signal_TestStopped
 						obj.LogPrint('测试结束');
-						obj.Serial.configureCallback('off');
-						obj.SignalHandler=function_handle.empty;
+						obj.ShutdownSerial;
 						obj.WatchDog.start;
 						break;
 					case UID.State_SessionRunning
@@ -252,8 +256,7 @@ classdef ExperimentWorker<handle
 					case UID.State_SessionPaused
 						obj.EventRecorder.LogEvent(UID.State_SessionPaused);
 						obj.LogPrint('会话暂停');
-						obj.Serial.configureCallback('off');
-						obj.SignalHandler=function_handle.empty;
+						obj.ShutdownSerial;
 						obj.State=UID.State_SessionPaused;
 						break;
 					case UID.State_SessionAborted
@@ -290,8 +293,7 @@ classdef ExperimentWorker<handle
 							case UID.State_SessionInvalid
 								Exception.No_sessions_are_running.Throw;
 							case UID.State_SessionAborted
-								obj.Serial.configureCallback('off');
-								obj.SignalHandler=function_handle.empty;
+								obj.ShutdownSerial;
 								obj.AbortAndSave;%这个函数调用包含了启用看门狗
 								break;
 							case UID.State_SessionFinished
@@ -306,11 +308,11 @@ classdef ExperimentWorker<handle
 			delete(obj.WatchDog);
 			delete(obj.Serial);
 		end
-		function SFT=get.ShutdownSerialAfter(obj)
+		function SFT=get.ReleaseSerialAfter(obj)
 			obj.FeedDog;
 			SFT=obj.WatchDog.StartDelay;
 		end
-		function set.ShutdownSerialAfter(obj,SSA)
+		function set.ReleaseSerialAfter(obj,SSA)
 			WatchDogRunning=obj.WatchDog.Running=="on";
 			obj.WatchDog.stop;
 			obj.WatchDog.StartDelay=SSA;

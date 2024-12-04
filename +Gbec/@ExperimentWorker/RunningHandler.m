@@ -29,7 +29,7 @@ switch Signal
 		end
 		obj.LogPrint('会话完成');
 
-		obj.Serial.configureCallback('off');
+		obj.ShutdownSerial;
 		warning off MATLAB:callback:DynamicPropertyEventError
 		%先关中断，以免与信息冲突。关中断可能会让已经产生的中断出错，这是MATLAB自身设计逻辑缺陷，不应当由用户负责处理，且不影响程序逻辑，可以直接忽略
 		if obj.SaveFile

@@ -172,7 +172,7 @@ classdef ExperimentWorker<handle
 		end
 		function ShutdownSerial(obj)
 			obj.Serial.configureCallback('off');
-			obj.flush('input');
+			obj.Serial.flush('input');
 			obj.SignalHandler=function_handle.empty;
 		end
 		function ReleaseSerial(obj,~,~)

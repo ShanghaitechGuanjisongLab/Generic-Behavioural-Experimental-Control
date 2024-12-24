@@ -30,7 +30,11 @@ classdef ExperimentWorker<handle
 		%See also Gbec.IHostAction
 		HostAction
 		%会话后展示事件记录的参数
-		%必须安装统一实验分析作图才能使用此属性。会话后，将调用UniExp.TrialwiseEventPlot，将本会话的事件记录表作为第一个参数，此属性值元胞展开作为后续参数。
+		%必须安装统一实验分析作图才能使用此属性。会话后，将调用UniExp.TrialwiseEventPlot，将本会话的事件记录表作为第一个参数，此属性值元胞展开作为后续参数。此外，也可
+		% 以调用任何自定义的函数句柄，将自定义的函数句柄放在第一个元胞中即可。此句柄必须接受包含以下列的表作为第一个输入：
+		% - Time(:,1)duration，从会话开始经历的时间
+		% - Event(:,1)categorical，事件
+		% TepArguments的后续元胞将作为随后的参数展开输入给提供的函数句柄。
 		%See also UniExp.TrialwiseEventPlot
 		TepArguments
 		%在输出日志中要前缀的名称

@@ -218,7 +218,7 @@ classdef ExperimentWorker<handle
 				obj
 				TestUID=Gbec.UID.Test_Last
 			end
-			import Gbec.UID
+			import('Gbec.UID')%整个文件必须使用函数式语法import，否则Gbec未安装时无法doc出有效页面
 			obj.FeedDog;
 			obj.ApiCall(UID.API_TestStop);
 			obj.Serial.write(TestUID,'uint8');
@@ -245,8 +245,8 @@ classdef ExperimentWorker<handle
 		end
 		function PauseSession(obj)
 			%暂停会话
-			import Gbec.UID
-			import Gbec.Exception
+			import('Gbec.UID')
+			import('Gbec.Exception')
 			obj.FeedDog;
 			if obj.State==UID.State_SessionRestored||obj.State==UID.State_SessionPaused
 				Exception.Cannot_pause_a_paused_session.Throw;
@@ -274,8 +274,8 @@ classdef ExperimentWorker<handle
 		end
 		function AbortSession(obj)
 			%放弃会话
-			import Gbec.UID
-			import Gbec.Exception
+			import('Gbec.UID')
+			import('Gbec.Exception')
 			obj.FeedDog;
 			switch obj.State
 				case UID.State_SessionRestored
@@ -342,7 +342,7 @@ classdef ExperimentWorker<handle
 				obj Gbec.ExperimentWorker
 				SessionUID=Gbec.UID.Session_Current
 			end
-			import Gbec.UID
+			import('Gbec.UID')
 			obj.FeedDog;
 			obj.ApiCall(UID.API_GetInfo);
 			obj.Serial.write(SessionUID,'uint8');

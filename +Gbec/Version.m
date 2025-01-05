@@ -1,5 +1,5 @@
 function V=Version
-V.Me='v6.5.0';
+V.Me='v6.5.1';
 V.MatlabExtension='18.1.0';
 V.MATLAB='R2022b';
 V.Deploy=9;

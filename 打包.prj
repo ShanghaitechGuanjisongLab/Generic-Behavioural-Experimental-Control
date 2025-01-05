@@ -21,7 +21,7 @@ MATLAB工具箱并不能将MATLAB代码编译成Arduino二进制代码，而是�
 随时暂停、放弃实验，不需要拔插头；
 实验过程中意外掉线自动重连，不会丢失进度</param.description>
     <param.screenshot>${PROJECT_ROOT}\工具箱图像.png</param.screenshot>
-    <param.version>6.4.1</param.version>
+    <param.version>6.5.0</param.version>
     <param.output>${PROJECT_ROOT}\通用行为实验控制.mltbx</param.output>
     <param.products.name>
       <item>Image Acquisition Toolbox</item>
@@ -119,6 +119,7 @@ Debug.mlx</param.exclude.filters>
     </fileset.rootdir>
     <fileset.rootfiles>
       <file>${PROJECT_ROOT}\+Gbec</file>
+      <file>${PROJECT_ROOT}\Contents.m</file>
       <file>${PROJECT_ROOT}\doc</file>
       <file>${PROJECT_ROOT}\README.md</file>
       <file>${PROJECT_ROOT}\resources</file>

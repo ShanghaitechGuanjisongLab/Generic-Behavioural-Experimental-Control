@@ -9,13 +9,14 @@
 #if BOX == 1
 Pin pCD1 = 9;
 Pin pBlueLed = 11;
-Pin pActiveBuzzer = 6;
+Pin pActiveBuzzer = 52;
 Pin pWaterPump = 2;
 Pin pAirPuff = 7;
 Pin pCapacitorVdd = 7;
 Pin pCapacitorOut = 18;
 Pin pPassiveBuzzer = 6;
-Pin pLaser = 4;
+Pin pLaser = 49;
+Pin pYellowLed = 51;
 #elif BOX == 2
 Pin pCD1 = 9;
 Pin pBlueLed = 8;
@@ -25,17 +26,19 @@ Pin pAirPuff = 12;
 Pin pCapacitorVdd = 7;
 Pin pCapacitorOut = 18;
 Pin pPassiveBuzzer = 25;
-Pin pLaser = 4;
+Pin pLaser = 53;
+Pin pYellowLed = 51;
 #elif BOX == 3
 Pin pCD1 = 9;
-Pin pBlueLed = 11;
-Pin pActiveBuzzer = 22;
+Pin pBlueLed = 4;
+Pin pActiveBuzzer = 3;
 Pin pWaterPump = 2;
 Pin pAirPuff = 12;
 Pin pCapacitorVdd = 6;
 Pin pCapacitorOut = 18;
 Pin pPassiveBuzzer = 25;
-Pin pLaser = 4;
+Pin pLaser = 7;
+Pin pYellowLed = 51;
 #endif
 
 // 设备特定初始化，例如电容的启动
@@ -93,9 +96,10 @@ const auto &TestMap = TestMap_t<
   PinFlashTest<Test_Water, pWaterPump, 5, 150>,
   PinFlashTest<Test_Air, pAirPuff, 2, 150>,
   PinFlashTest<Test_CapacitorReset, pCapacitorVdd, 1, 100, LOW>,
+  PinFlashTest<Test_Optogenetic, pLaser, 1, 1000>,
   MonitorTest<Test_CapacitorMonitor, pCapacitorOut>,
   SquareWaveTest<Test_SquareWave, pBlueLed, 3, 2000, 1000, 10>,
-  RandomFlashTest<Test_RandomFlash, pBlueLed, 3, 4000, 8000, 30, 300>,
+  RandomFlashTest<Test_RandomFlash, pYellowLed, 3, 6000, 6000, 1000, 3000>,
   ToneTest<Test_LowTone, pPassiveBuzzer, 4, 500, 1000>,
   ToneTest<Test_HighTone, pPassiveBuzzer, 4, 5000, 1000>>;
 
@@ -139,10 +143,11 @@ MyUID，标识该步骤的UID，在返回信息时供人类识别
 
 using sLight = PinFlashStep<pBlueLed, 3, 200, S<Signal_LightUp>, S<Signal_LightDown>, Step_Light>;
 using sAudio = PinFlashStep<pActiveBuzzer, 3, 200, S<Signal_AudioUp>, S<Signal_AudioDown>, Step_Audio>;
-using sWater = PinFlashStep<pWaterPump, 3, 100, S<Signal_WaterOffered>, NullStep, Step_Water>;
+using sWater = PinFlashStep<pWaterPump, 3, 150, S<Signal_WaterOffered>, NullStep, Step_Water>;
 using sAir = PinFlashStep<pAirPuff, 3, 150, S<Signal_AirPuff>, NullStep, Step_Air>;
 using sTag = PinFlashStep<pCD1, 4, 200, NullStep, NullStep, Step_Tag>;
 using sSquareWave = SquareWaveStep<pLaser, 3, 30, 30, 30, S<Signal_Laser>, NullStep, Step_SquareWave>;
+using sOptogenetic = PinFlashStep<pLaser, 1, 1000, S<Signal_Optogenetic>, NullStep, Step_Optogenetic>;
 
 /*监视类步骤
 
@@ -164,8 +169,8 @@ MissReporter，用于汇报错失的步骤。必须指定Monitor_ReportMiss旗�
 MyUID，标识该步骤的UID，在返回信息时供人类识别
 */
 
-using sMonitorLick = MonitorStep<pCapacitorOut, 5, 2000, Monitor_ReportOnce, S<Signal_MonitorHit>, S<Signal_MonitorMiss>>;
-using sResponseWindow = MonitorStep<pCapacitorOut, 5, 2000, Monitor_ReportOnce, sWater, S<Signal_MonitorMiss>>;
+using sMonitorLick = MonitorStep<pCapacitorOut, 5, 1000, Monitor_ReportOnce, S<Signal_MonitorHit>, S<Signal_MonitorMiss>>;
+using sResponseWindow = MonitorStep<pCapacitorOut, 5, 1000, Monitor_ReportOnce, sWater, S<Signal_MonitorMiss>>;
 
 /*等待类步骤
 
@@ -190,7 +195,7 @@ using sRandomPrepare = WaitStep<2, 0, 10000>;
 
 类似于监视类步骤，但不占用主时间轴，而是在后台持续监视，不断汇报每次命中。此类包含一个开始步骤和一个终止步骤，都是立即结束，不占用主时间轴。语法：
 using StepName = StartMonitorStep<uint8_t Pin, typename Reporter, UID MyUID = Step_StartMonitor>;
-using StepName = <uint8_t Pin, typename Reporter, UID MyUID = Step_StopMonitor>;
+using StepName = StopMonitorStep<uint8_t Pin, typename Reporter, UID MyUID = Step_StopMonitor>;
 开始和终止步骤的Pin和Reporter参数必须相同，配对出现。开始步骤后即开始在后台持续监视，后续其它步骤继续正常执行，直到配对的终止步骤后才结束监视。
 
 参数：
@@ -201,6 +206,26 @@ MyUID，标识该步骤的UID，在返回信息时供人类识别
 
 using sStartMonitor = StartMonitorStep<pCapacitorOut, S<Signal_HitCount>>;
 using sStopMonitor = StopMonitorStep<pCapacitorOut, S<Signal_HitCount>>;
+
+/*后台干扰类步骤
+
+类似于后台监视类步骤，但不是监视，而是指定一个引脚进行无限随机闪烁。语法：
+using StepName = StartRandomFlash<uint8_t Pin, uint8_t TimerCode, uint16_t MinHighMilliseconds, uint16_t MaxHighMilliseconds, uint16_t MinLowMilliseconds, uint16_t MaxLowMilliseconds, UID MyUID = Step_StartRandomFlash>;
+using StepName = StopRandomFlash<uint8_t Pin, uint8_t TimerCode, UID MyUID = Step_StopRandomFlash>;
+开始和终止步骤的Pin和TimerCode参数必须相同，配对出现。开始步骤后即开始在后台持续闪烁，后续其它步骤继续正常执行，直到配对的终止步骤后才结束闪烁。
+
+参数：
+Pin，要闪烁的引脚。
+TimerCode，用于闪烁的计时器。通常需要一个独立的计时器，不能跟任何其它步骤共用。
+MinHighMilliseconds，高电平的最短毫秒数
+MaxHighMilliseconds，高电平的最长毫秒数
+MinLowMilliseconds，低电平的最短毫秒数
+MaxLowMilliseconds，低电平的最长毫秒数
+MyUID，标识该步骤的UID，在返回信息时供人类识别
+*/
+
+using sStartInterfere = StartRandomFlash<pYellowLed, 4, 500, 1500, 500, 1500>;
+using sStopInterfere = StopRandomFlash<pYellowLed, 4>;
 
 /*音调类步骤
 
@@ -266,15 +291,18 @@ using tRandomImage = Trial<Trial_RandomImage, sRandomPrepare, S<Signal_HostActio
 using tLightOnly = Trial<Trial_LightOnly, sCalmDown, sLight, sTag, sMonitorLick, sFixedITI>;
 using tAudioOnly = Trial<Trial_AudioOnly, sCalmDown, sAudio, sTag, sMonitorLick, sFixedITI>;
 using tWaterOnly = Trial<Trial_WaterOnly, sCalmDown, sWater, sTag, sMonitorLick, sFixedITI>;
-using tLightWater = Trial<Trial_LightWater, sCalmDown, sLight, sTag, sMonitorLick, sWater, sFixedITI>;
-using tAudioWater = Trial<Trial_AudioWater, sCalmDown, sAudio, sTag, sMonitorLick, sWater, sFixedITI>;
+using tLightWater = Trial<Trial_LightWater, sCalmDown, sLight, sMonitorLick, sWater, sFixedITI>;
+using tAudioWater = Trial<Trial_AudioWater, sCalmDown, sAudio, sMonitorLick, sWater, sFixedITI>;
 using tLightAir = Trial<Trial_LightAir, S<Signal_StartRecord>, sFixedPrepare, sLight, sDelay, sAir, sRandomITI>;
 using tLightDelayWater = Trial<Trial_LightDelayWater, sCalmDown, sLight, sDelay, sResponseWindow>;
 using tRandomFlash = Trial<Trial_RandomFlash, sCalmDown, sLog, sRandomFlash, sMonitorLick>;
 using tStartMonitor = Trial<Trial_StartMonitor, sStartMonitor>;
-using tStopMonitor = Trial<Trial_StopMonitor, sStopMonitor>;
+using tStopMonitor = Trial<Trial_StopMonitor, sStopInterfere>;
 using tLowTone = Trial<Trial_LowTone, sLowTone, sFixedPrepare>;
 using tHighTone = Trial<Trial_HighTone, sHighTone, sFixedPrepare>;
+using tOptogeneticLightWater = Trial<Trial_OptogeneticLightWater, sCalmDown, sOptogenetic, sLight, sMonitorLick, sFixedITI>;
+using tStartInterfereMonitor = Trial<Trial_StartInterfereMonitor, sStartInterfere, sStartMonitor>;
+using tStopInterfereMonitor = Trial<Trial_StopInterfereMonitor, sStopMonitor, sStopInterfere>;
 
 const auto &SessionMap = SessionMap_t<
   /*会话设计
@@ -287,14 +315,15 @@ const auto &SessionMap = SessionMap_t<
 	  Trial1,Trial2,…，要运行的回合
 	  Number1,Number2,…，每个回合的重复次数
 	  */
-  Session<Session_LAWLw, true, tLightOnly, N<20>, tAudioOnly, N<20>, tWaterOnly, N<20>, tLightWater, N<20>>,
+  Session<Session_LAuW, true, tLightOnly, N<20>, tAudioOnly, N<20>, tWaterOnly, N<20>>,
   Session<Session_LAWLwAw, true, tLightOnly, N<20>, tAudioOnly, N<20>, tWaterOnly, N<20>, tLightWater, N<20>, tAudioWater, N<20>>,
   Session<Session_LightWater, false, tStartMonitor, N<1>, tLightWater, N<30>, tStopMonitor, N<1>>,
-  Session<Session_AudioWater, false, tAudioWater, N<30>>,
+  Session<Session_AudioWater, false, tStartMonitor, N<1>, tAudioWater, N<30>, tStopMonitor, N<1>>,
   Session<Session_LightAir, false, tLightAir, N<30>>,
   Session<Session_SurveillanceThroughout, false, Trial<Trial_StartMonitor, sStartMonitor>, N<1>, tWaterOnly, N<5>, tLightDelayWater, N<10>, Trial<Trial_StopMonitor, sStopMonitor>, N<1>>,
   //此会话要求主机端配置能根据串口指示显示高低频图像的HostAction
   Session<Session_HLFImage, true, tLFImage, N<30>, tHFImage, N<30>>,
   Session<Session_RandomImage, false, tRandomImage, N<100>>,
   Session<Session_RandomFlash, false, tRandomFlash, N<3>>,
-  Session<Session_HighLowTone, true, tLowTone, N<30>, tHighTone, N<30>>>;
+  Session<Session_HighLowTone, true, tLowTone, N<30>, tHighTone, N<30>>,
+  Session<Session_OptogeneticLightWater, false, tStartInterfereMonitor, N<1>, tLightWater, N<10>, tOptogeneticLightWater, N<10>, tLightWater, N<10>, tOptogeneticLightWater, N<10>, tStopInterfereMonitor, N<10>>>;

@@ -418,6 +418,51 @@ public:
   }
   static constexpr auto Info = InfoStruct(Info_UID, MyUID, Info_Pin, Pin, Info_HighMilliseconds, HighMilliseconds, Info_LowMilliseconds, LowMilliseconds, Info_RandomCycleMin, RandomCycleMin, Info_RandomCycleMax, RandomCycleMax);
 };
+
+// 后台无限随机闪烁引脚，直到StopRandomFlash。指定每个周期的高电平和低电平时长范围。
+template<uint8_t Pin, uint8_t TimerCode, uint16_t MinHighMilliseconds, uint16_t MaxHighMilliseconds, uint16_t MinLowMilliseconds, uint16_t MaxLowMilliseconds, UID MyUID = Step_StartRandomFlash>
+class StartRandomFlash : public IStep {
+  static void SetHigh() {
+    DigitalWrite<Pin, HIGH>();
+    TimersOneForAll::DoAfter<TimerCode>(random(MinHighMilliseconds, MaxHighMilliseconds), SetLow);
+  }
+  static void SetLow() {
+    DigitalWrite<Pin, LOW>();
+    TimersOneForAll::DoAfter<TimerCode>(random(MinLowMilliseconds, MaxLowMilliseconds), SetHigh);
+  }
+
+public:
+  bool Start(void (*FC)()) const override {
+    SetHigh();
+    return false;
+  }
+  void Setup() const override {
+    if (NeedSetup<Pin>) {
+      pinMode(Pin, OUTPUT);
+      NeedSetup<Pin> = false;
+    }
+  }
+  static constexpr auto Info = InfoStruct(Info_UID, MyUID, Info_Pin, Pin, Info_MinHighMilliseconds, MinHighMilliseconds, Info_MaxHighMilliseconds, MaxHighMilliseconds, Info_MinLowMilliseconds, MinLowMilliseconds, Info_MaxLowMilliseconds, MaxLowMilliseconds);
+};
+
+// 停止后台无限随机闪烁引脚
+template<uint8_t Pin, uint8_t TimerCode, UID MyUID = Step_StopRandomFlash>
+class StopRandomFlash : public IStep {
+public:
+  bool Start(void (*FC)()) const override {
+    TimersOneForAll::ShutDown<TimerCode>();
+    DigitalWrite<Pin, LOW>();
+    return false;
+  }
+  void Setup() const override {
+    if (NeedSetup<Pin>) {
+      pinMode(Pin, OUTPUT);
+      NeedSetup<Pin> = false;
+    }
+  }
+  static constexpr auto Info = InfoStruct(Info_UID, MyUID, Info_Pin, Pin);
+};
+
 // 在一段时间内同步监视引脚，发现高电平立即汇报。HitReporter和MissReporter都是IStep类型，一律异步执行，不等待
 template<uint8_t Pin, uint8_t TimerCode, uint16_t Milliseconds, uint8_t Flags, typename HitReporter, typename MissReporter = NullStep, UID MyUID = Step_Monitor>
 class MonitorStep : public IStep {

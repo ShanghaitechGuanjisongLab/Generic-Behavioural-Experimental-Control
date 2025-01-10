@@ -67,6 +67,10 @@ enum UID : uint8_t {
   Info_RandomCycleMin,
   Info_RandomCycleMax,
   Info_Event,
+  Info_MinHighMilliseconds,
+  Info_MaxHighMilliseconds,
+  Info_MinLowMilliseconds,
+  Info_MaxLowMilliseconds,
 
   //状态
 
@@ -83,6 +87,7 @@ enum UID : uint8_t {
   Signal_SerialReady,
   Signal_NoSuchSession,
   Signal_SessionStarted,
+  Signal_SessionPaused,
   Signal_SessionContinue,
   Signal_SessionRestored,
   Signal_ProgressPlease,
@@ -115,6 +120,7 @@ enum UID : uint8_t {
   Signal_Laser,
   Signal_Image,
   Signal_PreciseLog,
+  Signal_Optogenetic,
 
   // 测试UID
 
@@ -131,6 +137,7 @@ enum UID : uint8_t {
   Test_RandomFlash,
   Test_HighTone,
   Test_LowTone,
+  Test_Optogenetic,
 
   // 步骤UID
 
@@ -156,6 +163,9 @@ enum UID : uint8_t {
   Step_RandomFlash,
   Step_PreciseLog,
   Step_PinLow,
+  Step_Optogenetic,
+  Step_StartRandomFlash,
+  Step_StopRandomFlash,
 
   // 回合UID
 
@@ -175,12 +185,15 @@ enum UID : uint8_t {
   Trial_RandomFlash,
   Trial_LowTone,
   Trial_HighTone,
+  Trial_OptogeneticLightWater,
+  Trial_StartInterfereMonitor,
+  Trial_StopInterfereMonitor,
 
   // 会话UID
 
   Session_Current,//内部使用，请勿修改
   Session_LAWLwAw,
-  Session_LAWLw,
+  Session_LAuW,
   Session_LightWater,
   Session_AudioWater,
   Session_LightAir,
@@ -189,4 +202,5 @@ enum UID : uint8_t {
   Session_RandomImage,
   Session_RandomFlash,
   Session_HighLowTone,
+  Session_OptogeneticLightWater,
 };

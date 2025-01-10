@@ -39,6 +39,8 @@ classdef ExperimentWorker<handle
 		TepArguments
 		%在输出日志中要前缀的名称
 		LogName
+		%实验结束前几个回合发送喵提醒？
+		TrialsBeforeEndRemind=1
 	end
 	properties(Access=protected)
 		Serial internal.Serialport

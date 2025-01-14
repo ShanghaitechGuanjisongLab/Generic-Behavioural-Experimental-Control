@@ -9,7 +9,7 @@ switch Signal
 		obj.EventRecorder.LogEvent(UID.Signal_TrialStart)
 		TrialMod=mod(TrialIndex,obj.CheckCycle);
 		if obj.MiaoCode~=""
-			if TrialIndex+1==obj.DesignedNumTrials
+			if TrialIndex+obj.TrialsBeforeEndRemind==obj.DesignedNumTrials
 				SendMiao('实验结束',obj.HttpRetryTimes,obj.MiaoCode);
 			elseif TrialMod==0
 				SendMiao(sprintf('已到%u回合，请检查实验状态',TrialIndex),obj.HttpRetryTimes,obj.MiaoCode);

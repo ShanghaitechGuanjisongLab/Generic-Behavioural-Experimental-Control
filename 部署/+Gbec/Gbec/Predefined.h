@@ -644,6 +644,27 @@ struct SquareWaveStep : public IStep {
   }
   static constexpr auto Info = InfoStruct(Info_UID, MyUID, Info_Pin, Pin, Info_HighMilliseconds, HighMilliseconds, Info_LowMilliseconds, LowMilliseconds, Info_NumCycles, NumCycles);
 };
+template<typename... SubSteps>
+struct IndividualThreadStep : IStep {
+  static constexpr const IStep *StepPointers[] = { &Instance<SubSteps>... };
+  static const IStep *const *CurrentStep;
+  void Setup() const override {
+    for (const IStep *S : StepPointers)
+      S->Setup();
+  }
+  static void ContinueCycle() {
+    while (CurrentStep < std::end(StepPointers) && !(*CurrentStep++)->Start(ContinueCycle))
+      ;
+  }
+  bool Start(void (*FC)()) const override {
+    for (CurrentStep = StepPointers; CurrentStep < std::end(StepPointers) && !(*CurrentStep++)->Start(ContinueCycle);)
+      ;
+    return false;
+  }
+  static constexpr auto Info = InfoStruct(Info_UID, Step_IndividualThread, Info_SubSteps, InfoCell(SubSteps::Info...));
+};
+template<typename... SubSteps>
+const IStep *const *IndividualThreadStep<SubSteps...>::CurrentStep;
 template<UID TUID, typename... TSteps>
 class Trial : public ITrial {
   static const IStep *Steps[sizeof...(TSteps)];

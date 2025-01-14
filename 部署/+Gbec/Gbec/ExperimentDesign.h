@@ -5,7 +5,7 @@
 /* 引脚设置。建议遵守命名规范：p开头表示名称指向一个引脚号（Pin）
 可以使用预处理指令配置多个不同设备的不同引脚号
 */
-#define BOX 1
+#define BOX 2
 #if BOX == 1
 Pin pCD1 = 9;
 Pin pBlueLed = 11;
@@ -27,7 +27,7 @@ Pin pCapacitorVdd = 7;
 Pin pCapacitorOut = 18;
 Pin pPassiveBuzzer = 25;
 Pin pLaser = 53;
-Pin pYellowLed = 51;
+Pin pYellowLed = 6;
 #elif BOX == 3
 Pin pCD1 = 9;
 Pin pBlueLed = 4;
@@ -141,13 +141,16 @@ UpReporter,DownReporter，提醒闪烁开始和结束的汇报器，可以使用
 MyUID，标识该步骤的UID，在返回信息时供人类识别
 */
 
-using sLight = PinFlashStep<pBlueLed, 3, 200, S<Signal_LightUp>, S<Signal_LightDown>, Step_Light>;
-using sAudio = PinFlashStep<pActiveBuzzer, 3, 200, S<Signal_AudioUp>, S<Signal_AudioDown>, Step_Audio>;
-using sWater = PinFlashStep<pWaterPump, 3, 150, S<Signal_WaterOffered>, NullStep, Step_Water>;
-using sAir = PinFlashStep<pAirPuff, 3, 150, S<Signal_AirPuff>, NullStep, Step_Air>;
-using sTag = PinFlashStep<pCD1, 4, 200, NullStep, NullStep, Step_Tag>;
-using sSquareWave = SquareWaveStep<pLaser, 3, 30, 30, 30, S<Signal_Laser>, NullStep, Step_SquareWave>;
-using sOptogenetic = PinFlashStep<pLaser, 1, 1000, S<Signal_Optogenetic>, NullStep, Step_Optogenetic>;
+using sLight = PinFlashStep<pBlueLed, 4, 200, S<Signal_LightUp>, S<Signal_LightDown>, Step_Light>;
+using sAudio = PinFlashStep<pActiveBuzzer, 4, 200, S<Signal_AudioUp>, S<Signal_AudioDown>, Step_Audio>;
+using sWater80 = PinFlashStep<pWaterPump, 3, 80, S<Signal_WaterOffered>, NullStep, Step_Water>;
+using sWater150 = PinFlashStep<pWaterPump, 3, 150, S<Signal_WaterOffered>, NullStep, Step_Water>;
+using sAir = PinFlashStep<pAirPuff, 4, 150, S<Signal_AirPuff>, NullStep, Step_Air>;
+using sTag = PinFlashStep<pCD1, 1, 200, NullStep, NullStep, Step_Tag>;
+using sSquareWave = SquareWaveStep<pLaser, 4, 30, 30, 30, S<Signal_Laser>, NullStep, Step_SquareWave>;
+using sOptogenetic200 = PinFlashStep<pLaser, 1, 200, S<Signal_Optogenetic>, NullStep, Step_Optogenetic>;
+using sOptogenetic800 = PinFlashStep<pLaser, 1, 800, S<Signal_Optogenetic>, NullStep, Step_Optogenetic>;
+using sOptogenetic1000 = PinFlashStep<pLaser, 1, 1000, S<Signal_Optogenetic>, NullStep, Step_Optogenetic>;
 
 /*监视类步骤
 
@@ -169,8 +172,8 @@ MissReporter，用于汇报错失的步骤。必须指定Monitor_ReportMiss旗�
 MyUID，标识该步骤的UID，在返回信息时供人类识别
 */
 
-using sMonitorLick = MonitorStep<pCapacitorOut, 5, 1000, Monitor_ReportOnce, S<Signal_MonitorHit>, S<Signal_MonitorMiss>>;
-using sResponseWindow = MonitorStep<pCapacitorOut, 5, 1000, Monitor_ReportOnce, sWater, S<Signal_MonitorMiss>>;
+using sMonitorLick = MonitorStep<pCapacitorOut, 2, 1000, Monitor_ReportOnce, S<Signal_MonitorHit>, S<Signal_MonitorMiss>>;
+using sResponseWindow = MonitorStep<pCapacitorOut, 2, 1000, Monitor_ReportOnce, sWater150, S<Signal_MonitorMiss>>;
 
 /*等待类步骤
 
@@ -187,7 +190,8 @@ MyUID，标识该步骤的UID，在返回信息时供人类识别
 using sFixedITI = WaitStep<2, 20000>;
 using sRandomITI = WaitStep<2, 10000, 20000>;
 using sFixedPrepare = WaitStep<2, 2000>;
-using sDelay = WaitStep<2, 1000>;
+using sDelay200 = WaitStep<5, 200>;
+using sDelay1000 = WaitStep<2, 1000>;
 using sShortITI = WaitStep<2, 10000>;
 using sRandomPrepare = WaitStep<2, 0, 10000>;
 
@@ -224,8 +228,8 @@ MaxLowMilliseconds，低电平的最长毫秒数
 MyUID，标识该步骤的UID，在返回信息时供人类识别
 */
 
-using sStartInterfere = StartRandomFlash<pYellowLed, 4, 500, 1500, 500, 1500>;
-using sStopInterfere = StopRandomFlash<pYellowLed, 4>;
+using sStartInterfere = StartRandomFlash<pYellowLed, 5, 100, 1100, 100, 1100>;
+using sStopInterfere = StopRandomFlash<pYellowLed, 5>;
 
 /*音调类步骤
 
@@ -290,17 +294,24 @@ using tHFImage = Trial<Trial_HFImage, sRandomPrepare, S<Signal_HostAction>, S<Si
 using tRandomImage = Trial<Trial_RandomImage, sRandomPrepare, S<Signal_HostAction>, S<Signal_Image>, sTag, sShortITI>;
 using tLightOnly = Trial<Trial_LightOnly, sCalmDown, sLight, sTag, sMonitorLick, sFixedITI>;
 using tAudioOnly = Trial<Trial_AudioOnly, sCalmDown, sAudio, sTag, sMonitorLick, sFixedITI>;
-using tWaterOnly = Trial<Trial_WaterOnly, sCalmDown, sWater, sTag, sMonitorLick, sFixedITI>;
-using tLightWater = Trial<Trial_LightWater, sCalmDown, sLight, sMonitorLick, sWater, sFixedITI>;
-using tAudioWater = Trial<Trial_AudioWater, sCalmDown, sAudio, sMonitorLick, sWater, sFixedITI>;
-using tLightAir = Trial<Trial_LightAir, S<Signal_StartRecord>, sFixedPrepare, sLight, sDelay, sAir, sRandomITI>;
-using tLightDelayWater = Trial<Trial_LightDelayWater, sCalmDown, sLight, sDelay, sResponseWindow>;
+using tWaterOnly = Trial<Trial_WaterOnly, sCalmDown, sWater150, sTag, sMonitorLick, sFixedITI>;
+using tLightWater = Trial<Trial_LightWater, sCalmDown, sLight, sMonitorLick, sWater150, sFixedITI>;
+using tLightLickWater = Trial<Trial_LightLickWater, sCalmDown, sLight, sResponseWindow, sFixedITI>;
+using tAudioWater = Trial<Trial_AudioWater, sCalmDown, sAudio, sMonitorLick, sWater150, sFixedITI>;
+using tLightAir = Trial<Trial_LightAir, S<Signal_StartRecord>, sFixedPrepare, sLight, sDelay1000, sAir, sRandomITI>;
+using tLightDelayWater = Trial<Trial_LightDelayWater, sCalmDown, sLight, sDelay1000, sResponseWindow>;
 using tRandomFlash = Trial<Trial_RandomFlash, sCalmDown, sLog, sRandomFlash, sMonitorLick>;
 using tStartMonitor = Trial<Trial_StartMonitor, sStartMonitor>;
 using tStopMonitor = Trial<Trial_StopMonitor, sStopInterfere>;
 using tLowTone = Trial<Trial_LowTone, sLowTone, sFixedPrepare>;
 using tHighTone = Trial<Trial_HighTone, sHighTone, sFixedPrepare>;
-using tOptogeneticLightWater = Trial<Trial_OptogeneticLightWater, sCalmDown, sOptogenetic, sLight, sMonitorLick, sFixedITI>;
+using tOptogeneticBeforeLightWater = Trial<Trial_OptogeneticBeforeLightWater, sStartInterfere, sStartMonitor, sCalmDown, sOptogenetic1000, sDelay1000, sLight, sMonitorLick, sWater80, sFixedITI, sStopMonitor, sStopInterfere>;
+using tOptogeneticUponLightWater = Trial<Trial_OptogeneticUponLightWater, sStartInterfere, sStartMonitor, sCalmDown, sOptogenetic200, sLight, sMonitorLick, sWater80, sFixedITI, sStopMonitor, sStopInterfere>;
+using tOptogeneticAfterLightWater = Trial<Trial_OptogeneticAfterLightWater, sStartInterfere, sStartMonitor, sCalmDown, sLight, IndividualThreadStep<sDelay200, sOptogenetic800>, sMonitorLick, sWater80, sFixedITI, sStopMonitor, sStopInterfere>;
+using tOptogeneticBeforeAudioWater = Trial<Trial_OptogeneticBeforeAudioWater, sStartInterfere, sStartMonitor, sCalmDown, sOptogenetic1000, sDelay1000, sAudio, sMonitorLick, sWater80, sFixedITI, sStopMonitor, sStopInterfere>;
+using tOptogeneticUponAudioWater = Trial<Trial_OptogeneticUponAudioWater, sStartInterfere, sStartMonitor, sCalmDown, sOptogenetic200, sAudio, sMonitorLick, sWater80, sFixedITI, sStopMonitor, sStopInterfere>;
+using tOptogeneticAfterAudioWater = Trial<Trial_OptogeneticAfterAudioWater, sStartInterfere, sStartMonitor, sCalmDown, sAudio, IndividualThreadStep<sDelay200, sOptogenetic800>, sMonitorLick, sWater80, sFixedITI, sStopMonitor, sStopInterfere>;
+using tOptogeneticLightWaterTrain = Trial<Trial_OptogeneticLightWaterTrain, sCalmDown, sOptogenetic1000, sLight, sMonitorLick, sWater150, sFixedITI>;
 using tStartInterfereMonitor = Trial<Trial_StartInterfereMonitor, sStartInterfere, sStartMonitor>;
 using tStopInterfereMonitor = Trial<Trial_StopInterfereMonitor, sStopMonitor, sStopInterfere>;
 
@@ -319,6 +330,7 @@ const auto &SessionMap = SessionMap_t<
   Session<Session_LAWLwAw, true, tLightOnly, N<20>, tAudioOnly, N<20>, tWaterOnly, N<20>, tLightWater, N<20>, tAudioWater, N<20>>,
   Session<Session_LightWater, false, tStartMonitor, N<1>, tLightWater, N<30>, tStopMonitor, N<1>>,
   Session<Session_AudioWater, false, tStartMonitor, N<1>, tAudioWater, N<30>, tStopMonitor, N<1>>,
+  Session<Session_InterferedAudioWater, false, tStartInterfereMonitor, N<1>, tAudioWater, N<30>, tStopInterfereMonitor, N<1>>,
   Session<Session_LightAir, false, tLightAir, N<30>>,
   Session<Session_SurveillanceThroughout, false, Trial<Trial_StartMonitor, sStartMonitor>, N<1>, tWaterOnly, N<5>, tLightDelayWater, N<10>, Trial<Trial_StopMonitor, sStopMonitor>, N<1>>,
   //此会话要求主机端配置能根据串口指示显示高低频图像的HostAction
@@ -326,4 +338,5 @@ const auto &SessionMap = SessionMap_t<
   Session<Session_RandomImage, false, tRandomImage, N<100>>,
   Session<Session_RandomFlash, false, tRandomFlash, N<3>>,
   Session<Session_HighLowTone, true, tLowTone, N<30>, tHighTone, N<30>>,
-  Session<Session_OptogeneticLightWater, false, tStartInterfereMonitor, N<1>, tLightWater, N<10>, tOptogeneticLightWater, N<10>, tLightWater, N<10>, tOptogeneticLightWater, N<10>, tStopInterfereMonitor, N<10>>>;
+  Session<Session_OptogeneticAllTest, true, tOptogeneticBeforeLightWater, N<10>, tOptogeneticUponLightWater, N<10>, tOptogeneticAfterLightWater, N<10>, tOptogeneticBeforeAudioWater, N<10>, tOptogeneticUponAudioWater, N<10>, tOptogeneticAfterAudioWater, N<10>>,
+  Session<Session_OptogeneticLightWaterTrain, false, tStartInterfereMonitor, N<1>, tOptogeneticLightWaterTrain, N<30>, tStopInterfereMonitor, N<10>>>;

@@ -71,6 +71,7 @@ enum UID : uint8_t {
   Info_MaxHighMilliseconds,
   Info_MinLowMilliseconds,
   Info_MaxLowMilliseconds,
+  Info_SubSteps,
 
   //状态
 
@@ -166,6 +167,7 @@ enum UID : uint8_t {
   Step_Optogenetic,
   Step_StartRandomFlash,
   Step_StopRandomFlash,
+  Step_IndividualThread,
 
   // 回合UID
 
@@ -173,6 +175,7 @@ enum UID : uint8_t {
   Trial_AudioOnly,
   Trial_WaterOnly,
   Trial_LightWater,
+  Trial_LightLickWater,
   Trial_AudioWater,
   Trial_LightAir,
   Trial_StartMonitor,
@@ -185,9 +188,16 @@ enum UID : uint8_t {
   Trial_RandomFlash,
   Trial_LowTone,
   Trial_HighTone,
-  Trial_OptogeneticLightWater,
+  Trial_OptogeneticLightWaterTest,
+  Trial_OptogeneticLightWaterTrain,
   Trial_StartInterfereMonitor,
   Trial_StopInterfereMonitor,
+  Trial_OptogeneticBeforeLightWater,
+  Trial_OptogeneticUponLightWater,
+  Trial_OptogeneticAfterLightWater,
+  Trial_OptogeneticBeforeAudioWater,
+  Trial_OptogeneticUponAudioWater,
+  Trial_OptogeneticAfterAudioWater,
 
   // 会话UID
 
@@ -202,5 +212,8 @@ enum UID : uint8_t {
   Session_RandomImage,
   Session_RandomFlash,
   Session_HighLowTone,
-  Session_OptogeneticLightWater,
+  Session_OptogeneticLightWaterTest,
+  Session_OptogeneticLightWaterTrain,
+  Session_InterferedAudioWater,
+  Session_OptogeneticAllTest,
 };

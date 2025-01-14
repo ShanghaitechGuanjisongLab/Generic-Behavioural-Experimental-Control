@@ -42,7 +42,7 @@ Pin pYellowLed = 51;
 #endif
 
 // 设备特定初始化，例如电容的启动
-void PinSetup() {
+inline void PinSetup() {
   pinMode(pCapacitorVdd, OUTPUT);
   DigitalWrite<pCapacitorVdd, HIGH>();
 }
@@ -103,7 +103,7 @@ const auto &TestMap = TestMap_t<
   ToneTest<Test_LowTone, pPassiveBuzzer, 4, 500, 1000>,
   ToneTest<Test_HighTone, pPassiveBuzzer, 4, 5000, 1000>>;
 
-// 步骤设计。建议StepName遵守命名规范：s开头表示名称指向一个步骤（Step）
+// 步骤设计。建议StepName遵守命名规范：s开头表示名称指向一个步骤（Step）。所有涉及“随机”的步骤都使用对数分布，即将最大值和最小值取对数，然后在这个范围内随机抽取一个值，然后将结果取幂。例如，如果随机范围是100~400，则取到100~200和200~400的概率是相等的。
 
 /*写串口步骤
 
@@ -228,7 +228,7 @@ MaxLowMilliseconds，低电平的最长毫秒数
 MyUID，标识该步骤的UID，在返回信息时供人类识别
 */
 
-using sStartInterfere = StartRandomFlash<pYellowLed, 5, 100, 1100, 100, 1100>;
+using sStartInterfere = StartRandomFlash<pYellowLed, 5, 100, 2000, 100, 2000>;
 using sStopInterfere = StopRandomFlash<pYellowLed, 5>;
 
 /*音调类步骤

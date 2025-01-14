@@ -6,6 +6,7 @@
 #include <numeric>
 #include <set>
 #include <type_traits>
+#include <cmath>
 #include <TimersOneForAll.h>
 template<uint8_t Pin>
 constexpr uint8_t INTF;
@@ -95,6 +96,12 @@ struct PinFlashTest : public ITest {
     return true;
   }
 };
+template<uint16_t Min, uint16_t Max>
+inline uint16_t LogRandom() {
+  static const float LogMin = std::log2(Min);
+  static const float LogRange = std::log2(Max) - LogMin;
+  return pow(2, random(Max - Min) * LogRange / (Max - Min) + LogMin);
+}
 template<uint8_t TimerCode>
 std::vector<uint16_t> FlashCycles;
 template<uint8_t TimerCode>
@@ -108,7 +115,7 @@ void PopulateRandomCycles(uint8_t Times = 1) {
   FlashCycles<TimerCode>.clear();
   uint16_t MillisecondsLeft = FullMilliseconds * Times;
   while (MillisecondsLeft) {
-    uint16_t RandomCycle = random(RandomCycleMin, RandomCycleMax + 1);
+    uint16_t RandomCycle = LogRandom<RandomCycleMin, RandomCycleMax>();
     if (RandomCycle + RandomCycleMin > MillisecondsLeft)
       RandomCycle = RandomCycle < MillisecondsLeft ? (RandomCycleMax < MillisecondsLeft ? MillisecondsLeft - RandomCycleMin : (RandomCycle < MillisecondsLeft + MillisecondsLeft - RandomCycleMin ? MillisecondsLeft - RandomCycleMin : MillisecondsLeft)) : MillisecondsLeft;
     MillisecondsLeft -= RandomCycle;
@@ -323,7 +330,7 @@ public:
   bool Start(void (*FC)()) const override {
     FinishCallback<TimerCode> = FC;
     if (RandomTime)
-      TimersOneForAll::DoAfter<TimerCode>(Milliseconds<TimerCode> = random(MinMilliseconds, MaxMilliseconds + 1), TimeUp);
+      TimersOneForAll::DoAfter<TimerCode>(Milliseconds<TimerCode> = LogRandom<MinMilliseconds, MaxMilliseconds>(), TimeUp);
     else
       TimersOneForAll::DoAfter<TimerCode, MinMilliseconds>(TimeUp);
     RisingInterrupt<Pin>(Reset);
@@ -424,11 +431,11 @@ template<uint8_t Pin, uint8_t TimerCode, uint16_t MinHighMilliseconds, uint16_t 
 class StartRandomFlash : public IStep {
   static void SetHigh() {
     DigitalWrite<Pin, HIGH>();
-    TimersOneForAll::DoAfter<TimerCode>(random(MinHighMilliseconds, MaxHighMilliseconds), SetLow);
+    TimersOneForAll::DoAfter<TimerCode>(LogRandom<MinHighMilliseconds, MaxHighMilliseconds>(), SetLow);
   }
   static void SetLow() {
     DigitalWrite<Pin, LOW>();
-    TimersOneForAll::DoAfter<TimerCode>(random(MinLowMilliseconds, MaxLowMilliseconds), SetHigh);
+    TimersOneForAll::DoAfter<TimerCode>(LogRandom<MinLowMilliseconds, MaxLowMilliseconds>(), SetHigh);
   }
 
 public:
@@ -534,7 +541,7 @@ template<uint8_t TimerCode, uint16_t MinMilliseconds, uint16_t MaxMilliseconds =
 struct WaitStep : public IStep {
   bool Start(void (*FinishCallback)()) const override {
     if (MinMilliseconds < MaxMilliseconds)
-      TimersOneForAll::DoAfter<TimerCode>(random(MinMilliseconds, MaxMilliseconds + 1), FinishCallback);
+      TimersOneForAll::DoAfter<TimerCode>(LogRandom<MinMilliseconds, MaxMilliseconds>(), FinishCallback);
     else
       TimersOneForAll::DoAfter<TimerCode, MinMilliseconds>(FinishCallback);
     return true;

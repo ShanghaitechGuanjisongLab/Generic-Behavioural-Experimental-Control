@@ -44,6 +44,15 @@
         "type_traits": "cpp",
         "typeinfo": "cpp",
         "utility": "cpp",
-        "vector": "cpp"
+        "vector": "cpp",
+        "array": "cpp",
+        "chrono": "cpp",
+        "cstdint": "cpp",
+        "ctime": "cpp",
+        "deque": "cpp",
+        "dynarray": "cpp",
+        "ratio": "cpp",
+        "span": "cpp",
+        "unordered_map": "cpp"
     }
 }

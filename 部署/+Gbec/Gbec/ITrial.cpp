@@ -1,3 +1,3 @@
 #include "IStepTrial.h"
 uint8_t ITrial::StepsDone;
-void (*ITrial::FinishCallback)();
+std::move_only_function<void()const>ITrial::FinishCallback;

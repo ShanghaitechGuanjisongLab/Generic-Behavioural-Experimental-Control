@@ -22,7 +22,7 @@ struct ISession {
   }
   virtual void WriteInfo() const = 0;
   virtual void Restore(uint8_t NumDistinctTrials, const RestoreInfo *RI) const = 0;
-  static void (*FinishCallback)();
+  static std::move_only_function<void()const> FinishCallback;
 
 protected:
   static std::vector<const ITrial *> TrialQueue;

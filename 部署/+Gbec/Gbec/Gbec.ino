@@ -1,6 +1,7 @@
 #include <Cpp_Standard_Library.h>
 #include "ExperimentDesign.h"
 UID State = State_SessionInvalid;
+std::move_only_function<void()const>const EmptyFinishCallback = []() {};
 void SessionFinish() {
   Serial.write(State = State_SessionFinished);
 }
@@ -13,7 +14,7 @@ void setup() {
   Serial.write(Signal_SerialReady);
   std::ArduinoUrng::seed(SerialRead<uint32_t>());
 }
-const ISession *CurrentSession;
+const ISession* CurrentSession;
 void Start() {
   const UID SessionUID = SerialRead<UID>();
   if (State == State_SessionRunning || State == State_SessionPaused) {
@@ -43,7 +44,8 @@ void Continue() {
     Serial.write(Signal_SessionContinue);
     State = State_SessionRunning;
     CurrentSession->Continue();
-  } else
+  }
+  else
     Serial.write(State);
 }
 void Abort() {
@@ -67,7 +69,8 @@ void GetInfo() {
       Serial.write(Signal_InfoStart);
       CurrentSession->WriteInfo();
     }
-  } else {
+  }
+  else {
     const auto Query = SessionMap.find(SessionUID);
     if (Query == SessionMap.end())
       Serial.write(Signal_NoSuchSession);
@@ -102,7 +105,7 @@ void Restore() {
   Serial.write(Signal_SessionRestored);
   CurrentSession->Restore(RC.NumDistinctTrials, RIs.get());
 }
-const ITest *CurrentTest = nullptr;
+const ITest* CurrentTest = nullptr;
 void TestStart() {
   struct TestInfo {
     UID TestUID;
@@ -123,7 +126,8 @@ void TestStart() {
   if (CurrentTest->Start(TI.TestTimes)) {
     CurrentTest = nullptr;
     Serial.write(Signal_TestStartedAutoStop);
-  } else
+  }
+  else
     Serial.write(Signal_TestStartedManualStop);
 }
 void TestStop() {
@@ -133,14 +137,15 @@ void TestStop() {
       CurrentTest->Stop();
       CurrentTest = nullptr;
       Serial.write(State == State_SessionRunning ? State_SessionRunning : Signal_TestStopped);
-    } else
+    }
+    else
       Serial.write(Signal_NoLastTest);
   else {
     const auto Query = TestMap.find(TestUID);
     if (Query == TestMap.end())
       Serial.write(Signal_NoSuchTest);
     else {
-      const ITest *const TestToStop = (*Query).second;
+      const ITest* const TestToStop = (*Query).second;
       TestToStop->Stop();
       if (TestToStop == CurrentTest)
         CurrentTest = nullptr;
@@ -168,6 +173,7 @@ void loop() {
   if (API < std::extent_v<decltype(APIs)>) {
     Serial.write(Signal_ApiFound);
     APIs[API]();
-  } else
+  }
+  else
     Serial.write(Signal_ApiInvalid);
 }

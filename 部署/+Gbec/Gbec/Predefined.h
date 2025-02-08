@@ -228,27 +228,22 @@ struct _AddToArray<ToAdd, Container<AlreadyIn...>> {
 };
 template<typename ToAdd, typename Container>
 using AddToArray = typename _AddToArray<ToAdd, Container>::Result;
-template<typename T>
-constexpr UID TypeToUID = T::MyUID;
-template<>
-constexpr UID TypeToUID<bool> = Type_Bool;
-template<>
-constexpr UID TypeToUID<uint8_t> = Type_UInt8;
-template<>
-constexpr UID TypeToUID<uint16_t> = Type_UInt16;
-template<>
-constexpr UID TypeToUID<UID> = Type_UID;
+template<typename T>struct TypeToUID { static constexpr UID value = T::MyUID; };
+template<>struct TypeToUID<bool> { static constexpr UID value = Type_Bool; };
+template<>struct TypeToUID<uint8_t> { static constexpr UID value = Type_UInt8; };
+template<>struct TypeToUID<uint16_t> { static constexpr UID value = Type_UInt16; };
+template<>struct TypeToUID<UID> { static constexpr UID value = Type_UID; };
 #pragma pack(push, 1)
 template<typename T, typename... Ts>
 struct InfoArray {
   constexpr static UID MyUID = Type_Array;
   uint8_t Number = sizeof...(Ts) + 1;
-  UID Type = TypeToUID<typename T::value_type>;
+  UID Type = TypeToUID<typename T::value_type>::value;
   typename T::value_type Array[sizeof...(Ts) + 1] = { T::value, Ts::value... };
 };
 template<typename T, typename... Ts>
 struct CellArray {
-  UID Type = TypeToUID<T>;
+  UID Type = TypeToUID<T>::value;
   T Value;
   CellArray<Ts...> Values;
   constexpr CellArray(T Value, Ts... Values)
@@ -257,7 +252,7 @@ struct CellArray {
 };
 template<typename T>
 struct CellArray<T> {
-  UID Type = TypeToUID<T>;
+  UID Type = TypeToUID<T>::value;
   T Value;
   constexpr CellArray(T Value)
     : Value(Value) {
@@ -283,7 +278,7 @@ InfoCell(T, Ts...) -> InfoCell<T, Ts...>;
 template<typename TName, typename TValue, typename... Ts>
 struct InfoFields {
   TName Name;
-  UID Type = TypeToUID<TValue>;
+  UID Type = TypeToUID<TValue>::value;
   TValue Value;
   InfoFields<Ts...> FollowingFields;
   constexpr InfoFields(TName Name, TValue Value, Ts... NameValues)
@@ -293,7 +288,7 @@ struct InfoFields {
 template<typename TName, typename TValue>
 struct InfoFields<TName, TValue> {
   TName Name;
-  UID Type = TypeToUID<TValue>;
+  UID Type = TypeToUID<TValue>::value;
   TValue Value;
   constexpr InfoFields(TName Name, TValue Value)
     : Name(Name), Value(Value) {
@@ -532,21 +527,23 @@ public:
     FinishCallback = std::move(FC);
     if (ReportMiss)
       NoHits = true;
-    RisingInterrupt<Pin>(HitReport);
-    TimersOneForAll::DoAfter<TimerCode, Milliseconds>(TimeUp);
+    RisingInterrupt<Pin>(&HitReport);
+    Timer = Timers_one_for_all::AllocateTimer();
+    Timer->DoAfter(std::chrono::milliseconds{ Milliseconds }, TimeUp);
     return true;
   }
   void Pause() const override {
-    DetachInterrupt<Pin>(HitReport);
-    TimersOneForAll::Pause<TimerCode>();
+    DetachInterrupt<Pin>(&HitReport);
+    Timer->Pause();
   }
   void Continue() const override {
-    TimersOneForAll::Continue<TimerCode>();
-    RisingInterrupt<Pin>(HitReport);
+    Timer->Continue();
+    RisingInterrupt<Pin>(&HitReport);
   }
   void Abort() const override {
-    DetachInterrupt<Pin>(HitReport);
-    TimersOneForAll::ShutDown<TimerCode>();
+    DetachInterrupt<Pin>(&HitReport);
+    Timer->Stop();
+    Timer->Allocatable(true);
   }
   void Setup() const override {
     if (PinStates<Pin>::NeedSetup) {
@@ -570,29 +567,37 @@ public:
 // 不做任何事，同步等待一段时间后再进入下一步。
 template<uint8_t TimerCode, uint16_t MinMilliseconds, uint16_t MaxMilliseconds = MinMilliseconds, UID MyUID = Step_Wait>
 struct WaitStep : public IStep {
+  Timers_one_for_all::TimerClass const* Timer;
   bool Start(std::move_only_function<void()const>&& FinishCallback) const override {
+    Timer = Timers_one_for_all::AllocateTimer();
+    std::move_only_function<void()const> FC = [Timer, FinishCallback = std::move(FinishCallback)]() {
+      Timer->Allocatable(true);
+      FinishCallback();
+      };
     if (MinMilliseconds < MaxMilliseconds)
-      TimersOneForAll::DoAfter<TimerCode>(LogRandom<MinMilliseconds, MaxMilliseconds>(), FinishCallback);
+      Timer->DoAfter(std::chrono::milliseconds{ LogRandom<MinMilliseconds, MaxMilliseconds>() }, std::move(FC));
     else
-      TimersOneForAll::DoAfter<TimerCode, MinMilliseconds>(FinishCallback);
+      Timer->DoAfter(std::chrono::milliseconds{ MinMilliseconds }, std::move(FC));
     return true;
   }
   void Pause() const override {
-    TimersOneForAll::Pause<TimerCode>();
+    Timer->Pause();
   }
   void Continue() const override {
-    TimersOneForAll::Continue<TimerCode>();
+    Timer->Continue();
   }
   void Abort() const override {
-    TimersOneForAll::ShutDown<TimerCode>();
+    Timer->Stop();
+    Timer->Allocatable(true);
   }
   static constexpr auto Info = InfoStruct(Info_UID, MyUID, Info_MinMilliseconds, MinMilliseconds, Info_MaxMilliseconds, MaxMilliseconds);
 };
 // 开始监视指定引脚，发现高电平立即汇报。异步执行，步骤本身立即结束，但会在后台持续监视，直到StopMonitorStep才会结束监视。
 template<uint8_t Pin, typename Reporter, UID MyUID = Step_StartMonitor>
 struct StartMonitorStep : public IStep {
+  std::move_only_function<void()const>const ReportHit = []() {Report<Reporter>();};
   bool Start(std::move_only_function<void()const>&&) const override {
-    RisingInterrupt<Pin>(Report<Reporter>);
+    RisingInterrupt<Pin>(&ReportHit);
     return false;
   }
   void Setup() const override {

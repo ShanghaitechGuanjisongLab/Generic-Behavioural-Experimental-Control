@@ -209,12 +209,17 @@ struct ToneTest : public ITest {
   }
 };
 template<typename T>
-inline constexpr T& Instance() {
-  static T I;
-  return I;
-}
+struct Instance {
+  static T value;
+};
+template<typename T>
+T Instance<T>::value;
 template<typename... Ts>
-const std::map<UID, const ITest*> TestMap_t{ { Instance<Ts>().MyUID, &Instance<Ts>() }... };
+struct TestMap {
+  static const std::map<UID, const ITest*> value;
+};
+template<typename... Ts>
+const std::map<UID, const ITest*>TestMap<Ts...>::value{ { Instance<Ts>::value.MyUID, &Instance<Ts>::value }... };
 template<typename ToAdd, typename Container>
 struct _AddToArray;
 template<typename ToAdd, template<typename...> typename Container, typename... AlreadyIn>
@@ -363,7 +368,7 @@ public:
 extern std::move_only_function<void()const>const EmptyFinishCallback;
 template<typename Reporter>
 inline void Report() {
-  Instance<Reporter>().Start(&EmptyFinishCallback);
+  Instance<Reporter>::value.Start(&EmptyFinishCallback);
 }
 // 让引脚高电平一段时间再回到低电平。异步执行，不阻塞时相
 template<uint8_t Pin, uint16_t Milliseconds, typename UpReporter = NullStep, typename DownReporter = NullStep, UID MyUID = Step_PinFlash>
@@ -388,8 +393,8 @@ public:
       Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
       PinStates<Pin>::NeedSetup = false;
     }
-    Instance<UpReporter>().Setup();
-    Instance<DownReporter>().Setup();
+    Instance<UpReporter>::value.Setup();
+    Instance<DownReporter>::value.Setup();
   }
   static constexpr auto Info = InfoStruct(Info_UID, MyUID, Info_Pin, Pin, Info_Milliseconds, Milliseconds);
 };
@@ -435,8 +440,8 @@ public:
       Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
       PinStates<Pin>::NeedSetup = false;
     }
-    Instance<UpReporter>().Setup();
-    Instance<DownReporter>().Setup();
+    Instance<UpReporter>::value.Setup();
+    Instance<DownReporter>::value.Setup();
   }
   static constexpr auto Info = InfoStruct(Info_UID, MyUID, Info_Pin, Pin, Info_HighMilliseconds, HighMilliseconds, Info_LowMilliseconds, LowMilliseconds, Info_RandomCycleMin, RandomCycleMin, Info_RandomCycleMax, RandomCycleMax);
 };
@@ -549,8 +554,8 @@ public:
       Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
       PinStates<Pin>::NeedSetup = false;
     }
-    Instance<HitReporter>().Setup();
-    Instance<MissReporter>().Setup();
+    Instance<HitReporter>::value.Setup();
+    Instance<MissReporter>::value.Setup();
   }
   static constexpr auto Info = InfoStruct(
     Info_UID, MyUID,
@@ -596,7 +601,7 @@ struct StartMonitorStep : public IStep {
       Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
       PinStates<Pin>::NeedSetup = false;
     }
-    Instance<Reporter>().Setup();
+    Instance<Reporter>::value.Setup();
   }
   static constexpr auto Info = InfoStruct(Info_UID, MyUID, Info_Pin, Pin, Info_Reporter, Reporter::Info);
 };
@@ -649,8 +654,8 @@ struct ToneStep : public IStep {
       Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
       PinStates<Pin>::NeedSetup = false;
     }
-    Instance<UpReporter>().Setup();
-    Instance<DownReporter>().Setup();
+    Instance<UpReporter>::value.Setup();
+    Instance<DownReporter>::value.Setup();
   }
   static constexpr auto Info = InfoStruct(Info_UID, MyUID, Info_Pin, Pin, Info_FrequencyHz, FrequencyHz, Info_Milliseconds, Milliseconds);
 
@@ -673,14 +678,14 @@ struct SquareWaveStep : public IStep {
       Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
       PinStates<Pin>::NeedSetup = false;
     }
-    Instance<UpReporter>().Setup();
-    Instance<DownReporter>().Setup();
+    Instance<UpReporter>::value.Setup();
+    Instance<DownReporter>::value.Setup();
   }
   static constexpr auto Info = InfoStruct(Info_UID, MyUID, Info_Pin, Pin, Info_HighMilliseconds, HighMilliseconds, Info_LowMilliseconds, LowMilliseconds, Info_NumCycles, NumCycles);
 };
 template<typename... SubSteps>
 struct IndividualThreadStep : IStep {
-  static constexpr const IStep* StepPointers[] = { &Instance<SubSteps>()... };
+  static constexpr const IStep* StepPointers[] = { &Instance<SubSteps>::value... };
   static const IStep* const* CurrentStep;
   void Setup() const override {
     for (const IStep* S : StepPointers)
@@ -737,7 +742,7 @@ public:
   }
 };
 template<UID TUID, typename... TSteps>
-const IStep* Trial<TUID, TSteps...>::Steps[sizeof...(TSteps)] = { &Instance<TSteps>()... };
+const IStep* Trial<TUID, TSteps...>::Steps[sizeof...(TSteps)] = { &Instance<TSteps>::value... };
 template<uint16_t Value>
 using N = std::integral_constant<uint16_t, Value>;
 template<typename... Trials>
@@ -747,7 +752,7 @@ struct TrialArray {
 };
 // 静态成员必须类外定义，即使模板也一样
 template<typename... Trials>
-const ITrial* TrialArray<Trials...>::Interfaces[sizeof...(Trials)] = { &Instance<Trials>()... };
+const ITrial* TrialArray<Trials...>::Interfaces[sizeof...(Trials)] = { &Instance<Trials>::value... };
 template<typename TTrial, typename TNumber, typename... TrialThenNumber>
 struct TrialNumberSplit {
   using Numbers_t = AddToArray<TNumber, typename TrialNumberSplit<TrialThenNumber...>::Numbers_t>;
@@ -809,4 +814,4 @@ public:
   }
 };
 template<typename... Ts>
-const std::map<UID, const ISession*> SessionMap_t{ { Instance<Ts>().MyUID, &Instance<Ts>() }... };
+const std::map<UID, const ISession*> SessionMap_t{ { Instance<Ts>::value.MyUID, &Instance<Ts>::value }... };

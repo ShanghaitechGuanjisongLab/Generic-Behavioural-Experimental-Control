@@ -25,7 +25,7 @@ struct ISession {
   static std::move_only_function<void()const> FinishCallback;
 
 protected:
-  static std::vector<const ITrial *> TrialQueue;
+  static std::vector<ITrial *> TrialQueue;
   static uint16_t TrialsDone;
   static uint16_t TrialsRestored;
   static void RunAsync();

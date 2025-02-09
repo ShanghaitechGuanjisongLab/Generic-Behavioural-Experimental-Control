@@ -4,7 +4,6 @@
 #include <Timers_one_for_all.hpp>
 #include <Quick_digital_IO_interrupt.hpp>
 #include <algorithm>
-#include <map>
 #include <numeric>
 #include <set>
 #include <cmath>
@@ -13,27 +12,27 @@ extern UID State;
 template<uint8_t Pin>
 struct PinStates {
   static bool NeedSetup;
-  static std::set<std::move_only_function<void()const>const*> CallbackSet;
+  static std::set<std::move_only_function<void() const> const*> CallbackSet;
   static Timers_one_for_all::TimerClass const* FlashingTimer;
   static void TraverseCallback() {
     if (State != State_SessionPaused)
-      for (std::move_only_function<void()const>const* const C : CallbackSet)
+      for (std::move_only_function<void() const> const* const C : CallbackSet)
         (*C)();
   }
-  static std::move_only_function<void()const>const ReportHit;
+  static std::move_only_function<void() const> ReportHit;
 };
 template<uint8_t Pin>
 bool PinStates<Pin>::NeedSetup = true;
 template<uint8_t Pin>
-std::set<std::move_only_function<void()const>const*> PinStates<Pin>::CallbackSet;
+std::set<std::move_only_function<void() const> const*> PinStates<Pin>::CallbackSet;
 template<uint8_t Pin>
 Timers_one_for_all::TimerClass const* PinStates<Pin>::FlashingTimer;
 template<uint8_t Pin>
-std::move_only_function<void()const>const PinStates<Pin>::ReportHit;
+std::move_only_function<void() const> PinStates<Pin>::ReportHit;
 
 // 如果试图添加重复的中断回调，则不会添加，也不会出错
 template<uint8_t Pin>
-void RisingInterrupt(std::move_only_function<void()const>const* Callback) {
+void RisingInterrupt(std::move_only_function<void() const> const* Callback) {
   if (PinStates<Pin>::CallbackSet.empty()) {
     // 清除attachInterrupt之前已经立起并被记住的中断旗帜。中断旗帜与引脚号的对应关系与digitalPinToInterrupt不同。
 #ifdef ARDUINO_ARCH_AVR
@@ -49,7 +48,7 @@ void RisingInterrupt(std::move_only_function<void()const>const* Callback) {
 }
 
 template<uint8_t Pin>
-void DetachInterrupt(std::move_only_function<void()const>const* Callback) {
+void DetachInterrupt(std::move_only_function<void() const> const* Callback) {
   PinStates<Pin>::CallbackSet.erase(Callback);
   if (PinStates<Pin>::CallbackSet.empty())
     // detachInterrupt不能阻止后续中断旗帜再被立起
@@ -58,7 +57,7 @@ void DetachInterrupt(std::move_only_function<void()const>const* Callback) {
 struct ITest {
   UID MyUID;
   // 测试开始时将调用此方法。测试分为自动结束型和手动结束型。对于自动结束型，应当根据TestTimes参数将测试重复指定的次数，并返回true表示该测试将自动结束。对于手动结束型，一般应当忽略TestTimes参数，返回false，持续测试直到Stop被调用。
-  virtual bool Start(uint16_t TestTimes) const = 0;
+  virtual bool Start(uint16_t TestTimes) = 0;
   // 测试被用户手动结束时将调用此方法。自动结束型测试无需实现此方法，手动结束型则必须实现。
   virtual void Stop() const {}
   constexpr ITest(UID MyUID)
@@ -71,7 +70,7 @@ struct PinFlashTest : public ITest {
   constexpr PinFlashTest()
     : ITest(TMyUID) {
   }
-  bool Start(uint16_t TestTimes) const override {
+  bool Start(uint16_t TestTimes) override {
     if (PinStates<Pin>::NeedSetup) {
       Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
       PinStates<Pin>::NeedSetup = false;
@@ -79,10 +78,10 @@ struct PinFlashTest : public ITest {
     Quick_digital_IO_interrupt::DigitalWrite<Pin, HighOrLow>();
     Timers_one_for_all::TimerClass const* const Timer = Timers_one_for_all::AllocateTimer();
     constexpr std::chrono::milliseconds Delay{ Milliseconds };
-    Timer->DoAfter(Delay * TestTimes, [Timer]() {
+    Timer->DoAfter(Delay * TestTimes, [Timer = Timer]() {
       Timer->Allocatable(true);
       Quick_digital_IO_interrupt::DigitalToggle<Pin>();
-      });
+    });
     return true;
   }
 };
@@ -108,8 +107,7 @@ void PopulateRandomCycles(std::vector<std::chrono::milliseconds>& FlashCycles, u
     if (IntegerHigh & 1) {
       if (FloatHigh >= IntegerHigh + 0.5)
         IntegerHigh++;
-    }
-    else {
+    } else {
       if (FloatHigh > IntegerHigh + 0.5)
         IntegerHigh++;
     }
@@ -126,7 +124,7 @@ struct RandomFlashTest : public ITest {
   Timers_one_for_all::TimerClass const* Timer;
   std::vector<std::chrono::milliseconds> FlashCycles;
   std::vector<std::chrono::milliseconds>::const_iterator NextCycle;
-  bool Start(uint16_t TestTimes) const override {
+  bool Start(uint16_t TestTimes) override {
     if (PinStates<Pin>::NeedSetup) {
       Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
       PinStates<Pin>::NeedSetup = false;
@@ -144,26 +142,29 @@ protected:
   void SetHigh() {
     if (NextCycle < FlashCycles.cend()) {
       Quick_digital_IO_interrupt::DigitalWrite<Pin, HIGH>();
-      Timer->DoAfter(*(NextCycle++), [this]() {this->SetLow(); });
-    }
-    else
+      Timer->DoAfter(*(NextCycle++), [this]() {
+        this->SetLow();
+      });
+    } else
       Timer->Allocatable(true);
   }
   void SetLow() {
     Quick_digital_IO_interrupt::DigitalWrite<Pin, LOW>();
-    Timer->DoAfter(*(NextCycle++), [this]() {this->SetHigh(); });
+    Timer->DoAfter(*(NextCycle++), [this]() {
+      this->SetHigh();
+    });
   }
 };
 // 监视引脚，每次高电平发送串口报告。此测试需要调用Stop才能终止，且无视TestTimes参数
 template<UID TMyUID, uint8_t Pin>
 class MonitorTest : public ITest {
-  static std::move_only_function<void()const>const ReportHit;
+  static std::move_only_function<void() const> const ReportHit;
 
 public:
   constexpr MonitorTest()
     : ITest(TMyUID) {
   }
-  bool Start(uint16_t) const override {
+  bool Start(uint16_t) override {
     static_assert(Quick_digital_IO_interrupt::PinInterruptable(Pin), "试图将不支持的引脚用于MonitorTest");
     if (PinStates<Pin>::NeedSetup) {
       Quick_digital_IO_interrupt::PinMode<Pin, INPUT>();
@@ -177,7 +178,9 @@ public:
   }
 };
 template<UID TMyUID, uint8_t Pin>
-std::move_only_function<void()const>const MonitorTest<TMyUID, Pin>::ReportHit = []() {SerialWrite(Signal_MonitorHit);};
+std::move_only_function<void() const> const MonitorTest<TMyUID, Pin>::ReportHit = []() {
+  SerialWrite(Signal_MonitorHit);
+};
 // 测试具有指定高电平和低电平毫秒数和循环次数的方波
 template<UID TMyUID, uint8_t Pin, uint16_t HighMilliseconds, uint16_t LowMilliseconds, uint16_t NumCycles>
 struct SquareWaveTest : public ITest {
@@ -185,13 +188,15 @@ struct SquareWaveTest : public ITest {
     : ITest(TMyUID) {
   }
   Timers_one_for_all::TimerClass const* Timer;
-  bool Start(uint16_t TestTimes) const override {
+  bool Start(uint16_t TestTimes) override {
     if (PinStates<Pin>::NeedSetup) {
       Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
       PinStates<Pin>::NeedSetup = false;
     }
     Timer = Timers_one_for_all::AllocateTimer();
-    Timer->DoubleRepeat(std::chrono::milliseconds{ HighMilliseconds }, Quick_digital_IO_interrupt::DigitalToggle<Pin>, std::chrono::milliseconds{ LowMilliseconds }, Quick_digital_IO_interrupt::DigitalToggle<Pin>, NumCycles * TestTimes * 2, [Timer]() {Timer->Allocatable(true);});
+    Timer->DoubleRepeat(std::chrono::milliseconds{ LowMilliseconds }, Quick_digital_IO_interrupt::DigitalWrite<Pin, HIGH>, std::chrono::milliseconds{ HighMilliseconds }, Quick_digital_IO_interrupt::DigitalWrite<Pin, LOW>, NumCycles * TestTimes * 2, [Timer = Timer]() {
+      Timer->Allocatable(true);
+    });
     return true;
   }
 };
@@ -201,13 +206,16 @@ struct ToneTest : public ITest {
   constexpr ToneTest()
     : ITest(TMyUID) {
   }
-  bool Start(uint16_t TestTimes) const override {
+  Timers_one_for_all::TimerClass const* Timer;
+  bool Start(uint16_t TestTimes) override {
     if (PinStates<Pin>::NeedSetup) {
       Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
       PinStates<Pin>::NeedSetup = false;
     }
     Timer = Timers_one_for_all::AllocateTimer();
-    Timer->RepeatEvery(std::chrono::microseconds{ 1000000 / FrequencyHz }, Quick_digital_IO_interrupt::DigitalToggle<Pin>, std::chrono::milliseconds{ Milliseconds * TestTimes }, [Timer]() {Timer->Allocatable(true);});
+    Timer->RepeatEvery(std::chrono::microseconds{ 500000 / FrequencyHz }, Quick_digital_IO_interrupt::DigitalToggle<Pin>, std::chrono::microseconds{ Milliseconds * TestTimes * 1000 }, [Timer = Timer]() {
+      Timer->Allocatable(true);
+    });
     return true;
   }
 };
@@ -218,11 +226,14 @@ struct Instance {
 template<typename T>
 T Instance<T>::value;
 template<typename... Ts>
-struct TestMap {
-  static const std::map<UID, const ITest*> value;
+struct UidMap {
+  static const std::unordered_map<UID, ITest*> Tests;
+  static const std::unordered_map<UID, const ISession*> Sessions;
 };
 template<typename... Ts>
-const std::map<UID, const ITest*>TestMap<Ts...>::value{ { Instance<Ts>::value.MyUID, &Instance<Ts>::value }... };
+const std::unordered_map<UID, ITest*> UidMap<Ts...>::Tests{ { Instance<Ts>::value.MyUID, &Instance<Ts>::value }... };
+template<typename... Ts>
+const std::unordered_map<UID, const ISession*> UidMap<Ts...>::Sessions{ { Instance<Ts>::value.MyUID, &Instance<Ts>::value }... };
 template<typename ToAdd, typename Container>
 struct _AddToArray;
 template<typename ToAdd, template<typename...> typename Container, typename... AlreadyIn>
@@ -231,11 +242,11 @@ struct _AddToArray<ToAdd, Container<AlreadyIn...>> {
 };
 template<typename ToAdd, typename Container>
 using AddToArray = typename _AddToArray<ToAdd, Container>::Result;
-template<typename T>struct TypeToUID { static constexpr UID value = T::MyUID; };
-template<>struct TypeToUID<bool> { static constexpr UID value = Type_Bool; };
-template<>struct TypeToUID<uint8_t> { static constexpr UID value = Type_UInt8; };
-template<>struct TypeToUID<uint16_t> { static constexpr UID value = Type_UInt16; };
-template<>struct TypeToUID<UID> { static constexpr UID value = Type_UID; };
+template<typename T> struct TypeToUID { static constexpr UID value = T::MyUID; };
+template<> struct TypeToUID<bool> { static constexpr UID value = Type_Bool; };
+template<> struct TypeToUID<uint8_t> { static constexpr UID value = Type_UInt8; };
+template<> struct TypeToUID<uint16_t> { static constexpr UID value = Type_UInt16; };
+template<> struct TypeToUID<UID> { static constexpr UID value = Type_UID; };
 #pragma pack(push, 1)
 template<typename T, typename... Ts>
 struct InfoArray {
@@ -321,24 +332,28 @@ template<uint8_t Pin, uint16_t MinMilliseconds, uint16_t MaxMilliseconds = MinMi
 class CalmdownStep : public IStep {
   static constexpr bool RandomTime = MinMilliseconds < MaxMilliseconds;
   Timers_one_for_all::TimerClass const* Timer;
-  std::move_only_function<void()const> FinishCallback;
+  std::move_only_function<void() const> FinishCallback;
   std::chrono::milliseconds CurrentDuration{ MinMilliseconds };
-  std::move_only_function<void()const>const Reset = [this]() {
-    Timer->DoAfter(CurrentDuration, &TimeUp);
-    };
-  std::move_only_function<void()const>const TimeUp = [this]() {
+  std::move_only_function<void() const> const Reset = [this]() {
+    Timer->DoAfter(CurrentDuration, [this]() {
+      TimeUp();
+    });
+  };
+  void TimeUp() {
     DetachInterrupt<Pin>(&Reset);
     Timer->Allocatable(true);
     FinishCallback();
-    };
+  };
 
 public:
-  bool Start(std::move_only_function<void()const>&& FC) const override {
+  bool Start(std::move_only_function<void() const>&& FC) override {
     FinishCallback = std::move(FC);
     if (RandomTime)
       CurrentDuration = std::chrono::milliseconds{ LogRandom<MinMilliseconds, MaxMilliseconds>() };
     Timer = Timers_one_for_all::AllocateTimer();
-    Timer->DoAfter(CurrentDuration, &TimeUp);
+    Timer->DoAfter(CurrentDuration, [this]() {
+      TimeUp();
+    });
     RisingInterrupt<Pin>(&Reset);
     return true;
   }
@@ -352,9 +367,10 @@ public:
   }
   void Abort() const override {
     DetachInterrupt<Pin>(&Reset);
-    Timers_one_for_all::ShutDown<TimerCode>();
+    Timer->Stop();
+    Timer->Allocatable(true);
   }
-  void Setup() const override {
+  void Setup() override {
     if (PinStates<Pin>::NeedSetup) {
       static_assert(Quick_digital_IO_interrupt::PinInterruptable(Pin), "试图将不支持中断的引脚用于CalmdownStep");
       Quick_digital_IO_interrupt::PinMode<Pin, INPUT>();
@@ -363,10 +379,9 @@ public:
   }
   static constexpr auto Info = InfoStruct(Info_UID, MyUID, Info_Pin, Pin, Info_MinMilliseconds, MinMilliseconds, Info_MaxMilliseconds, MaxMilliseconds);
 };
-extern std::move_only_function<void()const>const EmptyFinishCallback;
 template<typename Reporter>
 inline void Report() {
-  Instance<Reporter>::value.Start(&EmptyFinishCallback);
+  Instance<Reporter>::value.Start([]() {});
 }
 // 让引脚高电平一段时间再回到低电平。异步执行，不阻塞时相
 template<uint8_t Pin, uint16_t Milliseconds, typename UpReporter = NullStep, typename DownReporter = NullStep, UID MyUID = Step_PinFlash>
@@ -379,14 +394,16 @@ class PinFlashStep : public IStep {
   Timers_one_for_all::TimerClass const* Timer;
 
 public:
-  bool Start(std::move_only_function<void()const>&&) const override {
+  bool Start(std::move_only_function<void() const>&&) override {
     Report<UpReporter>();
     Quick_digital_IO_interrupt::DigitalWrite<Pin, HIGH>();
     Timer = Timers_one_for_all::AllocateTimer();
-    Timer->DoAfter(std::chrono::milliseconds{ Milliseconds }, [this]() {this->DownReport(); });
+    Timer->DoAfter(std::chrono::milliseconds{ Milliseconds }, [this]() {
+      this->DownReport();
+    });
     return false;
   }
-  void Setup() const override {
+  void Setup() override {
     if (PinStates<Pin>::NeedSetup) {
       Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
       PinStates<Pin>::NeedSetup = false;
@@ -407,20 +424,23 @@ class RandomFlashStep : public IStep {
       if (ReportEachCycle)
         Report<UpReporter>();
       Quick_digital_IO_interrupt::DigitalWrite<Pin, HIGH>();
-      Timer->DoAfter(*(CurrentCycle++), [this]() {this->SetLow(); });
-    }
-    else
+      Timer->DoAfter(*(CurrentCycle++), [this]() {
+        this->SetLow();
+      });
+    } else
       Timer->Allocatable(true);
   }
   void SetLow() {
     if (ReportEachCycle)
       Report<DownReporter>();
     Quick_digital_IO_interrupt::DigitalWrite<Pin, LOW>();
-    Timer->DoAfter(*(CurrentCycle++), [this]() {this->SetHigh(); });
+    Timer->DoAfter(*(CurrentCycle++), [this]() {
+      this->SetHigh();
+    });
   }
 
 public:
-  bool Start(std::move_only_function<void()const>&&) const override {
+  bool Start(std::move_only_function<void() const>&&) override {
     if (!ReportEachCycle)
       Report<UpReporter>();
     if (HighMilliseconds) {
@@ -428,12 +448,11 @@ public:
       CurrentCycle = FlashCycles.cbegin();
       Timer = Timers_one_for_all::AllocateTimer();
       SetHigh();
-    }
-    else if (!ReportEachCycle)
+    } else if (!ReportEachCycle)
       Report<DownReporter>();
     return false;
   }
-  void Setup() const override {
+  void Setup() override {
     if (PinStates<Pin>::NeedSetup) {
       Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
       PinStates<Pin>::NeedSetup = false;
@@ -443,12 +462,6 @@ public:
   }
   static constexpr auto Info = InfoStruct(Info_UID, MyUID, Info_Pin, Pin, Info_HighMilliseconds, HighMilliseconds, Info_LowMilliseconds, LowMilliseconds, Info_RandomCycleMin, RandomCycleMin, Info_RandomCycleMax, RandomCycleMax);
 };
-
-template<uint8_t Pin>
-inline constexpr Timers_one_for_all::TimerClass const*& FlashingPinTimer() {
-  static Timers_one_for_all::TimerClass const* FPT;
-  return FPT;
-}
 // 后台无限随机闪烁引脚，直到StopRandomFlash。指定每个周期的高电平和低电平时长范围。
 template<uint8_t Pin, uint16_t MinHighMilliseconds, uint16_t MaxHighMilliseconds, uint16_t MinLowMilliseconds, uint16_t MaxLowMilliseconds, UID MyUID = Step_StartRandomFlash>
 class StartRandomFlash : public IStep {
@@ -462,12 +475,12 @@ class StartRandomFlash : public IStep {
   }
 
 public:
-  bool Start(std::move_only_function<void()const>&&) const override {
+  bool Start(std::move_only_function<void() const>&&) override {
     PinStates<Pin>::FlashingTimer = Timers_one_for_all::AllocateTimer();
     SetHigh();
     return false;
   }
-  void Setup() const override {
+  void Setup() override {
     if (PinStates<Pin>::NeedSetup) {
       Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
       PinStates<Pin>::NeedSetup = false;
@@ -479,13 +492,13 @@ public:
 template<uint8_t Pin, UID MyUID = Step_StopRandomFlash>
 class StopRandomFlash : public IStep {
 public:
-  bool Start(std::move_only_function<void()const>&&) const override {
+  bool Start(std::move_only_function<void() const>&&) override {
     PinStates<Pin>::FlashingTimer->Stop();
     PinStates<Pin>::FlashingTimer->Allocatable(true);
     Quick_digital_IO_interrupt::DigitalWrite<Pin, LOW>();
     return false;
   }
-  void Setup() const override {
+  void Setup() override {
     if (PinStates<Pin>::NeedSetup) {
       Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
       PinStates<Pin>::NeedSetup = false;
@@ -500,24 +513,23 @@ class MonitorStep : public IStep {
   static constexpr bool ReportOnce = Flags & Monitor_ReportOnce;
   static constexpr bool ReportMiss = !std::is_same_v<MissReporter, NullStep>;
   static constexpr bool HitAndFinish = Flags & Monitor_HitAndFinish;
-  std::move_only_function<void()const>FinishCallback;
+  std::move_only_function<void() const> FinishCallback;
   bool NoHits;
   Timers_one_for_all::TimerClass const* Timer;
-  std::move_only_function<void()const>const HitReport = [this]() {
+  std::move_only_function<void() const> const HitReport = [this]() {
     Report<HitReporter>();
     if (HitAndFinish) {
       DetachInterrupt<Pin>(&HitReport);
       Timer->Stop();
       Timer->Allocatable(true);
       FinishCallback();
-    }
-    else {
+    } else {
       if (ReportOnce)
         DetachInterrupt<Pin>(&HitReport);
       if (ReportMiss)
         NoHits = false;
     }
-    };
+  };
   void TimeUp() {
     DetachInterrupt<Pin>(&HitReport);
     if (ReportMiss && NoHits)
@@ -526,13 +538,15 @@ class MonitorStep : public IStep {
   }
 
 public:
-  bool Start(std::move_only_function<void()const>&& FC) const override {
+  bool Start(std::move_only_function<void() const>&& FC) override {
     FinishCallback = std::move(FC);
     if (ReportMiss)
       NoHits = true;
     RisingInterrupt<Pin>(&HitReport);
     Timer = Timers_one_for_all::AllocateTimer();
-    Timer->DoAfter(std::chrono::milliseconds{ Milliseconds }, TimeUp);
+    Timer->DoAfter(std::chrono::milliseconds{ Milliseconds }, [this]() {
+      TimeUp();
+    });
     return true;
   }
   void Pause() const override {
@@ -548,7 +562,7 @@ public:
     Timer->Stop();
     Timer->Allocatable(true);
   }
-  void Setup() const override {
+  void Setup() override {
     if (PinStates<Pin>::NeedSetup) {
       static_assert(Quick_digital_IO_interrupt::PinInterruptable(Pin), "试图将不支持中断的引脚用于MonitorStep");
       Quick_digital_IO_interrupt::PinMode<Pin, INPUT>();
@@ -571,12 +585,12 @@ public:
 template<uint16_t MinMilliseconds, uint16_t MaxMilliseconds = MinMilliseconds, UID MyUID = Step_Wait>
 struct WaitStep : public IStep {
   Timers_one_for_all::TimerClass const* Timer;
-  bool Start(std::move_only_function<void()const>&& FinishCallback) const override {
+  bool Start(std::move_only_function<void() const>&& FinishCallback) override {
     Timer = Timers_one_for_all::AllocateTimer();
-    std::move_only_function<void()const> FC = [Timer, FinishCallback = std::move(FinishCallback)]() {
+    std::move_only_function<void() const> FC = [Timer = Timer, FinishCallback = std::move(FinishCallback)]() {
       Timer->Allocatable(true);
       FinishCallback();
-      };
+    };
     if (MinMilliseconds < MaxMilliseconds)
       Timer->DoAfter(std::chrono::milliseconds{ LogRandom<MinMilliseconds, MaxMilliseconds>() }, std::move(FC));
     else
@@ -598,12 +612,12 @@ struct WaitStep : public IStep {
 // 开始监视指定引脚，发现高电平立即汇报。异步执行，步骤本身立即结束，但会在后台持续监视，直到StopMonitorStep才会结束监视。
 template<uint8_t Pin, typename Reporter, UID MyUID = Step_StartMonitor>
 struct StartMonitorStep : public IStep {
-  bool Start(std::move_only_function<void()const>&&) const override {
+  bool Start(std::move_only_function<void() const>&&) override {
     PinStates<Pin>::ReportHit = Report<Reporter>;
     RisingInterrupt<Pin>(&PinStates<Pin>::ReportHit);
     return false;
   }
-  void Setup() const override {
+  void Setup() override {
     if (PinStates<Pin>::NeedSetup) {
       static_assert(Quick_digital_IO_interrupt::PinInterruptable(Pin), "试图将不支持中断的引脚用于StartMonitorStep");
       Quick_digital_IO_interrupt::PinMode<Pin, INPUT>();
@@ -616,7 +630,7 @@ struct StartMonitorStep : public IStep {
 // 停止监视指定引脚。如果一个引脚被多个Reporter监视，此步骤只会终止指定Reporter的监视，其它Reporter照常工作。
 template<uint8_t Pin, typename Reporter, UID MyUID = Step_StopMonitor>
 struct StopMonitorStep : public IStep {
-  bool Start(std::move_only_function<void()const>&&) const override {
+  bool Start(std::move_only_function<void() const>&&) override {
     DetachInterrupt<Pin>(&PinStates<Pin>::ReportHit);
     return false;
   }
@@ -626,7 +640,7 @@ struct StopMonitorStep : public IStep {
 // 向串口写出一个字节
 template<UID ToWrite, UID MyUID = Step_SerialWrite>
 struct SerialWriteStep : public IStep {
-  bool Start(std::move_only_function<void()const>&&) const override {
+  bool Start(std::move_only_function<void() const>&&) override {
     SerialWrite(ToWrite);
     return false;
   }
@@ -634,30 +648,37 @@ struct SerialWriteStep : public IStep {
 };
 // 以精确的毫秒数记录事件。注意，如果中途发生断线重连事件，事件前后的相对时间将不再精确。
 extern uint32_t TimeShift;
-template<uint8_t TimerCode, UID Event, UID MyUID = Step_PreciseLog>
+template<UID Event, UID MyUID = Step_PreciseLog>
 struct PreciseLogStep : public IStep {
-  void Setup() const override {
+  Timers_one_for_all::TimerClass const* Timer = nullptr;
+  void Setup() override {
     // 必须每次Setup，否则无法重复使用。没有办法还原“已Setup”标志位。
-    TimersOneForAll::StartTiming<TimerCode>();
-    TimersOneForAll::MillisecondsElapsed<TimerCode> = TimeShift;
+    if (!Timer)
+      Timer = Timers_one_for_all::AllocateTimer();
+    Timer->StartTiming();
   }
-  bool Start(std::move_only_function<void()const>&&) const override {
+  bool Start(std::move_only_function<void() const>&&) override {
     SerialWrite(Signal_PreciseLog);
     SerialWrite(Event);
-    SerialWrite(TimersOneForAll::MillisecondsElapsed<TimerCode>);
+    SerialWrite(Timer->GetTiming<std::chrono::milliseconds>().count() + TimeShift);
     return false;
   }
   static constexpr auto Info = InfoStruct(Info_UID, MyUID, Info_Event, Event);
 };
 // 播放具有指定频率㎐和指定毫秒数的声音。异步执行，步骤不阻塞时相。
-template<uint8_t Pin, uint8_t TimerCode, uint16_t FrequencyHz, uint16_t Milliseconds, typename UpReporter = NullStep, typename DownReporter = NullStep, UID MyUID = Step_Audio>
+template<uint8_t Pin, uint16_t FrequencyHz, uint16_t Milliseconds, typename UpReporter = NullStep, typename DownReporter = NullStep, UID MyUID = Step_Audio>
 struct ToneStep : public IStep {
-  bool Start(std::move_only_function<void()const>&&) const override {
+  Timers_one_for_all::TimerClass const* Timer;
+  bool Start(std::move_only_function<void() const>&&) override {
     Report<UpReporter>();
-    TimersOneForAll::PlayTone<TimerCode, Pin, FrequencyHz, Milliseconds, DoneCallback>();
+    Timer = Timers_one_for_all::AllocateTimer();
+    Timer->RepeatEvery(std::chrono::microseconds{ 500000 / FrequencyHz }, Quick_digital_IO_interrupt::DigitalToggle<Pin>, std::chrono::microseconds{ Milliseconds * 1000 }, [Timer = Timer]() {
+      Timer->Allocatable(true);
+      Report<DownReporter>();
+    });
     return false;
   }
-  void Setup() const override {
+  void Setup() override {
     if (PinStates<Pin>::NeedSetup) {
       Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
       PinStates<Pin>::NeedSetup = false;
@@ -666,22 +687,21 @@ struct ToneStep : public IStep {
     Instance<DownReporter>::value.Setup();
   }
   static constexpr auto Info = InfoStruct(Info_UID, MyUID, Info_Pin, Pin, Info_FrequencyHz, FrequencyHz, Info_Milliseconds, Milliseconds);
-
-protected:
-  static void DoneCallback() {
-    DigitalWrite<Pin, LOW>();
-    Report<DownReporter>();
-  }
 };
 // 播放具有指定高电平和低电平毫秒数的方波。异步执行，步骤不阻塞时相。
-template<uint8_t Pin, uint8_t TimerCode, uint16_t HighMilliseconds, uint16_t LowMilliseconds, uint16_t NumCycles, typename UpReporter = NullStep, typename DownReporter = NullStep, UID MyUID = Step_SquareWave>
+template<uint8_t Pin, uint16_t HighMilliseconds, uint16_t LowMilliseconds, uint16_t NumCycles, typename UpReporter = NullStep, typename DownReporter = NullStep, UID MyUID = Step_SquareWave>
 struct SquareWaveStep : public IStep {
-  bool Start(std::move_only_function<void()const>&&) const override {
+  Timers_one_for_all::TimerClass const* Timer;
+  bool Start(std::move_only_function<void() const>&&) override {
     Report<UpReporter>();
-    TimersOneForAll::SquareWave<TimerCode, Pin, HighMilliseconds, LowMilliseconds, NumCycles, Report<DownReporter>>();
+    Timer = Timers_one_for_all::AllocateTimer();
+    Timer->DoubleRepeat(std::chrono::milliseconds{ LowMilliseconds }, Quick_digital_IO_interrupt::DigitalWrite<Pin, HIGH>, std::chrono::milliseconds{ HighMilliseconds }, Quick_digital_IO_interrupt::DigitalToggle<Pin, LOW>, NumCycles * 2, [Timer = Timer]() {
+      Timer->Allocatable(true);
+      Report<DownReporter>();
+    });
     return false;
   }
-  void Setup() const override {
+  void Setup() override {
     if (PinStates<Pin>::NeedSetup) {
       Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
       PinStates<Pin>::NeedSetup = false;
@@ -693,17 +713,17 @@ struct SquareWaveStep : public IStep {
 };
 template<typename... SubSteps>
 struct IndividualThreadStep : IStep {
-  static constexpr const IStep* StepPointers[] = { &Instance<SubSteps>::value... };
-  static const IStep* const* CurrentStep;
-  void Setup() const override {
-    for (const IStep* S : StepPointers)
+  static constexpr IStep* StepPointers[] = { &Instance<SubSteps>::value... };
+  static IStep* const* CurrentStep;
+  void Setup() override {
+    for (IStep* S : StepPointers)
       S->Setup();
   }
   static void ContinueCycle() {
     while (CurrentStep < std::end(StepPointers) && !(*CurrentStep++)->Start(ContinueCycle))
       ;
   }
-  bool Start(std::move_only_function<void()const>&&) const override {
+  bool Start(std::move_only_function<void() const>&&) override {
     for (CurrentStep = StepPointers; CurrentStep < std::end(StepPointers) && !(*CurrentStep++)->Start(ContinueCycle);)
       ;
     return false;
@@ -711,10 +731,10 @@ struct IndividualThreadStep : IStep {
   static constexpr auto Info = InfoStruct(Info_UID, Step_IndividualThread, Info_SubSteps, InfoCell(SubSteps::Info...));
 };
 template<typename... SubSteps>
-const IStep* const* IndividualThreadStep<SubSteps...>::CurrentStep;
+IStep* const* IndividualThreadStep<SubSteps...>::CurrentStep;
 template<UID TUID, typename... TSteps>
 class Trial : public ITrial {
-  static const IStep* Steps[sizeof...(TSteps)];
+  static IStep* Steps[sizeof...(TSteps)];
   static void NextStep() {
     while (StepsDone < sizeof...(TSteps))
       if (Steps[StepsDone++]->Start(NextStep))
@@ -727,11 +747,11 @@ public:
   constexpr Trial()
     : ITrial(TUID) {
   }
-  void Setup() const override {
-    for (const IStep* S : Steps)
+  void Setup() override {
+    for (IStep* S : Steps)
       S->Setup();
   }
-  bool Start(std::move_only_function<void()const>&& FC) const override {
+  bool Start(std::move_only_function<void() const>&& FC) override {
     FinishCallback = std::move(FC);
     StepsDone = 0;
     while (StepsDone < sizeof...(TSteps))
@@ -750,17 +770,17 @@ public:
   }
 };
 template<UID TUID, typename... TSteps>
-const IStep* Trial<TUID, TSteps...>::Steps[sizeof...(TSteps)] = { &Instance<TSteps>::value... };
+IStep* Trial<TUID, TSteps...>::Steps[sizeof...(TSteps)] = { &Instance<TSteps>::value... };
 template<uint16_t Value>
 using N = std::integral_constant<uint16_t, Value>;
 template<typename... Trials>
 struct TrialArray {
-  static const ITrial* Interfaces[sizeof...(Trials)];
+  static ITrial* Interfaces[sizeof...(Trials)];
   static constexpr auto Info = InfoCell(Trials::Info...);
 };
 // 静态成员必须类外定义，即使模板也一样
 template<typename... Trials>
-const ITrial* TrialArray<Trials...>::Interfaces[sizeof...(Trials)] = { &Instance<Trials>::value... };
+ITrial* TrialArray<Trials...>::Interfaces[sizeof...(Trials)] = { &Instance<Trials>::value... };
 template<typename TTrial, typename TNumber, typename... TrialThenNumber>
 struct TrialNumberSplit {
   using Numbers_t = AddToArray<TNumber, typename TrialNumberSplit<TrialThenNumber...>::Numbers_t>;
@@ -779,7 +799,7 @@ struct Session : public ISession {
   constexpr static uint8_t NumDistinctTrials = std::extent_v<decltype(TNS::Numbers.Array)>;
   static void ArrangeTrials(const uint16_t* TrialsLeft) {
     TrialQueue.resize(std::accumulate(TrialsLeft, TrialsLeft + NumDistinctTrials, uint16_t(0)));
-    const ITrial** TQEnd = TrialQueue.data();
+    ITrial** TQEnd = TrialQueue.data();
     for (uint8_t T = 0; T < NumDistinctTrials; ++T) {
       TNS::Trials_t::Interfaces[T]->Setup();
       std::fill_n(TQEnd, TrialsLeft[T], TNS::Trials_t::Interfaces[T]);
@@ -821,5 +841,3 @@ public:
     RunAsync();
   }
 };
-template<typename... Ts>
-const std::map<UID, const ISession*> SessionMap_t{ { Instance<Ts>::value.MyUID, &Instance<Ts>::value }... };

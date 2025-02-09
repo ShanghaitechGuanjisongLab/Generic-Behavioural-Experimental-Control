@@ -1,7 +1,6 @@
 #include <Cpp_Standard_Library.h>
 #include "ExperimentDesign.h"
 UID State = State_SessionInvalid;
-std::move_only_function<void()const>const EmptyFinishCallback = []() {};
 void SessionFinish() {
   Serial.write(State = State_SessionFinished);
 }
@@ -105,7 +104,7 @@ void Restore() {
   Serial.write(Signal_SessionRestored);
   CurrentSession->Restore(RC.NumDistinctTrials, RIs.get());
 }
-const ITest* CurrentTest = nullptr;
+ITest* CurrentTest = nullptr;
 void TestStart() {
   struct TestInfo {
     UID TestUID;

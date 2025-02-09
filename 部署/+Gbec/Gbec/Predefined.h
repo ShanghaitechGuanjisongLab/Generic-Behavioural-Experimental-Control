@@ -20,6 +20,7 @@ struct PinStates {
       for (std::move_only_function<void()const>const* const C : CallbackSet)
         (*C)();
   }
+  static std::move_only_function<void()const>const ReportHit;
 };
 template<uint8_t Pin>
 bool PinStates<Pin>::NeedSetup = true;
@@ -27,6 +28,8 @@ template<uint8_t Pin>
 std::set<std::move_only_function<void()const>const*> PinStates<Pin>::CallbackSet;
 template<uint8_t Pin>
 Timers_one_for_all::TimerClass const* PinStates<Pin>::FlashingTimer;
+template<uint8_t Pin>
+std::move_only_function<void()const>const PinStates<Pin>::ReportHit;
 
 // 如果试图添加重复的中断回调，则不会添加，也不会出错
 template<uint8_t Pin>
@@ -548,7 +551,7 @@ public:
   void Setup() const override {
     if (PinStates<Pin>::NeedSetup) {
       static_assert(Quick_digital_IO_interrupt::PinInterruptable(Pin), "试图将不支持中断的引脚用于MonitorStep");
-      Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
+      Quick_digital_IO_interrupt::PinMode<Pin, INPUT>();
       PinStates<Pin>::NeedSetup = false;
     }
     Instance<HitReporter>::value.Setup();
@@ -565,7 +568,7 @@ public:
     Info_MissReporter, MissReporter::Info);
 };
 // 不做任何事，同步等待一段时间后再进入下一步。
-template<uint8_t TimerCode, uint16_t MinMilliseconds, uint16_t MaxMilliseconds = MinMilliseconds, UID MyUID = Step_Wait>
+template<uint16_t MinMilliseconds, uint16_t MaxMilliseconds = MinMilliseconds, UID MyUID = Step_Wait>
 struct WaitStep : public IStep {
   Timers_one_for_all::TimerClass const* Timer;
   bool Start(std::move_only_function<void()const>&& FinishCallback) const override {
@@ -595,15 +598,15 @@ struct WaitStep : public IStep {
 // 开始监视指定引脚，发现高电平立即汇报。异步执行，步骤本身立即结束，但会在后台持续监视，直到StopMonitorStep才会结束监视。
 template<uint8_t Pin, typename Reporter, UID MyUID = Step_StartMonitor>
 struct StartMonitorStep : public IStep {
-  std::move_only_function<void()const>const ReportHit = []() {Report<Reporter>();};
   bool Start(std::move_only_function<void()const>&&) const override {
-    RisingInterrupt<Pin>(&ReportHit);
+    PinStates<Pin>::ReportHit = Report<Reporter>;
+    RisingInterrupt<Pin>(&PinStates<Pin>::ReportHit);
     return false;
   }
   void Setup() const override {
     if (PinStates<Pin>::NeedSetup) {
       static_assert(Quick_digital_IO_interrupt::PinInterruptable(Pin), "试图将不支持中断的引脚用于StartMonitorStep");
-      Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
+      Quick_digital_IO_interrupt::PinMode<Pin, INPUT>();
       PinStates<Pin>::NeedSetup = false;
     }
     Instance<Reporter>::value.Setup();
@@ -614,7 +617,7 @@ struct StartMonitorStep : public IStep {
 template<uint8_t Pin, typename Reporter, UID MyUID = Step_StopMonitor>
 struct StopMonitorStep : public IStep {
   bool Start(std::move_only_function<void()const>&&) const override {
-    DetachInterrupt<Pin>(Report<Reporter>);
+    DetachInterrupt<Pin>(&PinStates<Pin>::ReportHit);
     return false;
   }
   static constexpr auto Info = InfoStruct(Info_UID, MyUID, Info_Pin, Pin, Info_Reporter, Reporter::Info);

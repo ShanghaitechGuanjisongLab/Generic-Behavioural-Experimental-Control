@@ -168,7 +168,7 @@ void loop() {
     IsReady,
   };
   const uint8_t API = SerialRead<uint8_t>();
-  if (API < std::extent_v<decltype(APIs)>) {
+  if (API < std::extent_v<decltype(APIs)>_CSL_Parentheses11) {
     Serial.write(Signal_ApiFound);
     APIs[API]();
   }

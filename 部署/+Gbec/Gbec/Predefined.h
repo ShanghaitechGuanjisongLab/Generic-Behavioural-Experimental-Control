@@ -257,7 +257,7 @@ template<> struct TypeToUID<UID> { static constexpr UID value = Type_UID; };
 template<typename T, typename... Ts>
 struct InfoArray {
   constexpr static UID MyUID = Type_Array;
-  uint8_t Number = sizeof...(Ts) + 1;
+  uint8_t Number = (sizeof...(Ts) + 1);  //SAM架构的bug，必须套一层括号
   UID Type = TypeToUID<typename T::value_type>::value;
   typename T::value_type Array[sizeof...(Ts) + 1] = { T::value, Ts::value... };
 };
@@ -279,22 +279,19 @@ struct CellArray<T> {
   }
 };
 template<typename... T>
-struct InfoCell {
+struct _InfoCell {
   constexpr static UID MyUID = Type_Cell;
   uint8_t NumCells = 0;
 };
 template<typename T, typename... Ts>
-struct InfoCell<T, Ts...> {
+struct _InfoCell<T, Ts...> {
   constexpr static UID MyUID = Type_Cell;
-  uint8_t NumCells = sizeof...(Ts) + 1;
+  uint8_t NumCells = (sizeof...(Ts) + 1);
   CellArray<T, Ts...> Values;
-  constexpr InfoCell(T Value, Ts... Values)
+  constexpr _InfoCell(T Value, Ts... Values)
     : Values(CellArray<T, Ts...>(Value, Values...)) {
   }
 };
-// 只有主模板能推断，特化模板必须加推断向导
-template<typename T, typename... Ts>
-InfoCell(T, Ts...) -> InfoCell<T, Ts...>;
 template<typename TName, typename TValue, typename... Ts>
 struct InfoFields {
   TName Name;
@@ -315,23 +312,40 @@ struct InfoFields<TName, TValue> {
   }
 };
 template<typename... Ts>
-struct InfoStruct {
+struct _InfoStruct {
   constexpr static UID MyUID = Type_Struct;
   uint8_t NumFields = 0;
 };
 template<typename T, typename... Ts>
-struct InfoStruct<UID, T, Ts...> {
+struct _InfoStruct<UID, T, Ts...> {
   constexpr static UID MyUID = Type_Struct;
-  uint8_t NumFields = sizeof...(Ts) / 2 + 1;
+  uint8_t NumFields = (sizeof...(Ts) / 2 + 1);
   InfoFields<UID, T, Ts...> Fields;
-  constexpr InfoStruct(UID Name, T Value, Ts... NameValues)
+  constexpr _InfoStruct(UID Name, T Value, Ts... NameValues)
     : Fields(InfoFields<UID, T, Ts...>(Name, Value, NameValues...)) {
   }
 };
+#pragma pack(pop)
+#ifdef __cpp_deduction_guides
 // 只有主模板能推断，特化模板必须加推断向导
+template<typename... T>
+using InfoCell = _InfoCell<T...>;
+template<typename T, typename... Ts>
+InfoCell(T, Ts...) -> InfoCell<T, Ts...>;
+template<typename... T>
+using InfoStruct = _InfoStruct<T...>;
 template<typename... Ts>
 InfoStruct(UID, Ts...) -> InfoStruct<UID, Ts...>;
-#pragma pack(pop)
+#else
+template<typename... T>
+constexpr _InfoStruct<T...> InfoStruct(T... NameValues) {
+  return _InfoStruct<T...>(NameValues...);
+}
+template<typename... T>
+constexpr _InfoCell<T...> InfoCell(T... Values) {
+  return _InfoCell<T...>(Values...);
+}
+#endif
 using NullStep = IStep;
 // 持续等待，直到指定引脚在指定连续毫秒数内都保持静默才结束
 template<uint8_t Pin, uint16_t MinMilliseconds, uint16_t MaxMilliseconds = MinMilliseconds, UID MyUID = Step_Calmdown>
@@ -517,7 +531,7 @@ public:
 template<uint8_t Pin, uint16_t Milliseconds, uint8_t Flags, typename HitReporter, typename MissReporter = NullStep, UID MyUID = Step_Monitor>
 class MonitorStep : public IStep {
   static constexpr bool ReportOnce = Flags & Monitor_ReportOnce;
-  static constexpr bool ReportMiss = !std::is_same_v<MissReporter, NullStep>;
+  static constexpr bool ReportMiss = !std::is_same_v<MissReporter, NullStep> _CSL_Parentheses11;
   static constexpr bool HitAndFinish = Flags & Monitor_HitAndFinish;
   std::move_only_function<void() const> FinishCallback;
   bool NoHits;
@@ -802,7 +816,7 @@ struct TrialNumberSplit<TTrial, TNumber> {
 template<UID TUID, bool TRandom, typename... TrialThenNumber>
 struct Session : public ISession {
   using TNS = TrialNumberSplit<TrialThenNumber...>;
-  constexpr static uint8_t NumDistinctTrials = std::extent_v<decltype(TNS::Numbers.Array)>;
+  constexpr static uint8_t NumDistinctTrials = std::extent_v<decltype(TNS::Numbers.Array)> _CSL_Parentheses11;
   static void ArrangeTrials(const uint16_t* TrialsLeft) {
     TrialQueue.resize(std::accumulate(TrialsLeft, TrialsLeft + NumDistinctTrials, uint16_t(0)));
     ITrial** TQEnd = TrialQueue.data();

@@ -1,7 +1,13 @@
 #pragma once
 #include "ISession.h"
 #include "SerialIO.h"
-#include <Timers_one_for_all.hpp>
+#define TOFA_TIMER0
+#define TOFA_TIMER1
+#define TOFA_TIMER2
+#define TOFA_TIMER3
+#define TOFA_TIMER4
+#define TOFA_TIMER5
+#include <TimersOneForAll_Declare.hpp>
 #include <Quick_digital_IO_interrupt.hpp>
 #include <algorithm>
 #include <numeric>
@@ -236,7 +242,7 @@ template<typename... Ts>
 const std::unordered_map<UID, const ISession*> UidMap<Ts...>::Sessions{ { Instance<Ts>::value.MyUID, &Instance<Ts>::value }... };
 template<typename ToAdd, typename Container>
 struct _AddToArray;
-template<typename ToAdd, template<typename...> typename Container, typename... AlreadyIn>
+template<typename ToAdd, template<typename...> class Container, typename... AlreadyIn>
 struct _AddToArray<ToAdd, Container<AlreadyIn...>> {
   using Result = Container<ToAdd, AlreadyIn...>;
 };

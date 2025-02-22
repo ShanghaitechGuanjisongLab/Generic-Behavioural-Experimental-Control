@@ -184,9 +184,9 @@ public:
   }
 };
 template<UID TMyUID, uint8_t Pin>
-std::move_only_function<void() const> const MonitorTest<TMyUID, Pin>::ReportHit = []() {
+std::move_only_function<void() const> const MonitorTest<TMyUID, Pin>::ReportHit{ []() {
   SerialWrite(Signal_MonitorHit);
-};
+} };
 // 测试具有指定高电平和低电平毫秒数和循环次数的方波
 template<UID TMyUID, uint8_t Pin, uint16_t HighMilliseconds, uint16_t LowMilliseconds, uint16_t NumCycles>
 struct SquareWaveTest : public ITest {
@@ -327,13 +327,11 @@ struct _InfoStruct<UID, T, Ts...> {
 };
 #pragma pack(pop)
 #ifdef __cpp_deduction_guides
+#define InfoCell _InfoCell
+#define InfoStruct _InfoStruct
 // 只有主模板能推断，特化模板必须加推断向导
-template<typename... T>
-using InfoCell = _InfoCell<T...>;
 template<typename T, typename... Ts>
 InfoCell(T, Ts...) -> InfoCell<T, Ts...>;
-template<typename... T>
-using InfoStruct = _InfoStruct<T...>;
 template<typename... Ts>
 InfoStruct(UID, Ts...) -> InfoStruct<UID, Ts...>;
 #else
@@ -353,12 +351,8 @@ class CalmdownStep : public IStep {
   static constexpr bool RandomTime = MinMilliseconds < MaxMilliseconds;
   Timers_one_for_all::TimerClass const* Timer;
   std::move_only_function<void() const> FinishCallback;
-  std::chrono::milliseconds CurrentDuration{ MinMilliseconds };
-  std::move_only_function<void() const> const Reset = [this]() {
-    Timer->DoAfter(CurrentDuration, [this]() {
-      TimeUp();
-    });
-  };
+  std::chrono::milliseconds CurrentDuration = std::chrono::milliseconds(MinMilliseconds);  //SAM的bug，此处无法直接用花括号初始化
+  std::move_only_function<void() const> const Reset;
   void TimeUp() {
     DetachInterrupt<Pin>(&Reset);
     Timer->Allocatable(true);
@@ -398,6 +392,12 @@ public:
     }
   }
   static constexpr auto Info = InfoStruct(Info_UID, MyUID, Info_Pin, Pin, Info_MinMilliseconds, MinMilliseconds, Info_MaxMilliseconds, MaxMilliseconds);
+  CalmdownStep()
+    : Reset{ [this]() {
+        Timer->DoAfter(CurrentDuration, [this]() {
+          TimeUp();
+        });
+      } } {}
 };
 template<typename Reporter>
 inline void Report() {
@@ -536,20 +536,7 @@ class MonitorStep : public IStep {
   std::move_only_function<void() const> FinishCallback;
   bool NoHits;
   Timers_one_for_all::TimerClass const* Timer;
-  std::move_only_function<void() const> const HitReport = [this]() {
-    Report<HitReporter>();
-    if (HitAndFinish) {
-      DetachInterrupt<Pin>(&HitReport);
-      Timer->Stop();
-      Timer->Allocatable(true);
-      FinishCallback();
-    } else {
-      if (ReportOnce)
-        DetachInterrupt<Pin>(&HitReport);
-      if (ReportMiss)
-        NoHits = false;
-    }
-  };
+  std::move_only_function<void() const> const HitReport;
   void TimeUp() {
     DetachInterrupt<Pin>(&HitReport);
     if (ReportMiss && NoHits)
@@ -600,6 +587,24 @@ public:
     Info_HitAndFinish, HitAndFinish,
     Info_HitReporter, HitReporter::Info,
     Info_MissReporter, MissReporter::Info);
+  MonitorStep()
+    : HitReport {
+    [this]() {
+      Report<HitReporter>();
+      if (HitAndFinish) {
+        DetachInterrupt<Pin>(&HitReport);
+        Timer->Stop();
+        Timer->Allocatable(true);
+        FinishCallback();
+      } else {
+        if (ReportOnce)
+          DetachInterrupt<Pin>(&HitReport);
+        if (ReportMiss)
+          NoHits = false;
+      }
+    }
+  }
+  {}
 };
 // 不做任何事，同步等待一段时间后再进入下一步。
 template<uint16_t MinMilliseconds, uint16_t MaxMilliseconds = MinMilliseconds, UID MyUID = Step_Wait>

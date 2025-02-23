@@ -1,5 +1,6 @@
 #include "ExperimentDesign.h"
 UID State = State_SessionInvalid;
+std::string InfoBuffer;
 void SessionFinish() {
   Serial.write(State = State_SessionFinished);
 }
@@ -175,4 +176,14 @@ void loop() {
   else
     Serial.write(Signal_ApiInvalid);
 }
+#if __cplusplus < 201703L
+//C++17之前，即使是 static constexpr 成员，也必须在类外定义
+template<typename... SubSteps>
+constexpr IStep* IndividualThreadStep<SubSteps...>::StepPointers[];
+template<typename TTrial, typename TNumber, typename... TrialThenNumber>
+constexpr typename TrialNumberSplit<TTrial, TNumber, TrialThenNumber...>::Numbers_t TrialNumberSplit<TTrial, TNumber, TrialThenNumber...>::Numbers;
+template<typename TTrial, typename TNumber>
+constexpr typename TrialNumberSplit<TTrial, TNumber>::Numbers_t TrialNumberSplit<TTrial, TNumber>::Numbers;
+constexpr std::ArduinoUrng ISession::Urng;
+#endif
 #include<TimersOneForAll_Define.hpp>

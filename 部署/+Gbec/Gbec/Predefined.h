@@ -14,6 +14,7 @@
 #include <set>
 #include <cmath>
 #include <unordered_map>
+#include <string>
 extern UID State;
 template<uint8_t Pin>
 struct PinStates {
@@ -588,23 +589,22 @@ public:
     Info_HitReporter, HitReporter::Info,
     Info_MissReporter, MissReporter::Info);
   MonitorStep()
-    : HitReport {
-    [this]() {
-      Report<HitReporter>();
-      if (HitAndFinish) {
-        DetachInterrupt<Pin>(&HitReport);
-        Timer->Stop();
-        Timer->Allocatable(true);
-        FinishCallback();
-      } else {
-        if (ReportOnce)
-          DetachInterrupt<Pin>(&HitReport);
-        if (ReportMiss)
-          NoHits = false;
-      }
-    }
-  }
-  {}
+    : HitReport{
+        [this]() {
+          Report<HitReporter>();
+          if (HitAndFinish) {
+            DetachInterrupt<Pin>(&HitReport);
+            Timer->Stop();
+            Timer->Allocatable(true);
+            FinishCallback();
+          } else {
+            if (ReportOnce)
+              DetachInterrupt<Pin>(&HitReport);
+            if (ReportMiss)
+              NoHits = false;
+          }
+        }
+      } {}
 };
 // 不做任何事，同步等待一段时间后再进入下一步。
 template<uint16_t MinMilliseconds, uint16_t MaxMilliseconds = MinMilliseconds, UID MyUID = Step_Wait>
@@ -810,14 +810,15 @@ template<typename TTrial, typename TNumber, typename... TrialThenNumber>
 struct TrialNumberSplit {
   using Numbers_t = AddToArray<TNumber, typename TrialNumberSplit<TrialThenNumber...>::Numbers_t>;
   using Trials_t = AddToArray<TTrial, typename TrialNumberSplit<TrialThenNumber...>::Trials_t>;
-  constexpr static Numbers_t Numbers = Numbers_t();
+  static constexpr Numbers_t Numbers = Numbers_t();
 };
 template<typename TTrial, typename TNumber>
 struct TrialNumberSplit<TTrial, TNumber> {
   using Numbers_t = InfoArray<TNumber>;
   using Trials_t = TrialArray<TTrial>;
-  constexpr static Numbers_t Numbers = Numbers_t();  // 必须显式初始化不然不过编译
+  static constexpr Numbers_t Numbers = Numbers_t();  // 必须显式初始化不然不过编译
 };
+extern std::string InfoBuffer;
 template<UID TUID, bool TRandom, typename... TrialThenNumber>
 struct Session : public ISession {
   using TNS = TrialNumberSplit<TrialThenNumber...>;
@@ -840,8 +841,13 @@ public:
     : ISession(TUID) {
   }
   void WriteInfo() const override {
-    constexpr auto Info = InfoStruct(Info_UID, TUID, Info_Random, TRandom, Info_DistinctTrials, TNS::Trials_t::Info, Info_NumTrials, TNS::Numbers);
-    SerialWrite(Info);
+    //此处使用PROGMEM可以节省很多内存
+    static constexpr auto Info PROGMEM = InfoStruct(Info_UID, TUID, Info_Random, TRandom, Info_DistinctTrials, TNS::Trials_t::Info, Info_NumTrials, TNS::Numbers);
+    InfoBuffer.resize_and_overwrite(sizeof(Info), [](char* Pointer, size_t Capacity) {
+      memcpy_P(Pointer, &Info, sizeof(Info));
+      return sizeof(Info);
+    });
+    SerialWrite(InfoBuffer.data(), InfoBuffer.size());
   }
   void Start() const override {
     ArrangeTrials(TNS::Numbers.Array);

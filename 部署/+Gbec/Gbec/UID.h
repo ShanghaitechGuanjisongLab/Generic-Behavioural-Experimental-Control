@@ -122,6 +122,8 @@ enum UID : uint8_t {
   Signal_Image,
   Signal_PreciseLog,
   Signal_Optogenetic,
+  Signal_TimerAllocated,
+  Signal_TimerReleased,
 
   // 测试UID
 

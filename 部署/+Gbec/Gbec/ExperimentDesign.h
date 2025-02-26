@@ -93,9 +93,9 @@ const auto& TestMap = UidMap<
   PinFlashTest<Test_Optogenetic, pLaser, 1000>,
   MonitorTest<Test_CapacitorMonitor, pCapacitorOut>,
   SquareWaveTest<Test_SquareWave, pBlueLed, 2000, 1000, 10>,
-  RandomFlashTest<Test_RandomFlash, pYellowLed, 6000, 6000, 1000, 3000>,
+  RandomFlashTest<Test_RandomFlash, pYellowLed, 6000, 6000, 100, 2000>,
   ToneTest<Test_LowTone, pPassiveBuzzer, 500, 1000>,
-  ToneTest<Test_HighTone, pPassiveBuzzer, 5000, 1000 >> ::Tests;
+  ToneTest<Test_HighTone, pPassiveBuzzer, 5000, 1000 >>::Tests;
 
 // 步骤设计。建议StepName遵守命名规范：s开头表示名称指向一个步骤（Step）。所有涉及“随机”的步骤都使用对数分布，即将最大值和最小值取对数，然后在这个范围内随机抽取一个值，然后将结果取幂。例如，如果随机范围是100~400，则取到100~200和200~400的概率是相等的。
 
@@ -177,13 +177,13 @@ MaxMilliseconds，最大等待的毫秒数。可以设置为与MinMilliseconds�
 MyUID，标识该步骤的UID，在返回信息时供人类识别
 */
 
-using sFixedITI = WaitStep< 20000>;
-using sRandomITI = WaitStep< 10000, 20000>;
-using sFixedPrepare = WaitStep< 2000>;
-using sDelay200 = WaitStep< 200>;
-using sDelay1000 = WaitStep< 1000>;
-using sShortITI = WaitStep< 10000>;
-using sRandomPrepare = WaitStep< 0, 10000>;
+using sFixedITI = WaitStep<20000>;
+using sRandomITI = WaitStep<10000, 20000>;
+using sFixedPrepare = WaitStep<2000>;
+using sDelay200 = WaitStep<200>;
+using sDelay1000 = WaitStep<1000>;
+using sShortITI = WaitStep<10000>;
+using sRandomPrepare = WaitStep<0, 10000>;
 
 /*后台监视类步骤
 
@@ -325,4 +325,4 @@ const auto& SessionMap = UidMap<
   Session<Session_RandomFlash, false, tRandomFlash, N<3>>,
   Session<Session_HighLowTone, true, tLowTone, N<30>, tHighTone, N<30>>,
   Session<Session_OptogeneticAllTest, true, tOptogeneticBeforeLightWater, N<10>, tOptogeneticUponLightWater, N<10>, tOptogeneticAfterLightWater, N<10>, tOptogeneticBeforeAudioWater, N<10>, tOptogeneticUponAudioWater, N<10>, tOptogeneticAfterAudioWater, N<10>>,
-  Session<Session_OptogeneticLightWaterTrain, false, tStartInterfereMonitor, N<1>, tOptogeneticLightWaterTrain, N<30>, tStopInterfereMonitor, N<10>> > ::Sessions;
+  Session<Session_OptogeneticLightWaterTrain, false, tStartInterfereMonitor, N<1>, tOptogeneticLightWaterTrain, N<30>, tStopInterfereMonitor, N<10>> >::Sessions;

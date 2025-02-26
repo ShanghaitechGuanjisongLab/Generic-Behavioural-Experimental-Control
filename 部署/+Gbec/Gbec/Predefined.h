@@ -408,9 +408,9 @@ inline void Report() {
 template<uint8_t Pin, uint16_t Milliseconds, typename UpReporter = NullStep, typename DownReporter = NullStep, UID MyUID = Step_PinFlash>
 class PinFlashStep : public IStep {
   void DownReport() {
-    Timer->Allocatable(true);
     Quick_digital_IO_interrupt::DigitalWrite<Pin, LOW>();
     Report<DownReporter>();
+    Timer->Allocatable(true);
   }
   Timers_one_for_all::TimerClass const* Timer;
 
@@ -515,8 +515,8 @@ class StopRandomFlash : public IStep {
 public:
   bool Start(std::move_only_function<void() const>&&) override {
     PinStates<Pin>::FlashingTimer->Stop();
-    PinStates<Pin>::FlashingTimer->Allocatable(true);
     Quick_digital_IO_interrupt::DigitalWrite<Pin, LOW>();
+    PinStates<Pin>::FlashingTimer->Allocatable(true);
     return false;
   }
   void Setup() override {
@@ -542,6 +542,7 @@ class MonitorStep : public IStep {
     DetachInterrupt<Pin>(&HitReport);
     if (ReportMiss && NoHits)
       Report<MissReporter>();
+    Timer->Allocatable(true);
     FinishCallback();
   }
 
@@ -681,6 +682,7 @@ struct PreciseLogStep : public IStep {
     if (!Timer)
       Timer = Timers_one_for_all::AllocateTimer();
     Timer->StartTiming();
+    //一旦Setup，此计时器将被永久占用，不会释放
   }
   bool Start(std::move_only_function<void() const>&&) override {
     SerialWrite(Signal_PreciseLog);

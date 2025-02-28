@@ -366,11 +366,11 @@ classdef ExperimentWorker<handle
 				end
 			end
 		end
-		function PeekState(EW)
+		function PeekState(obj)
 			%观察会话当前的运行状态
 			obj.FeedDog;
-			EW.ApiCall(Gbec.UID.API_Peek);
-			obj.LogPrint(Gbec.UID(EW.WaitForSignal));
+			obj.ApiCall(Gbec.UID.API_Peek);
+			obj.LogPrint(Gbec.UID(obj.WaitForSignal));
 		end
 		function SP=get.SavePath(obj)
 			SP=obj.oSavePath;

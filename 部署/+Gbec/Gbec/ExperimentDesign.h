@@ -312,17 +312,7 @@ const auto& SessionMap = UidMap<
     Trial1,Trial2,…，要运行的回合
     Number1,Number2,…，每个回合的重复次数
     */
-  Session<Session_LAuW, true, tLightOnly, N<20>, tAudioOnly, N<20>, tWaterOnly, N<20>>,
-  Session<Session_LAWLwAw, true, tLightOnly, N<20>, tAudioOnly, N<20>, tWaterOnly, N<20>, tLightWater, N<20>, tAudioWater, N<20>>,
   Session<Session_LightWater, false, tStartMonitor, N<1>, tLightWater, N<30>, tStopMonitor, N<1>>,
   Session<Session_AudioWater, false, tStartMonitor, N<1>, tAudioWater, N<30>, tStopMonitor, N<1>>,
   Session<Session_InterferedAudioWater, false, tStartInterfereMonitor, N<1>, tAudioWater, N<30>, tStopInterfereMonitor, N<1>>,
-  Session<Session_LightAir, false, tLightAir, N<30>>,
-  Session<Session_SurveillanceThroughout, false, Trial<Trial_StartMonitor, sStartMonitor>, N<1>, tWaterOnly, N<5>, tLightDelayWater, N<10>, Trial<Trial_StopMonitor, sStopMonitor>, N<1>>,
-  //此会话要求主机端配置能根据串口指示显示高低频图像的HostAction
-  Session<Session_HLFImage, true, tLFImage, N<30>, tHFImage, N<30>>,
-  Session<Session_RandomImage, false, tRandomImage, N<100>>,
-  Session<Session_RandomFlash, false, tRandomFlash, N<3>>,
-  Session<Session_HighLowTone, true, tLowTone, N<30>, tHighTone, N<30>>,
-  Session<Session_OptogeneticAllTest, true, tOptogeneticBeforeLightWater, N<10>, tOptogeneticUponLightWater, N<10>, tOptogeneticAfterLightWater, N<10>, tOptogeneticBeforeAudioWater, N<10>, tOptogeneticUponAudioWater, N<10>, tOptogeneticAfterAudioWater, N<10>>,
-  Session<Session_OptogeneticLightWaterTrain, false, tStartInterfereMonitor, N<1>, tOptogeneticLightWaterTrain, N<30>, tStopInterfereMonitor, N<10>> >::Sessions;
+  Session<Session_OptogeneticAudioWaterBUA,true,>::Sessions;

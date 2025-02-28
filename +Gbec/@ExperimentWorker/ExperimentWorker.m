@@ -17,9 +17,9 @@ classdef ExperimentWorker<handle
 		%鼠名
 		Mouse string
 		%断线重连尝试间隔秒数
-		RetryInterval(1,1)double=3
+		RetryInterval(1,1)double=4
 		%断线重连尝试次数
-		MaxRetryTimes(1,1)uint8=3
+		MaxRetryTimes(1,1)uint8=4
 		%视频对象
 		VideoInput
 		%当前设计的回合总数

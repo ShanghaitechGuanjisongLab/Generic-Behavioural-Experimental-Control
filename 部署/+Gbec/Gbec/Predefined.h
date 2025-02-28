@@ -843,13 +843,7 @@ public:
     : ISession(TUID) {
   }
   void WriteInfo() const override {
-    //此处使用PROGMEM可以节省很多内存
-    static constexpr auto Info PROGMEM = InfoStruct(Info_UID, TUID, Info_Random, TRandom, Info_DistinctTrials, TNS::Trials_t::Info, Info_NumTrials, TNS::Numbers);
-    InfoBuffer.resize_and_overwrite(sizeof(Info), [](char* Pointer, size_t Capacity) {
-      memcpy_P(Pointer, &Info, sizeof(Info));
-      return sizeof(Info);
-    });
-    SerialWrite(InfoBuffer.data(), InfoBuffer.size());
+    SerialWrite(InfoStruct(Info_UID, TUID, Info_Random, TRandom, Info_DistinctTrials, TNS::Trials_t::Info, Info_NumTrials, TNS::Numbers));
   }
   void Start() const override {
     ArrangeTrials(TNS::Numbers.Array);

@@ -315,4 +315,4 @@ const auto& SessionMap = UidMap<
   Session<Session_LightWater, false, tStartMonitor, N<1>, tLightWater, N<30>, tStopMonitor, N<1>>,
   Session<Session_AudioWater, false, tStartMonitor, N<1>, tAudioWater, N<30>, tStopMonitor, N<1>>,
   Session<Session_InterferedAudioWater, false, tStartInterfereMonitor, N<1>, tAudioWater, N<30>, tStopInterfereMonitor, N<1>>,
-  Session<Session_OptogeneticAudioWaterBUA,true,>::Sessions;
+  Session<Session_OptogeneticAudioWaterBUA,true,tOptogeneticBeforeAudioWater,N<10>,tOptogeneticUponAudioWater,N<10>,tOptogeneticAfterAudioWater,N<10>>>::Sessions;

@@ -216,4 +216,5 @@ enum UID : uint8_t {
   Session_OptogeneticLightWaterTrain,
   Session_InterferedAudioWater,
   Session_OptogeneticAllTest,
+  Session_OptogeneticAudioWaterBUA,
 };

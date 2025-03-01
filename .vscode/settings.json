@@ -53,6 +53,8 @@
         "dynarray": "cpp",
         "ratio": "cpp",
         "span": "cpp",
-        "unordered_map": "cpp"
+        "unordered_map": "cpp",
+        "cctype": "cpp",
+        "string_view": "cpp"
     }
 }

@@ -13,15 +13,18 @@ for a=1:obj.MaxRetryTimes
 	disp("，正尝试恢复连接第"+string(a)+Suffix);
 	pause(obj.RetryInterval);
 	try
-		obj.SerialInitialize(SerialPort);
+		obj.SerialInitialize(SerialPort,false);
 		ReconnectFail=false;
 		break;
-	catch
-		obj.LogPrint("串口同步失败");
+	catch ME
+		obj.LogPrint(sprintf("串口同步失败：%s：%s",ME.identifier,ME.message));
 	end
 end
 if ReconnectFail
 	obj.State=UID.State_SessionInvalid;
+	if obj.MiaoCode~=""
+		SendMiao("Arduino连接中断，请检查设备！",obj.HttpRetryTimes,obj.MiaoCode);
+	end
 	Exception.Disconnection_reconnection_failed.Throw;
 end
 obj.LogPrint("重新连接成功");

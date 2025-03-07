@@ -109,7 +109,6 @@ classdef ExperimentWorker<handle
 			end
 		end
 		function RestoreSession(obj)
-			obj.FeedDog;
 			TrialsDone=obj.TrialRecorder.GetTimeTable().Event;
 			if ~isempty(TrialsDone)
 				TrialsDone(end)=[];
@@ -135,6 +134,7 @@ classdef ExperimentWorker<handle
 			else
 				Gbec.Exception.Unexpected_response_from_Arduino.Throw;
 			end
+			obj.WatchDog.stop;
 		end
 		function SerialCallback(obj,~,~)
 			while obj.Serial.NumBytesAvailable

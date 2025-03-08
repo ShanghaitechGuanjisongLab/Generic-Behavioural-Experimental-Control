@@ -5,7 +5,7 @@
 /* 引脚设置。建议遵守命名规范：p开头表示名称指向一个引脚号（Pin）
 可以使用预处理指令配置多个不同设备的不同引脚号
 */
-#define BOX 2
+#define BOX 1
 #if BOX == 1
 Pin pCD1 = 9;
 Pin pBlueLed = 11;

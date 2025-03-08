@@ -261,7 +261,7 @@ struct UidMap
 };
 template <typename... Ts>
 const std::unordered_map<UID, ITest *(*)()> UidMap<Ts...>::Tests{{Ts::MyUID, []()
-                                                                  { return new Ts; }}...};
+                                                                 { return new Ts; }}...};
 template <typename... Ts>
 const std::unordered_map<UID, ISession *(*)()> UidMap<Ts...>::Sessions{{Ts::MyUID, []()
                                                                         { return new Ts; }}...};

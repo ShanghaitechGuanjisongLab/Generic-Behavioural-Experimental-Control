@@ -104,9 +104,9 @@ struct PinFlashTest : public ITest
 template <uint16_t Min, uint16_t Max>
 uint16_t LogRandom()
 {
-  constexpr float LogMin = std::log2(Min);
-  constexpr uint16_t Range = Max - Min;
-  return pow(2, random(Range) * (std::log2(Max) - LogMin) / Range + LogMin);
+  static const float LogMin = std::log2(Min);
+  static const float LogRange = std::log2(Max) - LogMin;
+  return pow(2, random() * LogRange / std::numeric_limits<decltype(random())>::max() + LogMin);
 }
 template <uint16_t HighMilliseconds, uint16_t LowMilliseconds, uint16_t RandomCycleMin, uint16_t RandomCycleMax>
 void PopulateRandomCycles(std::vector<std::chrono::milliseconds> &FlashCycles, uint8_t Times = 1)

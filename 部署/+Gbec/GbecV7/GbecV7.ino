@@ -157,3 +157,4 @@ void loop()
 	for (const std::shared_ptr<const std::move_only_function<void() const>>& Task : IdleTasksCopy)
 		(*Task)();
 }
+#include <TimersOneForAll_Define.hpp>

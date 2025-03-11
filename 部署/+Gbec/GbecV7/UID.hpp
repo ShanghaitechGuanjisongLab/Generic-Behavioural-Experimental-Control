@@ -60,4 +60,6 @@ enum class UID : uint8_t
 	Progress_Warning,
 
 	Signal_TrialStart,
+
+	Test_BlueLed,
 };

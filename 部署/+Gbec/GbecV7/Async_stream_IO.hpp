@@ -24,11 +24,11 @@ namespace Async_stream_IO
 	void Send(const void* Message, uint8_t Length, uint8_t ToPort, Stream& ToStream = Serial);
 	/* 委托下次ExecuteTransactionsInQueue时，调用Callback，提供一个临时接口MessageSender，用于向远程发送消息。MessageSender在Callback返回后失效，因此调用方不应试图保存MessageSender。
 	调用方可以多次使用该接口，向远程ToPort发送任意Size的Message任意多条。但请注意，每次调用MessageSender，在逻辑上都将视为发送一条单独的消息，而不会合并成一条发送。如果需要合并成一条发送，请在Callback中自行实现消息合并逻辑。
-	此方法是最灵活的发送方法，可用于发送临时生成的消息，而不必将消息持久存储以等待发送。
+	此方法是最灵活的发送方法，可用于发送临时生成的消息，而不必将消息持久存储以等待发送，更节省内存
 	此方法保证Callback被调用时中断处于启用状态。
 	 */
 	void Send(std::move_only_function<void(const std::move_only_function<void(const void* Message, uint8_t Size) const>& MessageSender) const>&& Callback, uint8_t ToPort, Stream& ToStream = Serial);
-	// 委托下次ExecuteTransactionsInQueue时，向远程ToPort发送指定Message。这个Message应当可以直接将底层字节发送给串口。
+	// 委托下次ExecuteTransactionsInQueue时，向远程ToPort发送指定Message。这个Message应当可以直接将底层字节发送给串口。这个Message将被拷贝，因此调用方可以在返回后立即释放Message。在消息实际被发送之前，Message将持续占用内存。
 	template<typename T, std::enable_if_t<!std::invocable<T>_CSL_Parentheses11, int> = 0>
 	inline void Send(const T& Message, uint8_t ToPort, Stream& ToStream = Serial)
 	{

@@ -64,7 +64,10 @@
 		"cinttypes": "cpp",
 		"unordered_set": "cpp",
 		"concepts": "cpp",
-		"span": "cpp"
+		"span": "cpp",
+		"chrono": "cpp",
+		"ratio": "cpp",
+		"string_view": "cpp"
 	},
-	"C_Cpp.formatting": "default"
+	"C_Cpp.formatting": "clangFormat"
 }

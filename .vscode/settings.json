@@ -67,7 +67,8 @@
 		"span": "cpp",
 		"chrono": "cpp",
 		"ratio": "cpp",
-		"string_view": "cpp"
+		"string_view": "cpp",
+		"mutex": "cpp"
 	},
 	"C_Cpp.formatting": "clangFormat"
 }

@@ -156,6 +156,7 @@ enum UID : uint8_t {
   Step_RandomFlash,
   Step_PreciseLog,
   Step_PinLow,
+  Step_DigitalWrite,
 
   // 回合UID
 
@@ -189,4 +190,8 @@ enum UID : uint8_t {
   Session_RandomImage,
   Session_RandomFlash,
   Session_HighLowTone,
+
+  Property_Pin,
+  Property_HighOrLow,
+  Property_StepID,
 };

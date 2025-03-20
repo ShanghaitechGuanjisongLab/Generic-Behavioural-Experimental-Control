@@ -1,34 +1,35 @@
 #include "Objects.h"
 #include <set>
 #include <sstream>
+#include <map>
 template <typename T>
-inline void BindFunctionToPort(T&& Function, UID Port)
+inline void BindFunctionToPort(T &&Function, UID Port)
 {
 	Async_stream_IO::BindFunctionToPort(std::forward<T>(Function), static_cast<uint8_t>(Port));
 }
 // 此全局对象不上锁，禁止使用中断处理方法访问
-std::set<RootObject*> AllObjects;
-std::unordered_map<UID, ChildObject*>AsyncObjects;
+std::set<RootObject *> AllObjects;
+std::unordered_map<UID, ChildObject *> AsyncObjects;
 // 此全局对象可以被中断处理方法访问，因此在中断启用时禁止访问。从此容器中删除的任务，仍可能会被执行最后一次，因此任务的资源应当由任务本身负责释放
-std::set<const std::shared_ptr<const std::move_only_function<void() const>>> IdleTasks;
-extern const std::unordered_map<UID, RootObject* (*)()> ObjectCreators;
+extern const std::unordered_map<UID, RootObject *(*)()> ObjectCreators;
 ArchUrng Urng;
+std::move_only_function<void() const> const NullCallback = []() {};
 void setup()
 {
 	Serial.setTimeout(-1);
 	Serial.begin(9600);
 	BindFunctionToPort([]()
-		{ return static_cast<uint8_t>(sizeof(size_t)); }, UID::Port_PointerSize);
+					   { return static_cast<uint8_t>(sizeof(size_t)); }, UID::Port_PointerSize);
 	BindFunctionToPort([](UID Subclass, uint8_t ProgressPort)
-		{
+					   {
 			const auto Iterator = ObjectCreators.find(Subclass);
 			if (Iterator == ObjectCreators.end())
 				return static_cast<RootObject*>(nullptr);
 			RootObject* const NewObject = Iterator->second();
 			AllObjects.insert(NewObject);
 			return NewObject; }, UID::Port_ObjectCreate);
-	BindFunctionToPort([](RootObject* O)
-		{
+	BindFunctionToPort([](RootObject *O)
+					   {
 			if (AllObjects.contains(O))
 			{
 				noInterrupts();
@@ -38,8 +39,8 @@ void setup()
 			}
 			else
 				return UID::Exception_InvalidObject; }, UID::Port_ObjectStart);
-	Async_stream_IO::Listen([](const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize)
-		{
+	Async_stream_IO::Listen([](const std::move_only_function<void(void *Message, uint8_t Size) const> &MessageReader, uint8_t MessageSize)
+							{
 			static std::vector<char> Message;
 			Message.resize(MessageSize);
 			MessageReader(Message.data(), MessageSize);
@@ -58,10 +59,9 @@ void setup()
 				interrupts();
 			}
 			else
-				Async_stream_IO::Send(UID::Exception_InvalidObject, Arguments.RemotePort);
-		}, static_cast<uint8_t>(UID::Port_ObjectRestore));
-	BindFunctionToPort([](RootObject* O, uint16_t Times)
-		{
+				Async_stream_IO::Send(UID::Exception_InvalidObject, Arguments.RemotePort); }, static_cast<uint8_t>(UID::Port_ObjectRestore));
+	BindFunctionToPort([](RootObject *O, uint16_t Times)
+					   {
 			if (AllObjects.contains(O))
 			{
 				noInterrupts();
@@ -71,8 +71,8 @@ void setup()
 			}
 			else
 				return UID::Exception_InvalidObject; }, UID::Port_ObjectRepeat);
-	BindFunctionToPort([](RootObject* O)
-		{
+	BindFunctionToPort([](RootObject *O)
+					   {
 			if (AllObjects.contains(O))
 			{
 				noInterrupts();
@@ -82,8 +82,8 @@ void setup()
 			}
 			else
 				return UID::Exception_InvalidObject; }, UID::Port_ObjectPause);
-	BindFunctionToPort([](RootObject* O)
-		{
+	BindFunctionToPort([](RootObject *O)
+					   {
 			if (AllObjects.contains(O))
 			{
 				noInterrupts();
@@ -93,8 +93,8 @@ void setup()
 			}
 			else
 				return UID::Exception_InvalidObject; }, UID::Port_ObjectContinue);
-	BindFunctionToPort([](RootObject* O)
-		{
+	BindFunctionToPort([](RootObject *O)
+					   {
 			if (AllObjects.contains(O))
 			{
 				noInterrupts();
@@ -104,8 +104,8 @@ void setup()
 			}
 			else
 				return UID::Exception_InvalidObject; }, UID::Port_ObjectAbort);
-	BindFunctionToPort([](RootObject* O, uint8_t RemotePort)
-		{
+	BindFunctionToPort([](RootObject *O, uint8_t RemotePort)
+					   {
 			if (AllObjects.contains(O))
 			{
 				std::dynarray<char> Information;
@@ -122,8 +122,8 @@ void setup()
 			}
 			else
 				return UID::Exception_InvalidObject; }, UID::Port_ObjectGetInformation);
-	BindFunctionToPort([](RootObject* O)
-		{
+	BindFunctionToPort([](RootObject *O)
+					   {
 			if (AllObjects.erase(O))
 			{
 				noInterrupts();
@@ -134,17 +134,17 @@ void setup()
 			else
 				return UID::Exception_InvalidObject; }, UID::Port_ObjectDestroy);
 	BindFunctionToPort([](uint8_t ToPort)
-		{ Async_stream_IO::Send([](const std::move_only_function<void(const void* Message, uint8_t Size) const>& MessageSender)
-			{
+					   { Async_stream_IO::Send([](const std::move_only_function<void(const void *Message, uint8_t Size) const> &MessageSender)
+											   {
 				const size_t MessageSize = sizeof(RootObject*) * AllObjects.size() + sizeof(uint8_t);
 				std::unique_ptr<uint8_t[]>Message = std::make_unique_for_overwrite<uint8_t[]>(MessageSize);
 				Message[0] = AllObjects.size();
 				std::copy(AllObjects.cbegin(), AllObjects.cend(), reinterpret_cast<RootObject**>(Message.get() + 1));
 				MessageSender(Message.get(), MessageSize); }, ToPort); },
-		UID::Port_AllObjects);
+					   UID::Port_AllObjects);
 #ifdef ARDUINO_ARCH_AVR
 	Async_stream_IO::RemoteInvoke(static_cast<uint8_t>(UID::Port_RandomSeed), [](Async_stream_IO::Exception, uint32_t RandomSeed)
-		{ std::ArduinoUrng::seed(RandomSeed); });
+								  { std::ArduinoUrng::seed(RandomSeed); });
 #endif
 }
 void loop()
@@ -154,7 +154,7 @@ void loop()
 	// 必须拷贝一份，因为IdleTasks可能在中断中被修改，这种修改可能是添加，也可能是删除
 	const std::set<const std::shared_ptr<const std::move_only_function<void() const>>> IdleTasksCopy(IdleTasks);
 	interrupts();
-	for (const std::shared_ptr<const std::move_only_function<void() const>>& Task : IdleTasksCopy)
+	for (const std::shared_ptr<const std::move_only_function<void() const>> &Task : IdleTasksCopy)
 		(*Task)();
 }
 #include <TimersOneForAll_Define.hpp>

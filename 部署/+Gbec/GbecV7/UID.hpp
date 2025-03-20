@@ -33,6 +33,7 @@ enum class UID : uint8_t
 	Property_StarterID,
 	Property_Pin,
 	Property_Duration,
+	Property_Reporter,
 
 	Type_Bool,
 	Type_UInt8,
@@ -55,4 +56,6 @@ enum class UID : uint8_t
 
 	Step_DigitalWrite,
 	Step_Delay,
+	Step_StartMonitor,
+	Step_StopMonitor,
 };

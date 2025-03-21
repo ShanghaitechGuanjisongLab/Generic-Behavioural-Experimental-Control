@@ -147,14 +147,17 @@ void setup()
 								  { std::ArduinoUrng::seed(RandomSeed); });
 #endif
 }
+std::map<uint8_t, std::move_only_function<void() const> const *> PinMonitors;
 void loop()
 {
 	Async_stream_IO::ExecuteTransactionsInQueue();
 	noInterrupts();
-	// 必须拷贝一份，因为IdleTasks可能在中断中被修改，这种修改可能是添加，也可能是删除
-	const std::set<const std::shared_ptr<const std::move_only_function<void() const>>> IdleTasksCopy(IdleTasks);
+	for (uint8_t P = 0; P < NUM_DIGITAL_PINS; ++P)
+	{
+		const auto Monitor = PinMonitors.find(P);
+		if (Monitor != PinMonitors.end())
+			Monitor->second->operator()();
+	}
 	interrupts();
-	for (const std::shared_ptr<const std::move_only_function<void() const>> &Task : IdleTasksCopy)
-		(*Task)();
 }
 #include <TimersOneForAll_Define.hpp>

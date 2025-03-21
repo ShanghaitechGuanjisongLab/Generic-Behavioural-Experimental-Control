@@ -7,6 +7,7 @@
 #include <ostream>
 #include <set>
 #include <map>
+#include "Async_stream_IO.hpp"
 struct AutomaticallyEndedTest
 {
 	virtual void Run(uint16_t RepeatTimes) = 0;
@@ -28,7 +29,7 @@ struct Step
 	virtual void Continue() const {}
 	// 放弃当前步骤。不能放弃的步骤可以不override此方法。
 	virtual void Abort() const {}
-	// 从断线重连中恢复。不能恢复的步骤可以不override此方法。返回值的意义和Start相同
+	// 从断线重连中恢复。不能恢复的步骤可以不override此方法，默认什么都不做直接返回true。
 	virtual bool Restore(std::unordered_map<UID, uint16_t> &TrialsDone)
 	{
 		return true;
@@ -119,23 +120,74 @@ struct Delay : Step
 protected:
 	Timers_one_for_all::TimerClass *const Timer = Timers_one_for_all::AllocateTimer();
 };
-//不能使用指针，因为执行时会交换到本地，如果在中断时释放资源，本地副本将会执行到空指针。为防止此情况
-extern std::map<uint8_t, std::move_only_function<void() const>> PinMonitors;
+// 使用此容器时必须禁止中断
+extern std::map<uint8_t, std::move_only_function<void() const> const *> PinMonitors;
 extern std::move_only_function<void() const> const NullCallback;
 #define WriteStep(FieldName)                         \
 	static_cast<uint8_t>(UID::Property_##FieldName); \
 	FieldName::WriteInfo(OutStream);
+template <uint8_t Pin>
+struct PinStates
+{
+	static std::move_only_function<void() const> Monitor;
+};
+template <uint8_t Pin>
+std::move_only_function<void() const> PinStates<Pin>::Monitor;
+
+template <UID TrialID, typename TrialStep>
+struct Trial : TrialStep
+{
+	Trial(std::move_only_function<void() const> const &FinishCallback) : TrialStep(FinishCallback) {}
+	bool Start() override
+	{
+		Async_stream_IO::Send(TrialID, static_cast<uint8_t>(UID::Port_TrialStart));
+		return TrialStep::Start();
+	}
+	void Repeat() override
+	{
+		Async_stream_IO::Send(TrialID, static_cast<uint8_t>(UID::Port_TrialStart));
+		TrialStep::Repeat();
+	}
+	static void WriteInfo(std::ostream &OutStream)
+	{
+		OutStream << WriteStructSize(3) << WriteStepID(UID::Step_Trial) << WriteField(TrialID) << WriteStep(TrialStep);
+	}
+};
+template <typename Trial>
+struct TrialTraits
+{
+	static constexpr UID TrialID = UID::Trial_Invalid;
+	static constexpr bool IsTrial = false;
+};
+template <UID _TrialID, typename TrialStep>
+struct TrialTraits<Trial<_TrialID, TrialStep>>
+{
+	static constexpr UID TrialID = _TrialID;
+	static constexpr bool IsTrial = true;
+};
+template <typename StepType, typename = bool>
+struct StepTraits
+{
+	static constexpr bool ContainTrials = false;
+};
+template <typename StepType>
+struct StepTraits<StepType, decltype(StepType::ContainTrials)>
+{
+	static constexpr bool ContainTrials = StepType::ContainTrials;
+};
 template <uint8_t Pin, typename Reporter>
 struct StartMonitor : Step
 {
 	StartMonitor(std::move_only_function<void() const> const &)
 	{
+		static_assert(!StepTraits<Reporter>::ContainTrials, "StartMonitor步骤的Reporter不能包含Trial");
 		Quick_digital_IO_interrupt::PinMode<Pin, INPUT>();
+		PinStates<Pin>::Monitor = [R = Reporter(NullCallback)]()
+		{ R.Start(); };
 	}
 	void Repeat() override
 	{
-		PinMonitors[Pin] = [R = Reporter(NullCallback)]()
-		{ R.Start(); };
+		PinMonitors[Pin] = &PinStates<Pin>::Monitor;
 	}
 	static void WriteInfo(std::ostream &OutStream)
 	{
@@ -159,33 +211,47 @@ template <typename RepeateeType, uint8_t Pin>
 struct RepeatIfPin
 {
 	RepeateeType Repeatee;
-	RepeatIfPin(std::move_only_function<void() const> const &FinishCallback) : Repeatee(RepeateeType(FinishCallback)) {}
+	std::move_only_function<void() const> const ChildCallback;
+	std::move_only_function<void() const> const MonitorCallback;
+	RepeatIfPin(std::move_only_function<void() const> const &ParentCallback) : ChildCallback([ParentCallback]()
+																							 {
+			PinMonitors.erase(Pin);
+			ParentCallback(); }),
+																			   Repeatee(RepeateeType(ChildCallback)), MonitorCallback([&Repeatee]()
+																																	  {
+			Repeatee.Abort();
+			Repeatee.Repeat(); })
+	{
+		static_assert(!StepTraits<RepeateeType>::ContainTrials, "RepeatIfPin步骤的RepeateeType不能包含Trial");
+	}
 	bool RepeateeStartReturn;
 	bool Start() override
 	{
 		if (RepeateeStartReturn = Repeatee.Start())
 			return true;
-		PinMonitors[Pin] = [&Repeatee]()
-		{
-			Repeatee.Abort();
-			Repeatee.Repeat();
-		};
+		PinMonitors[Pin] = &MonitorCallback;
 		return false;
 	}
 	void Repeat() override
 	{
 		Repeatee.Repeat();
 		if (!RepeateeStartReturn)
-			PinMonitors[Pin] = [&Repeatee]()
-			{
-				Repeatee.Abort();
-				Repeatee.Repeat();
-			};
+			PinMonitors[Pin] = &MonitorCallback;
 	}
-	void Pause()const override
+	void Pause() const override
 	{
 		Repeatee.Pause();
-		
+		PinMonitors.erase(Pin);
+	}
+	void Continue() const override
+	{
+		Repeatee.Continue();
+		PinMonitors[Pin] = &MonitorCallback;
+	}
+	void Abort() const override
+	{
+		Repeatee.Abort();
+		PinMonitors.erase(Pin);
 	}
 };
 #define UidPairClass(Uid, Class) {UID::Uid, []() { return new Class; }}

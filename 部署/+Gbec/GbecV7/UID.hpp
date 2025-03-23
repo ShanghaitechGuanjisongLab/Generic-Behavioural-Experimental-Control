@@ -37,6 +37,9 @@ enum class UID : uint8_t
 	Property_Reporter,
 	Property_TrialID,
 	Property_TrialStep,
+	Property_Repeatee,
+	Property_SwitchFrom,
+	Property_SwitchTo,
 
 	Type_Bool,
 	Type_UInt8,
@@ -62,6 +65,8 @@ enum class UID : uint8_t
 	Step_StartMonitor,
 	Step_StopMonitor,
 	Step_Trial,
+	Step_RepeatIfPin,
+	Step_SwitchIfPin,
 
 	Trial_Invalid,
 };

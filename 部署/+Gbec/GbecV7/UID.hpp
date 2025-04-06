@@ -15,6 +15,7 @@ enum class UID : uint8_t
 	Port_AllObjects,
 	Port_RandomSeed,
 	Port_TrialStart,
+	Port_Signal,
 
 	Exception_Success,
 	Exception_InvalidObject,
@@ -40,6 +41,11 @@ enum class UID : uint8_t
 	Property_Repeatee,
 	Property_SwitchFrom,
 	Property_SwitchTo,
+	Property_Min,
+	Property_Max,
+	Property_Unconditional,
+	Property_Conditional,
+	Property_AsyncStep,
 
 	Type_Bool,
 	Type_UInt8,
@@ -55,6 +61,9 @@ enum class UID : uint8_t
 	State_ObjectRunning,
 	State_ObjectPaused,
 	State_ObjectIdle,
+	State_Normal,
+	State_Repeat,
+	State_Restore,
 
 	Signal_TrialStart,
 
@@ -67,6 +76,9 @@ enum class UID : uint8_t
 	Step_Trial,
 	Step_RepeatIfPin,
 	Step_SwitchIfPin,
+	Step_AppendIfPin,
+	Step_SerialWrite,
+	Step_Async,
 
 	Trial_Invalid,
 };

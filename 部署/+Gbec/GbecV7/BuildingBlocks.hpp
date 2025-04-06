@@ -7,6 +7,7 @@
 #include <ostream>
 #include <set>
 #include <map>
+#include <cmath>
 #include "Async_stream_IO.hpp"
 struct AutomaticallyEndedTest
 {
@@ -18,11 +19,13 @@ struct Step
 	// 返回true表示步骤已完成可以进入下一步，返回false表示步骤未完成需要等待FinishCallback。如果不重写此方法，此方法将调用Repeat然后返回true。
 	virtual bool Start()
 	{
-		Repeat();
 		return true;
 	}
-	// 类似于Start，但必须重复和上次Start或Repeat完全相同的行为。这仅对于那些存在随机性的步骤有意义，对于确定性步骤此方法除了没有返回值以外应当与Start做完全相同的事情。
-	virtual void Repeat() {}
+	// 类似于Start，但必须重复和上次Start或Repeat完全相同的行为。这仅对于那些存在随机性的步骤有意义，对于确定性步骤此方法应当与Start做完全相同的事情。
+	virtual bool Repeat()
+	{
+		return Start();
+	}
 	// 暂停当前步骤。不能暂停的步骤可以不override此方法。
 	virtual void Pause() const {}
 	// 继续已暂停的步骤。不能暂停的步骤可以不override此方法。
@@ -60,46 +63,84 @@ struct DigitalWrite : Step
 	{
 		Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
 	}
-	void Repeat() override
+	bool Start() override
 	{
 		Quick_digital_IO_interrupt::DigitalWrite<Pin, HighOrLow>();
+		return true;
 	}
 	static void WriteInfo(std::ostream &OutStream)
 	{
 		OutStream << WriteStructSize(3) << WriteStepID(UID::Step_DigitalWrite) << WriteField(Pin) << WriteField(HighOrLow);
 	}
+	using Repeatable = DigitalWrite<Pin, HighOrLow>;
+};
+// 向串口写出UID
+template <UID Value>
+struct SerialWrite : Step
+{
+	SerialWrite(std::move_only_function<void() const> const &)
+	{
+	}
+	bool Start() override
+	{
+		Async_stream_IO::Send(Value, static_cast<uint8_t>(UID::Port_Signal));
+		return true;
+	}
+	static void WriteInfo(std::ostream &OutStream)
+	{
+		OutStream << WriteStructSize(2) << WriteStepID(UID::Step_SerialWrite) << WriteField(Value);
+	}
+	using Repeatable = SerialWrite<Value>;
 };
 template <uint16_t Count>
 struct Milliseconds
 {
-	static constexpr std::chrono::milliseconds Value = std::chrono::milliseconds(Count);
-	static constexpr UID Type = UID::Type_Milliseconds;
+	static constexpr std::chrono::milliseconds Get() { return std::chrono::milliseconds(Count) }
+	static void WriteInfo(std::ostream &OutStream)
+	{
+		OutStream << static_cast<uint8_t>(UID::Type_Milliseconds) << Count;
+	}
 };
 template <uint8_t Count>
 struct Seconds
 {
-	static constexpr std::chrono::seconds Value = std::chrono::seconds(Count);
-	static constexpr UID Type = UID::Type_Seconds;
+	static constexpr std::chrono::seconds Get() { return std::chrono::milliseconds(Count) }
+	static void WriteInfo(std::ostream &OutStream)
+	{
+		OutStream << static_cast<uint8_t>(UID::Type_Seconds) << Count;
+	}
+};
+template <typename Min, typename Max>
+class RandomDuration
+{
+	using DurationType = decltype(Min::Get());
+
+public:
+	static DurationType Get()
+	{
+		constexpr float MinCount = Min::Get().count();
+		return DurationType(pow(std::chrono::duration_cast<DurationType>(Min::Get()).count() / MinCount, random() / RANDOM_MAX) * MinCount);
+	}
+	static void WriteInfo(std::ostream &OutStream)
+	{
+		OutStream << WriteStructSize(2) << static_cast<uint8_t>(UID::Property_Min);
+		Min::WriteInfo(OutStream);
+		OutStream << static_cast<uint8_t>(UID::Property_Max);
+		Max::WriteInfo(OutStream);
+	}
 };
 #define WriteDuration(FieldName, Duration) static_cast<uint8_t>(UID::Property_##FieldName) << static_cast<uint8_t>(Duration::Type) << Duration::Value.count()
 // 等待一段时间，不做任何事
 template <typename Duration>
 struct Delay : Step
 {
-	std::move_only_function<void() const> const &FinishCallback;
-	Delay(std::move_only_function<void() const> const &FinishCallback) : FinishCallback(FinishCallback) {}
-	Timers_one_for_all::TimerClass *Timer;
-	void Repeat() override
-	{
-		Timer = Timers_one_for_all::AllocateTimer();
-		Timer->DoAfter(Duration::Value, [this]()
-					   {
-				Timer->Allocatable = true;
-				FinishCallback(); });
-	}
+	Delay(std::move_only_function<void() const> const &FinishCallback) : TimerCallback([this]()
+																					   {
+		Timer->Allocatable = true;
+		FinishCallback(); }) {}
 	bool Start() override
 	{
-		Repeat();
+		(Timer = Timers_one_for_all::AllocateTimer())->DoAfter(Duration::Get(), TimerCallback);
 		return false;
 	}
 	void Pause() const override
@@ -119,9 +160,27 @@ struct Delay : Step
 	{
 		OutStream << WriteStructSize(2) << WriteStepID(UID::Step_Delay) << WriteDuration(Duration, Duration);
 	}
+	struct Repeatable : Delay<Duration>
+	{
+		using Delay<Duration>::Delay;
+		bool Start() override
+		{
+			(Timer = Timers_one_for_all::AllocateTimer())->DoAfter(LastDuration = Duration::Get(), TimerCallback);
+			return false;
+		}
+		bool Repeat() override
+		{
+			(Timer = Timers_one_for_all::AllocateTimer())->DoAfter(LastDuration, TimerCallback);
+			return false;
+		}
+
+	protected:
+		decltype(Duration::Get()) LastDuration;
+	};
 
 protected:
-	Timers_one_for_all::TimerClass *const Timer = Timers_one_for_all::AllocateTimer();
+	std::move_only_function<void() const> const TimerCallback;
+	Timers_one_for_all::TimerClass *Timer;
 };
 // 使用此容器时必须禁止中断
 extern std::map<uint8_t, std::move_only_function<void() const> const *> PinMonitors;
@@ -136,184 +195,160 @@ struct PinStates
 };
 template <uint8_t Pin>
 std::move_only_function<void() const> PinStates<Pin>::Monitor;
-
+template <typename StepType, typename = bool>
+struct ContainTrials
+{
+	static constexpr bool value = false;
+};
+template <typename StepType>
+struct ContainTrials<StepType, decltype(StepType::value)>
+{
+	static constexpr bool value = StepType::value;
+};
 template <UID TrialID, typename TrialStep>
 struct Trial : TrialStep
 {
-	Trial(std::move_only_function<void() const> const &FinishCallback) : TrialStep(FinishCallback) {}
+	static constexpr bool ContainTrials = true;
+	Trial(std::move_only_function<void() const> const &FinishCallback) : TrialStep(FinishCallback)
+	{
+		static_assert(!ContainTrials<TrialStep>::value, "Trial步骤的TrialStep不能包含Trial");
+	}
 	bool Start() override
 	{
 		Async_stream_IO::Send(TrialID, static_cast<uint8_t>(UID::Port_TrialStart));
 		return TrialStep::Start();
 	}
-	void Repeat() override
+	struct Repeatable : Trial<TrialID, TrialStep::Repeatable>
 	{
-		Async_stream_IO::Send(TrialID, static_cast<uint8_t>(UID::Port_TrialStart));
-		TrialStep::Repeat();
+		using Trial<TrialID, TrialStep::Repeatable>::Trial;
+		bool Repeat() override
+		{
+			Async_stream_IO::Send(TrialID, static_cast<uint8_t>(UID::Port_TrialStart));
+			return TrialStep::Repeatable::Repeat();
+		}
+		using Repeatable = Repeatable;
+	};
+	bool Restore(std::unordered_map<UID, uint16_t> &TrialsDone) override
+	{
+		auto const it = TrialsDone.find(TrialID);
+		if (it == TrialsDone.end())
+			return Start();
+		if (it->second)
+		{
+			if (!--it->second)
+				TrialsDone.erase(it);
+			return true;
+		}
+		else
+		{
+			TrialsDone.erase(it);
+			return Start();
+		}
 	}
 	static void WriteInfo(std::ostream &OutStream)
 	{
 		OutStream << WriteStructSize(3) << WriteStepID(UID::Step_Trial) << WriteField(TrialID) << WriteStep(TrialStep);
 	}
 };
-template <typename Trial>
-struct TrialTraits
-{
-	static constexpr UID TrialID = UID::Trial_Invalid;
-	static constexpr bool IsTrial = false;
-};
-template <UID _TrialID, typename TrialStep>
-struct TrialTraits<Trial<_TrialID, TrialStep>>
-{
-	static constexpr UID TrialID = _TrialID;
-	static constexpr bool IsTrial = true;
-};
-template <typename StepType, typename = bool>
-struct StepTraits
-{
-	static constexpr bool ContainTrials = false;
-};
-template <typename StepType>
-struct StepTraits<StepType, decltype(StepType::ContainTrials)>
-{
-	static constexpr bool ContainTrials = StepType::ContainTrials;
-};
-// 开始监视引脚，每次检测到高电平执行Reporter步骤
+// 开始监视引脚，每次检测到高电平执行Reporter步骤。此步骤开始后立即结束，但监视会持续在后台执行，直到调用StopMonitor步骤。
 template <uint8_t Pin, typename Reporter>
 struct StartMonitor : Step
 {
 	StartMonitor(std::move_only_function<void() const> const &)
 	{
-		static_assert(!StepTraits<Reporter>::ContainTrials, "StartMonitor步骤的Reporter不能包含Trial");
+		static_assert(!ContainTrials<Reporter>::value, "StartMonitor步骤的Reporter不能包含Trial");
 		Quick_digital_IO_interrupt::PinMode<Pin, INPUT>();
 		PinStates<Pin>::Monitor = [R = Reporter(NullCallback)]()
 		{ R.Start(); };
 	}
-	void Repeat() override
+	bool Start() override
 	{
 		PinMonitors[Pin] = &PinStates<Pin>::Monitor;
+		return true;
 	}
 	static void WriteInfo(std::ostream &OutStream)
 	{
 		OutStream << WriteStructSize(3) << WriteStepID(UID::Step_StartMonitor) << WriteField(Pin) << WriteStep(Reporter);
 	}
+	using Repeatable = StartMonitor<Pin, Reporter>;
 };
 // 与StartMonitor相对应的步骤，停止监视引脚
 template <uint8_t Pin>
 struct StopMonitor : Step
 {
 	StopMonitor(std::move_only_function<void() const> const &) {}
-	void Repeat() override
+	bool Start() override
 	{
 		PinMonitors.erase(Pin);
+		return true;
 	}
 	static void WriteInfo(std::ostream &OutStream)
 	{
 		OutStream << WriteStructSize(2) << WriteStepID(UID::Step_StopMonitor) << WriteField(Pin);
 	}
+	using Repeatable = StopMonitor<Pin>;
 };
 // 执行Repeatee步骤，同时监控引脚。如果Repeatee执行完之前检测到引脚电平，放弃当前执行并重启。
 template <typename Repeatee, uint8_t Pin>
-struct RepeatIfPin : Repeatee
+struct RepeatIfPin : Repeatee::Repeatable // 有些步骤的Repeatable不继承自那个步骤类型
 {
-	std::move_only_function<void() const> const ChildCallback;
-	std::move_only_function<void() const> const MonitorCallback;
 	RepeatIfPin(std::move_only_function<void() const> const &ParentCallback) : ChildCallback{[ParentCallback]()
 																							 {
 			PinMonitors.erase(Pin);
 			ParentCallback(); }},
-																			   Repeatee(ChildCallback), MonitorCallback{[this]()
-																														{
-			Repeatee::Abort();
-			Repeatee::Repeat(); }}
+																			   Repeatee::Repeatable(ChildCallback), MonitorCallback{[this]()
+																																	{
+																																		Repeatee::Repeatable::Abort();
+																																		Repeatee::Repeatable::Repeat(); }}
 	{
-		static_assert(!StepTraits<Repeatee>::ContainTrials, "RepeatIfPin步骤的Repeatee不能包含Trial");
+		static_assert(!ContainTrials<Repeatee::Repeatable>::value, "RepeatIfPin步骤的Repeatee不能包含Trial");
 	}
-	bool RepeateeStartReturn;
 	bool Start() override
 	{
-		if (RepeateeStartReturn = Repeatee::Start())
+		if (Repeatee::Repeatable::Start())
 			return true;
 		PinMonitors[Pin] = &MonitorCallback;
 		return false;
 	}
-	void Repeat() override
+	struct Repeatable : RepeatIfPin<Repeatee::Repeatable, Pin>
 	{
-		Repeatee::Repeat();
-		if (!RepeateeStartReturn)
+		using RepeatIfPin<Repeatee::Repeatable, Pin>::RepeatIfPin;
+		bool Repeat() override
+		{
+			if (Repeatee::Repeatable::Repeat())
+				return true;
 			PinMonitors[Pin] = &MonitorCallback;
-	}
+			return false;
+		}
+		using Repeatable = Repeatable;
+	};
 	void Pause() const override
 	{
-		Repeatee::Pause();
+		Repeatee::Repeatable::Pause();
 		PinMonitors.erase(Pin);
 	}
 	void Continue() const override
 	{
-		Repeatee::Continue();
+		Repeatee::Repeatable::Continue();
 		PinMonitors[Pin] = &MonitorCallback;
 	}
 	void Abort() const override
 	{
-		Repeatee::Abort();
+		Repeatee::Repeatable::Abort();
 		PinMonitors.erase(Pin);
 	}
 	static void WriteInfo(std::ostream &OutStream)
 	{
 		OutStream << WriteStructSize(3) << WriteStepID(UID::Step_RepeatIfPin) << WriteField(Pin) << WriteStep(Repeatee);
 	}
-};
-// 执行SwitchFrom步骤并监控引脚。如果SwitchFrom结束前检测到引脚电平，放弃SwitchFrom，转而执行SwitchTo步骤。可以不指定SwitchTo，则检测到电平后仅放弃SwitchFrom，然后本步骤结束。
-template <typename SwitchFrom, uint8_t Pin, typename SwitchTo>
-struct SwitchIfPin
-{
-	SwitchFrom From;
-	SwitchTo To;
-	bool FromStartReturn;
-	bool ToStartReturn;
-	bool Repeating;
-	Step *Current;
-	std::move_only_function<void() const> const FromCallback;
+
+protected:
+	std::move_only_function<void() const> const ChildCallback;
 	std::move_only_function<void() const> const MonitorCallback;
-	RepeatIfPin(std::move_only_function<void() const> const &ParentCallback) : FromCallback{[ParentCallback]()
-																							{
-			PinMonitors.erase(Pin);
-			ParentCallback(); }},
-																			   From{FromCallback}, To{ParentCallback}, MonitorCallback{[this, ParentCallback]()
-																																	   {
-																																		   From.Abort();
-																																		   PinMonitors.erase(Pin);
-																																		   if (Repeating)
-																																			   To.Repeat();
-																																		   else
-																																			   ToStartReturn = To.Start();
-																																		   if (ToStartReturn)
-																																			   ParentCallback();
-																																		   else
-																																			   Current = &To;
-																																	   }}
-	{
-		static_assert(!StepTraits<SwitchFrom>::ContainTrials, "SwitchIfPin步骤的SwitchFrom不能包含Trial");
-		static_assert(!StepTraits<SwitchTo>::ContainTrials, "SwitchIfPin步骤的SwitchTo不能包含Trial");
-	}
-	bool Start() override
-	{
-		if (FromStartReturn = From.Start())
-			return true;
-		Current = &From;
-		Repeating = false;
-		PinMonitors[Pin] = &MonitorCallback;
-		return false;
-	}
-	void Repeat() override
-	{
-		From.Repeat();
-		if (FromStartReturn)
-			return;
-		PinMonitors[Pin] = &MonitorCallback;
-		Current = &From;
-		Repeating = true;
-	}
+};
+template <typename SwitchFrom, uint8_t Pin, typename SwitchTo>
+struct _SwitchIfPin : Step
+{
 	void Pause() const override
 	{
 		Current->Pause();
@@ -337,7 +372,273 @@ struct SwitchIfPin
 		OutStream << WriteStructSize(4) << WriteStepID(UID::Step_SwitchIfPin) << WriteStep(SwitchFrom);
 		OutStream << WriteField(Pin) << WriteStep(SwitchTo);
 	}
+
+protected:
+	Step *Current;
+	std::move_only_function<void() const> const FromCallback;
+	std::move_only_function<void() const> const MonitorCallback;
+	SwitchFrom From;
+	SwitchTo To;
+	_SwitchIfPin(std::move_only_function<void() const> const &ParentCallback, std::move_only_function<void() const> &&MonitorCallback) : FromCallback([ParentCallback]()
+																																					  {
+		PinMonitors.erase(Pin);
+		ParentCallback(); }),
+																																		 MonitorCallback(std::move(MonitorCallback)), From{FromCallback}, To{ParentCallback}
+	{
+		static_assert(!ContainTrials<SwitchFrom>::value, "SwitchIfPin步骤的SwitchFrom不能包含Trial");
+		static_assert(!ContainTrials<SwitchTo>::value, "SwitchIfPin步骤的SwitchTo不能包含Trial");
+	}
 };
+// 执行SwitchFrom步骤并监控引脚。如果SwitchFrom结束前检测到引脚电平，放弃SwitchFrom，转而执行SwitchTo步骤。可以不指定SwitchTo，则检测到电平后仅放弃SwitchFrom，然后本步骤结束。
+template <typename SwitchFrom, uint8_t Pin, typename SwitchTo>
+struct SwitchIfPin : _SwitchIfPin<SwitchFrom, Pin, SwitchTo>
+{
+	struct Repeatable : _SwitchIfPin<SwitchFrom::Repeatable, Pin, SwitchTo::Repeatable>
+	{
+		Repeatable(std::move_only_function<void() const> const &ParentCallback) : _SwitchIfPin<SwitchFrom::Repeatable, Pin, SwitchTo::Repeatable>(ParentCallback, [this, ParentCallback]()
+																																				  {
+			From.Abort();
+			PinMonitors.erase(Pin);
+			if (Repeating?To.Repeat():To.Start())
+				ParentCallback();
+			else
+				Current = &To; }) {}
+		bool Start() override
+		{
+			if (From.Start())
+				return true;
+			Current = &From;
+			Repeating = false;
+			PinMonitors[Pin] = &MonitorCallback;
+			return false;
+		}
+		bool Repeat() override
+		{
+			if (From.Repeat())
+				return true;
+			PinMonitors[Pin] = &MonitorCallback;
+			Current = &From;
+			Repeating = true;
+			return false;
+		}
+		using Repeatable = Repeatable;
+
+	protected:
+		bool Repeating;
+	};
+	SwitchIfPin(std::move_only_function<void() const> const &ParentCallback) : _SwitchIfPin<SwitchFrom, Pin, SwitchTo>(ParentCallback, [this, ParentCallback]()
+																													   {
+		From.Abort();
+		PinMonitors.erase(Pin);
+		if (To.Start())
+			ParentCallback();
+		else
+			Current = &To; }) {}
+	bool Start() override
+	{
+		if (From.Start())
+			return true;
+		Current = &From;
+		PinMonitors[Pin] = &MonitorCallback;
+		return false;
+	}
+};
+// 执行SwitchFrom步骤并监控引脚，如果SwitchFrom结束前检测到引脚电平，放弃执行，结束步骤。
 template <typename SwitchFrom, uint8_t Pin>
 using AbortIfPin = SwitchIfPin<SwitchFrom, Pin, NullStep>;
+template <typename Unconditional, uint8_t Pin, typename Conditional>
+struct _AppendIfPin : Step
+{
+	void Pause() const override
+	{
+		Current->Pause();
+		if (Current == &UnconditionalStep)
+			PinMonitors.erase(Pin);
+	}
+	void Continue() const override
+	{
+		Current->Continue();
+		if (Current == &UnconditionalStep)
+			PinMonitors[Pin] = &MonitorCallback;
+	}
+	void Abort() const override
+	{
+		Current->Abort();
+		if (Current == &UnconditionalStep)
+			PinMonitors.erase(Pin);
+	}
+
+protected:
+	Step *Current;
+	bool PinDetected;
+	std::move_only_function<void() const> const MonitorCallback{[&PinDetected]()
+																{ PinDetected = true; }};
+	std::move_only_function<void() const> const UnconditionalCallback;
+	Unconditional UnconditionalStep;
+	Conditional ConditionalStep;
+	_AppendIfPin(std::move_only_function<void() const> const &ParentCallback, std::move_only_function<void() const> &&UnconditionalCallback) : UnconditionalCallback(std::move(UnconditionalCallback)), UnconditionalStep{UnconditionalCallback}, ConditionalStep{ParentCallback} {}
+};
+// 执行Unconditional步骤并监控引脚，如果Unconditional结束前检测到引脚电平，则在Unconditional结束后额外执行Conditional步骤。
+template <typename Unconditional, uint8_t Pin, typename Conditional>
+struct AppendIfPin : Step
+{
+	struct Repeatable : _AppendIfPin<Unconditional::Repeatable, Pin, Conditional::Repeatable>
+	{
+		Repeatable(std::move_only_function<void() const> const &ParentCallback) : _AppendIfPin<Unconditional::Repeatable, Pin, Conditional::Repeatable>(ParentCallback, [this, ParentCallback]()
+																																						{
+			PinMonitors.erase(Pin);
+			if (!PinDetected||(Repeating?ConditionalStep.Repeat():ConditionalStep.Start()))
+				ParentCallback();
+			else
+				Current=&ConditionalStep; }) {}
+		bool Start() override
+		{
+			if (UnconditionalStep.Start())
+				return true;
+			Current = &UnconditionalStep;
+			PinDetected = false;
+			PinMonitors[Pin] = &MonitorCallback;
+			Repeating = false;
+			return false;
+		}
+		bool Repeat() override
+		{
+			if (UnconditionalStep.Repeat())
+				return true;
+			PinMonitors[Pin] = &MonitorCallback;
+			PinDetected = false;
+			Current = &UnconditionalStep;
+			Repeating = true;
+			return false;
+		}
+
+	protected:
+		bool Repeating;
+	};
+	AppendIfPin(std::move_only_function<void() const> const &ParentCallback) : _AppendIfPin<Unconditional, Pin, Conditional>(ParentCallback, [this, ParentCallback]()
+																															 {
+		PinMonitors.erase(Pin);
+		if (!PinDetected || ConditionalStep.Start())
+			ParentCallback();
+		else
+			Current = &ConditionalStep; }) {}
+	bool Start() override
+	{
+		if (UnconditionalStep.Start())
+			return true;
+		Current = &UnconditionalStep;
+		PinDetected = false;
+		PinMonitors[Pin] = &MonitorCallback;
+		return false;
+	}
+};
+// 使用Async包装的步骤将异步执行，不等待那个步骤结束，Async就立即结束返回，那个步骤在后台自动执行直到结束，因而也无法暂停或放弃。
+template <typename AsyncStep>
+struct Async : AsyncStep
+{
+	Async(std::move_only_function<void() const> const &) : AsyncStep(NullCallback) {}
+	bool Start() override
+	{
+		AsyncStep::Start();
+		return true;
+	}
+	struct Repeatable : Async<AsyncStep::Repeatable>
+	{
+		using Async<AsyncStep::Repeatable>::Async;
+		bool Repeat() override
+		{
+			AsyncStep::Repeatable::Repeat();
+			return true;
+		}
+	};
+	static void WriteInfo(std::ostream &OutStream)
+	{
+		OutStream << WriteStructSize(2) << WriteStepID(UID::Step_Async) << WriteStep(AsyncStep);
+	}
+};
+template <bool V, bool... Vs>
+struct Any
+{
+	static constexpr bool value = V || Any<Vs...>::value;
+};
+template <bool V>
+struct Any<V>
+{
+	static constexpr bool value = V;
+};
+template <typename Indices>
+struct CopyTupleToPointers;
+template <size_t... Indices>
+struct CopyTupleToPointers<std::index_sequence<Indices...>>
+{
+	template <typename... Types>
+	static void Copy(std::tuple<Types...> const &Source, Step *const *Destination)
+	{
+		Step *const _[] = {Destination[Indices] = &std::get<Indices>(Source)...};
+	}
+};
+template <typename... Steps>
+struct Sequential : Step
+{
+	static constexpr bool ContainTrials = Any<ContainTrials<Steps>::value...>::value;
+	std::tuple<Steps...> StepsTuple;
+	Step *const StepPointers[sizeof...(Steps)];
+	Step *const *CurrentStep;
+	std::move_only_function<void() const> const ChildCallback;
+	std::unordered_map<UID, uint16_t> *TrialsDoneLeft;
+	Sequential(std::move_only_function<void() const> const &ParentCallback) : ChildCallback{ContainTrials?[ParentCallback, this]()
+	{
+		while (++CurrentStep < std::end(StepPointers))
+		if(TrialsDoneLeft)
+		{
+			bool const Finished=CurrentStep->Restore(*TrialsDoneLeft);
+			if(TrialsDoneLeft)
+		}
+			if (!CurrentStep->Start())
+				return;
+		ParentCallback();
+	}:[this, ParentCallback]()
+	{
+		while (++CurrentStep < std::end(StepPointers))
+			if (!CurrentStep->Start())
+				return;
+		ParentCallback();
+	}},
+																			  StepsTuple{Steps{ChildCallback}...}
+	{
+		CopyTupleToPointers<std::make_index_sequence<sizeof...(Steps)>>::Copy(StepsTuple, StepPointers);
+	}
+	bool Start() override
+	{
+		for (CurrentStep = std::begin(StepPointers); CurrentStep < std::end(StepPointers); ++CurrentStep)
+			if (!CurrentStep->Start())
+			{
+				TrialsDoneLeft = nullptr;
+				return false;
+			}
+		return true;
+	}
+	void Pause() const override
+	{
+		CurrentStep->Pause();
+	}
+	void Continue() const override
+	{
+		CurrentStep->Continue();
+	}
+	void Abort() const override
+	{
+		CurrentStep->Abort();
+	}
+	bool Restore(std::unordered_map<UID, uint16_t> &TrialsDone) override
+	{
+		for (CurrentStep = std::begin(StepPointers); CurrentStep < std::end(StepPointers); ++CurrentStep)
+			if (!CurrentStep->Restore(TrialsDone))
+			{
+				TrialsDoneLeft = &TrialsDone;
+				return false;
+			}
+		return true;
+	}
+};
 #define UidPairClass(Uid, Class) {UID::Uid, []() { return new Class; }}

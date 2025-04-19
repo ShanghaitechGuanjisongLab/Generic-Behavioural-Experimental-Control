@@ -182,6 +182,7 @@ protected:
 	std::move_only_function<void() const> const TimerCallback;
 	Timers_one_for_all::TimerClass *Timer;
 };
+
 // 使用此容器时必须禁止中断
 extern std::map<uint8_t, std::move_only_function<void() const> const *> PinMonitors;
 extern std::move_only_function<void() const> const NullCallback;
@@ -578,33 +579,9 @@ struct CopyTupleToPointers<std::index_sequence<Indices...>>
 	}
 };
 template <typename... Steps>
-struct Sequential : Step
+struct _Sequential_Base : Step
 {
-	static constexpr bool ContainTrials = Any<ContainTrials<Steps>::value...>::value;
-	std::tuple<Steps...> StepsTuple;
-	Step *const StepPointers[sizeof...(Steps)];
-	Step *const *CurrentStep;
-	std::move_only_function<void() const> const ChildCallback;
-	std::unordered_map<UID, uint16_t> *TrialsDoneLeft;
-	Sequential(std::move_only_function<void() const> const &ParentCallback) : ChildCallback{ContainTrials?[ParentCallback, this]()
-	{
-		while (++CurrentStep < std::end(StepPointers))
-		if(TrialsDoneLeft)
-		{
-			bool const Finished=CurrentStep->Restore(*TrialsDoneLeft);
-			if(TrialsDoneLeft)
-		}
-			if (!CurrentStep->Start())
-				return;
-		ParentCallback();
-	}:[this, ParentCallback]()
-	{
-		while (++CurrentStep < std::end(StepPointers))
-			if (!CurrentStep->Start())
-				return;
-		ParentCallback();
-	}},
-																			  StepsTuple{Steps{ChildCallback}...}
+	_Sequential_Base(std::move_only_function<void() const> &&ChildCallback) : ChildCallback{std::move(ChildCallback)}, StepsTuple{Steps{ChildCallback}...}
 	{
 		CopyTupleToPointers<std::make_index_sequence<sizeof...(Steps)>>::Copy(StepsTuple, StepPointers);
 	}
@@ -612,10 +589,7 @@ struct Sequential : Step
 	{
 		for (CurrentStep = std::begin(StepPointers); CurrentStep < std::end(StepPointers); ++CurrentStep)
 			if (!CurrentStep->Start())
-			{
-				TrialsDoneLeft = nullptr;
 				return false;
-			}
 		return true;
 	}
 	void Pause() const override
@@ -630,6 +604,79 @@ struct Sequential : Step
 	{
 		CurrentStep->Abort();
 	}
+
+protected:
+	std::tuple<Steps...> StepsTuple;
+	Step *const StepPointers[sizeof...(Steps)];
+	Step *const *CurrentStep;
+	std::move_only_function<void() const> const ChildCallback;
+};
+template <typename... Steps>
+struct _Sequential_Simple : _Sequential_Base<Steps...>
+{
+	_Sequential_Simple(std::move_only_function<void() const> const &ParentCallback) : _Sequential_Base<Steps...>([ParentCallback, this]()
+																												 {
+		while (++CurrentStep < std::end(StepPointers))
+			if (!CurrentStep->Start())
+				return;
+		ParentCallback(); }) {}
+	struct Repeatable : _Sequential_Base<Steps...>
+	{
+		Repeatable(std::move_only_function<void() const> const &ParentCallback) : _Sequential_Base<Steps...>([ParentCallback, this]()
+																											 {
+			while (++CurrentStep < std::end(StepPointers))
+				if (!(Repeating?CurrentStep->Repeat():CurrentStep->Start()))
+					return;
+			ParentCallback(); }) {}
+		bool Start() override
+		{
+			Repeating = false;
+			for (CurrentStep = std::begin(StepPointers); CurrentStep < std::end(StepPointers); ++CurrentStep)
+				if (!CurrentStep->Start())
+					return false;
+			return true;
+		}
+		bool Repeat() override
+		{
+			Repeating = true;
+			for (CurrentStep = std::begin(StepPointers); CurrentStep < std::end(StepPointers); ++CurrentStep)
+				if (!CurrentStep->Repeat())
+					return false;
+			return true;
+		}
+
+	protected:
+		bool Repeating;
+	};
+};
+template <typename... Steps>
+struct _Sequential_WithTrials : _Sequential_Base<Steps...>
+{
+	static constexpr bool ContainTrials = true;
+	_Sequential_WithTrials(std::move_only_function<void() const> const &ParentCallback) : _Sequential_Base<Steps...>([ParentCallback, this]()
+																													 {
+		while (++CurrentStep < std::end(StepPointers))
+			if (TrialsDoneLeft)
+			{
+				bool const Finished = CurrentStep->Restore(*TrialsDoneLeft);
+				if (TrialsDoneLeft->empty())
+					TrialsDoneLeft = nullptr;
+				if (!Finished)
+					return;
+			}
+			else if (!CurrentStep->Start())
+				return;
+		ParentCallback(); }) {}
+	bool Start() override
+	{
+		for (CurrentStep = std::begin(StepPointers); CurrentStep < std::end(StepPointers); ++CurrentStep)
+			if (!CurrentStep->Start())
+			{
+				TrialsDoneLeft = nullptr;
+				return false;
+			}
+		return true;
+	}
 	bool Restore(std::unordered_map<UID, uint16_t> &TrialsDone) override
 	{
 		for (CurrentStep = std::begin(StepPointers); CurrentStep < std::end(StepPointers); ++CurrentStep)
@@ -640,5 +687,29 @@ struct Sequential : Step
 			}
 		return true;
 	}
+	struct Repeatable
+	{
+		static_assert(false, "Sequential::Repeatable不允许包含Trial");
+	};
+	template <uint16_t... Repeats>
+	struct WithRepeats
+	{
+		static constexpr bool ContainTrials = true;
+
+	protected:
+		struct StepWithRepeat
+		{
+			Step *StepPointer;
+			uint16_t RepeatCount;
+		};
+		std::tuple<Steps...> StepsTuple;
+		Step *const StepPointers[sizeof...(Steps)];
+		Step *const *CurrentStep;
+		std::move_only_function<void() const> const ChildCallback;
+		std::unordered_map<UID, uint16_t> *TrialsDoneLeft;
+	};
+
+protected:
+	std::unordered_map<UID, uint16_t> *TrialsDoneLeft;
 };
 #define UidPairClass(Uid, Class) {UID::Uid, []() { return new Class; }}

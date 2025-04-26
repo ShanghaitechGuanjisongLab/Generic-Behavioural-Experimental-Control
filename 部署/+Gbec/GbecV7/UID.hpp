@@ -46,6 +46,9 @@ enum class UID : uint8_t
 	Property_Unconditional,
 	Property_Conditional,
 	Property_AsyncStep,
+	Property_Steps,
+	Property_Step,
+	Property_Repeat,
 
 	Type_Bool,
 	Type_UInt8,
@@ -79,6 +82,8 @@ enum class UID : uint8_t
 	Step_AppendIfPin,
 	Step_SerialWrite,
 	Step_Async,
+	Step_Sequential,
+	Step_Random,
 
 	Trial_Invalid,
 };

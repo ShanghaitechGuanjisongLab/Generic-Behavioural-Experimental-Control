@@ -8,6 +8,7 @@
 #include <set>
 #include <map>
 #include <cmath>
+#include <random>
 #include "Async_stream_IO.hpp"
 struct AutomaticallyEndedTest
 {
@@ -197,22 +198,22 @@ struct PinStates
 template <uint8_t Pin>
 std::move_only_function<void() const> PinStates<Pin>::Monitor;
 template <typename StepType, typename = bool>
-struct ContainTrials
+struct _ContainTrials
 {
 	static constexpr bool value = false;
 };
 template <typename StepType>
-struct ContainTrials<StepType, decltype(StepType::value)>
+struct _ContainTrials<StepType, decltype(StepType::_iContainTrials)>
 {
-	static constexpr bool value = StepType::value;
+	static constexpr bool value = StepType::_iContainTrials;
 };
 template <UID TrialID, typename TrialStep>
 struct Trial : TrialStep
 {
-	static constexpr bool ContainTrials = true;
+	static constexpr bool _iContainTrials = true;
 	Trial(std::move_only_function<void() const> const &FinishCallback) : TrialStep(FinishCallback)
 	{
-		static_assert(!ContainTrials<TrialStep>::value, "Trial步骤的TrialStep不能包含Trial");
+		static_assert(!_ContainTrials<TrialStep>::value, "Trial步骤的TrialStep不能包含Trial");
 	}
 	bool Start() override
 	{
@@ -257,7 +258,7 @@ struct StartMonitor : Step
 {
 	StartMonitor(std::move_only_function<void() const> const &)
 	{
-		static_assert(!ContainTrials<Reporter>::value, "StartMonitor步骤的Reporter不能包含Trial");
+		static_assert(!_ContainTrials<Reporter>::value, "StartMonitor步骤的Reporter不能包含Trial");
 		Quick_digital_IO_interrupt::PinMode<Pin, INPUT>();
 		PinStates<Pin>::Monitor = [R = Reporter(NullCallback)]()
 		{ R.Start(); };
@@ -302,7 +303,7 @@ struct RepeatIfPin : Repeatee::Repeatable // 有些步骤的Repeatable不继承�
 																																		Repeatee::Repeatable::Abort();
 																																		Repeatee::Repeatable::Repeat(); }}
 	{
-		static_assert(!ContainTrials<Repeatee::Repeatable>::value, "RepeatIfPin步骤的Repeatee不能包含Trial");
+		static_assert(!_ContainTrials<Repeatee::Repeatable>::value, "RepeatIfPin步骤的Repeatee不能包含Trial");
 	}
 	bool Start() override
 	{
@@ -386,8 +387,8 @@ protected:
 		ParentCallback(); }),
 																																		 MonitorCallback(std::move(MonitorCallback)), From{FromCallback}, To{ParentCallback}
 	{
-		static_assert(!ContainTrials<SwitchFrom>::value, "SwitchIfPin步骤的SwitchFrom不能包含Trial");
-		static_assert(!ContainTrials<SwitchTo>::value, "SwitchIfPin步骤的SwitchTo不能包含Trial");
+		static_assert(!_ContainTrials<SwitchFrom>::value, "SwitchIfPin步骤的SwitchFrom不能包含Trial");
+		static_assert(!_ContainTrials<SwitchTo>::value, "SwitchIfPin步骤的SwitchTo不能包含Trial");
 	}
 };
 // 执行SwitchFrom步骤并监控引脚。如果SwitchFrom结束前检测到引脚电平，放弃SwitchFrom，转而执行SwitchTo步骤。可以不指定SwitchTo，则检测到电平后仅放弃SwitchFrom，然后本步骤结束。
@@ -477,7 +478,11 @@ protected:
 	std::move_only_function<void() const> const UnconditionalCallback;
 	Unconditional UnconditionalStep;
 	Conditional ConditionalStep;
-	_AppendIfPin(std::move_only_function<void() const> const &ParentCallback, std::move_only_function<void() const> &&UnconditionalCallback) : UnconditionalCallback(std::move(UnconditionalCallback)), UnconditionalStep{UnconditionalCallback}, ConditionalStep{ParentCallback} {}
+	_AppendIfPin(std::move_only_function<void() const> const &ParentCallback, std::move_only_function<void() const> &&UnconditionalCallback) : UnconditionalCallback(std::move(UnconditionalCallback)), UnconditionalStep{UnconditionalCallback}, ConditionalStep{ParentCallback}
+	{
+		static_assert(!_ContainTrials<Unconditional>::value, "AppendIfPin步骤的Unconditional不能包含Trial");
+		static_assert(!_ContainTrials<Conditional>::value, "AppendIfPin步骤的Conditional不能包含Trial");
+	}
 };
 // 执行Unconditional步骤并监控引脚，如果Unconditional结束前检测到引脚电平，则在Unconditional结束后额外执行Conditional步骤。
 template <typename Unconditional, uint8_t Pin, typename Conditional>
@@ -537,7 +542,10 @@ struct AppendIfPin : Step
 template <typename AsyncStep>
 struct Async : AsyncStep
 {
-	Async(std::move_only_function<void() const> const &) : AsyncStep(NullCallback) {}
+	Async(std::move_only_function<void() const> const &) : AsyncStep(NullCallback)
+	{
+		static_assert(!_ContainTrials<AsyncStep>::value, "Async步骤的AsyncStep不能包含Trial");
+	}
 	bool Start() override
 	{
 		AsyncStep::Start();
@@ -558,32 +566,53 @@ struct Async : AsyncStep
 	}
 };
 template <bool V, bool... Vs>
-struct Any
+struct _Any
 {
-	static constexpr bool value = V || Any<Vs...>::value;
+	static constexpr bool value = V || _Any<Vs...>::value;
 };
 template <bool V>
-struct Any<V>
+struct _Any<V>
 {
 	static constexpr bool value = V;
 };
+template <bool V, bool... Vs>
+struct _All
+{
+	static constexpr bool value = V && _Any<Vs...>::value;
+};
+template <bool V>
+struct _All<V>
+{
+	static constexpr bool value = V;
+};
+struct _StepWithRepeat
+{
+	Step *StepPointer;
+	uint16_t RepeatCount;
+};
 template <typename Indices>
-struct CopyTupleToPointers;
+struct _CopyTupleToPointers;
 template <size_t... Indices>
-struct CopyTupleToPointers<std::index_sequence<Indices...>>
+struct _CopyTupleToPointers<std::index_sequence<Indices...>>
 {
 	template <typename... Types>
 	static void Copy(std::tuple<Types...> const &Source, Step *const *Destination)
 	{
 		Step *const _[] = {Destination[Indices] = &std::get<Indices>(Source)...};
 	}
+	template <typename... Types>
+	static void Copy(std::tuple<Types...> const &Source, _StepWithRepeat *Destination)
+	{
+		Step *const _[] = {Destination[Indices].StepPointer = &std::get<Indices>(Source)...};
+	}
 };
+
 template <typename... Steps>
 struct _Sequential_Base : Step
 {
 	_Sequential_Base(std::move_only_function<void() const> &&ChildCallback) : ChildCallback{std::move(ChildCallback)}, StepsTuple{Steps{ChildCallback}...}
 	{
-		CopyTupleToPointers<std::make_index_sequence<sizeof...(Steps)>>::Copy(StepsTuple, StepPointers);
+		_CopyTupleToPointers<std::make_index_sequence<sizeof...(Steps)>>::Copy(StepsTuple, StepPointers);
 	}
 	bool Start() override
 	{
@@ -604,10 +633,15 @@ struct _Sequential_Base : Step
 	{
 		CurrentStep->Abort();
 	}
+	static void WriteInfo(std::ostream &OutStream)
+	{
+		OutStream << WriteStructSize(2) << WriteStepID(UID::Step_Sequential) << static_cast<uint8_t>(UID::Property_Steps) << static_cast<uint8_t>(UID::Type_Cell) << static_cast<uint8_t>(sizeof...(Steps));
+		int _[] = {(Steps::WriteInfo(OutStream), 0)...};
+	}
 
 protected:
 	std::tuple<Steps...> StepsTuple;
-	Step *const StepPointers[sizeof...(Steps)];
+	Step *StepPointers[sizeof...(Steps)];
 	Step *const *CurrentStep;
 	std::move_only_function<void() const> const ChildCallback;
 };
@@ -652,7 +686,7 @@ struct _Sequential_Simple : _Sequential_Base<Steps...>
 template <typename... Steps>
 struct _Sequential_WithTrials : _Sequential_Base<Steps...>
 {
-	static constexpr bool ContainTrials = true;
+	static constexpr bool _ContainTrials = true;
 	_Sequential_WithTrials(std::move_only_function<void() const> const &ParentCallback) : _Sequential_Base<Steps...>([ParentCallback, this]()
 																													 {
 		while (++CurrentStep < std::end(StepPointers))
@@ -692,24 +726,338 @@ struct _Sequential_WithTrials : _Sequential_Base<Steps...>
 		static_assert(false, "Sequential::Repeatable不允许包含Trial");
 	};
 	template <uint16_t... Repeats>
-	struct WithRepeats
+	struct WithRepeats : Step
 	{
-		static constexpr bool ContainTrials = true;
+		static constexpr bool _ContainTrials = true;
+		WithRepeats(std::move_only_function<void() const> const &ParentCallback) : ChildCallback{[ParentCallback, this]()
+																								 {
+																									 for (;;)
+																									 {
+																										 if (!--CurrentStep->RepeatCount && ++CurrentStep == std::end(StepPointers))
+																										 {
+																											 ParentCallback();
+																											 return;
+																										 }
+																										 if (TrialsDoneLeft)
+																										 {
+																											 bool const Finished = CurrentStep->StepPointer->Restore(*TrialsDoneLeft);
+																											 if (TrialsDoneLeft->empty())
+																												 TrialsDoneLeft = nullptr;
+																											 if (!Finished)
+																												 break;
+																										 }
+																										 else if (!CurrentStep->StepPointer->Start())
+																											 break;
+																									 }
+																								 }},
+																				   StepsTuple{Steps{ChildCallback}...}
+		{
+			static_assert(sizeof...(Steps) == sizeof...(Repeats), "WithRepeats的Steps和Repeats数量不匹配");
+			static_assert(!_All<Repeats>::value, "WithRepeats的Repeats不能包含0");
+			_CopyTupleToPointers<std::make_index_sequence<sizeof...(Steps)>>::Copy(StepsTuple, StepPointers);
+		}
+		bool Start() override
+		{
+			CurrentStep = std::begin(StepPointers);
+			uint16_t const _[] = {CurrentStep++->RepeatCount = Repeats...};
+			CurrentStep = std::begin(StepPointers);
+			while (CurrentStep->StepPointer->Start())
+				if (!--CurrentStep->RepeatCount && ++CurrentStep == std::end(StepPointers))
+					return true;
+			TrialsDoneLeft = nullptr;
+			return false;
+		}
+		bool Restore(std::unordered_map<UID, uint16_t> &TrialsDone) override
+		{
+			CurrentStep = std::begin(StepPointers);
+			uint16_t const _[] = {CurrentStep++->RepeatCount = Repeats...};
+			CurrentStep = std::begin(StepPointers);
+			while (CurrentStep->StepPointer->Restore(TrialsDone))
+			{
+				if (!--CurrentStep->RepeatCount && ++CurrentStep == std::end(StepPointers))
+					return true;
+				if (TrialsDoneLeft->empty())
+				{
+					while (CurrentStep->StepPointer->Start())
+						if (!--CurrentStep->RepeatCount && ++CurrentStep == std::end(StepPointers))
+							return true;
+					TrialsDoneLeft = nullptr;
+					return false;
+				}
+			}
+			TrialsDoneLeft = &TrialsDone;
+			return false;
+		}
+		void Pause() const override
+		{
+			CurrentStep->StepPointer->Pause();
+		}
+		void Continue() const override
+		{
+			CurrentStep->StepPointer->Continue();
+		}
+		void Abort() const override
+		{
+			CurrentStep->StepPointer->Abort();
+		}
+		static void WriteInfo(std::ostream &OutStream)
+		{
+			OutStream << WriteStructSize(2) << WriteStepID(UID::Step_Sequential) << static_cast<uint8_t>(UID::Property_Steps) << static_cast<uint8_t>(UID::Type_Array) << static_cast<uint8_t>(sizeof...(Steps));
+			int _[] = {(OutStream << WriteStructSize(2) << static_cast<uint8_t>(UID::Property_Step), Steps::WriteInfo(OutStream), OutStream << static_cast<uint8_t>(UID::Property_Repeat) << static_cast<uint8_t>(UID::Type_UInt16) << Repeats, 0)...};
+		}
+		struct Repeatable
+		{
+			static_assert(false, "Sequential::WithRepeats不允许Repeatable");
+		};
 
 	protected:
-		struct StepWithRepeat
-		{
-			Step *StepPointer;
-			uint16_t RepeatCount;
-		};
 		std::tuple<Steps...> StepsTuple;
-		Step *const StepPointers[sizeof...(Steps)];
-		Step *const *CurrentStep;
+		_StepWithRepeat StepPointers[sizeof...(Steps)];
+		_StepWithRepeat *CurrentStep;
 		std::move_only_function<void() const> const ChildCallback;
 		std::unordered_map<UID, uint16_t> *TrialsDoneLeft;
 	};
 
 protected:
 	std::unordered_map<UID, uint16_t> *TrialsDoneLeft;
+};
+template <typename... Steps>
+using _Sequential_Selector = std::conditional_t<_Any<_ContainTrials<Steps>::value...>::value, _Sequential_WithTrials<Steps...>, _Sequential_Simple<Steps...>>;
+template <typename... Steps>
+struct Sequential : _Sequential_Selector<Steps...>
+{
+	using _Sequential_Selector<Steps...>::_Sequential_Selector;
+};
+
+#ifdef ARDUINO_ARCH_AVR
+using ArchUrng = std::ArduinoUrng;
+#else
+using ArchUrng = std::TrueUrng;
+#endif
+extern ArchUrng Urng;
+template <typename... Steps>
+struct _Random_Base : Step
+{
+	_Random_Base(std::move_only_function<void() const> &&ChildCallback) : ChildCallback{std::move(ChildCallback)}, StepsTuple{Steps{ChildCallback}...}
+	{
+		_CopyTupleToPointers<std::make_index_sequence<sizeof...(Steps)>>::Copy(StepsTuple, StepPointers);
+	}
+	bool Start() override
+	{
+		std::shuffle(std::begin(StepPointers), std::end(StepPointers), Urng);
+		for (CurrentStep = std::begin(StepPointers); CurrentStep < std::end(StepPointers); ++CurrentStep)
+			if (!CurrentStep->Start())
+				return false;
+		return true;
+	}
+	void Pause() const override
+	{
+		CurrentStep->Pause();
+	}
+	void Continue() const override
+	{
+		CurrentStep->Continue();
+	}
+	void Abort() const override
+	{
+		CurrentStep->Abort();
+	}
+	static void WriteInfo(std::ostream &OutStream)
+	{
+		OutStream << WriteStructSize(2) << WriteStepID(UID::Step_Random) << static_cast<uint8_t>(UID::Property_Steps) << static_cast<uint8_t>(UID::Type_Cell) << static_cast<uint8_t>(sizeof...(Steps));
+		int _[] = {(Steps::WriteInfo(OutStream), 0)...};
+	}
+
+protected:
+	std::tuple<Steps...> StepsTuple;
+	Step *StepPointers[sizeof...(Steps)];
+	Step *const *CurrentStep;
+	std::move_only_function<void() const> const ChildCallback;
+};
+template <typename... Steps>
+struct _Random_Simple : _Random_Base<Steps...>
+{
+	_Random_Simple(std::move_only_function<void() const> const &ParentCallback) : _Random_Base<Steps...>([ParentCallback, this]()
+																												 {
+		while (++CurrentStep < std::end(StepPointers))
+			if (!CurrentStep->Start())
+				return;
+		ParentCallback(); }) {}
+	struct Repeatable : _Random_Base<Steps...>
+	{
+		Repeatable(std::move_only_function<void() const> const &ParentCallback) : _Random_Base<Steps...>([ParentCallback, this]()
+																											 {
+			while (++CurrentStep < std::end(StepPointers))
+				if (!(Repeating?CurrentStep->Repeat():CurrentStep->Start()))
+					return;
+			ParentCallback(); }) {}
+		bool Start() override
+		{
+			Repeating = false;
+			std::shuffle(std::begin(StepPointers), std::end(StepPointers), Urng);
+			for (CurrentStep = std::begin(StepPointers); CurrentStep < std::end(StepPointers); ++CurrentStep)
+				if (!CurrentStep->Start())
+					return false;
+			return true;
+		}
+		bool Repeat() override
+		{
+			Repeating = true;
+			for (CurrentStep = std::begin(StepPointers); CurrentStep < std::end(StepPointers); ++CurrentStep)
+				if (!CurrentStep->Repeat())
+					return false;
+			return true;
+		}
+
+	protected:
+		bool Repeating;
+	};
+};
+template <typename... Steps>
+struct _Random_WithTrials : _Random_Base<Steps...>
+{
+	static constexpr bool _ContainTrials = true;
+	_Random_WithTrials(std::move_only_function<void() const> const &ParentCallback) : _Random_Base<Steps...>([ParentCallback, this]()
+																													 {
+		while (++CurrentStep < std::end(StepPointers))
+			if (TrialsDoneLeft)
+			{
+				bool const Finished = CurrentStep->Restore(*TrialsDoneLeft);
+				if (TrialsDoneLeft->empty())
+					TrialsDoneLeft = nullptr;
+				if (!Finished)
+					return;
+			}
+			else if (!CurrentStep->Start())
+				return;
+		ParentCallback(); }) {}
+	bool Start() override
+	{
+		std::shuffle(std::begin(StepPointers), std::end(StepPointers), Urng);
+		for (CurrentStep = std::begin(StepPointers); CurrentStep < std::end(StepPointers); ++CurrentStep)
+			if (!CurrentStep->Start())
+			{
+				TrialsDoneLeft = nullptr;
+				return false;
+			}
+		return true;
+	}
+	bool Restore(std::unordered_map<UID, uint16_t> &TrialsDone) override
+	{
+		std::shuffle(std::begin(StepPointers), std::end(StepPointers), Urng);
+		for (CurrentStep = std::begin(StepPointers); CurrentStep < std::end(StepPointers); ++CurrentStep)
+			if (!CurrentStep->Restore(TrialsDone))
+			{
+				TrialsDoneLeft = &TrialsDone;
+				return false;
+			}
+		return true;
+	}
+	struct Repeatable
+	{
+		static_assert(false, "Random::Repeatable不允许包含Trial");
+	};
+	template <uint16_t... Repeats>
+	struct WithRepeats : Step
+	{
+		static constexpr bool _ContainTrials = true;
+		WithRepeats(std::move_only_function<void() const> const &ParentCallback) : ChildCallback{[ParentCallback, this]()
+																								 {
+																									 for (;;)
+																									 {
+																										 if (!--CurrentStep->RepeatCount && ++CurrentStep == std::end(StepPointers))
+																										 {
+																											 ParentCallback();
+																											 return;
+																										 }
+																										 if (TrialsDoneLeft)
+																										 {
+																											 bool const Finished = CurrentStep->StepPointer->Restore(*TrialsDoneLeft);
+																											 if (TrialsDoneLeft->empty())
+																												 TrialsDoneLeft = nullptr;
+																											 if (!Finished)
+																												 break;
+																										 }
+																										 else if (!CurrentStep->StepPointer->Start())
+																											 break;
+																									 }
+																								 }},
+																				   StepsTuple{Steps{ChildCallback}...}
+		{
+			static_assert(sizeof...(Steps) == sizeof...(Repeats), "WithRepeats的Steps和Repeats数量不匹配");
+			static_assert(!_All<Repeats>::value, "WithRepeats的Repeats不能包含0");
+			_CopyTupleToPointers<std::make_index_sequence<sizeof...(Steps)>>::Copy(StepsTuple, StepPointers);
+		}
+		bool Start() override
+		{
+			CurrentStep = std::begin(StepPointers);
+			uint16_t const _[] = {CurrentStep++->RepeatCount = Repeats...};
+			CurrentStep = std::begin(StepPointers);
+			while (CurrentStep->StepPointer->Start())
+				if (!--CurrentStep->RepeatCount && ++CurrentStep == std::end(StepPointers))
+					return true;
+			TrialsDoneLeft = nullptr;
+			return false;
+		}
+		bool Restore(std::unordered_map<UID, uint16_t> &TrialsDone) override
+		{
+			CurrentStep = std::begin(StepPointers);
+			uint16_t const _[] = {CurrentStep++->RepeatCount = Repeats...};
+			CurrentStep = std::begin(StepPointers);
+			while (CurrentStep->StepPointer->Restore(TrialsDone))
+			{
+				if (!--CurrentStep->RepeatCount && ++CurrentStep == std::end(StepPointers))
+					return true;
+				if (TrialsDoneLeft->empty())
+				{
+					while (CurrentStep->StepPointer->Start())
+						if (!--CurrentStep->RepeatCount && ++CurrentStep == std::end(StepPointers))
+							return true;
+					TrialsDoneLeft = nullptr;
+					return false;
+				}
+			}
+			TrialsDoneLeft = &TrialsDone;
+			return false;
+		}
+		void Pause() const override
+		{
+			CurrentStep->StepPointer->Pause();
+		}
+		void Continue() const override
+		{
+			CurrentStep->StepPointer->Continue();
+		}
+		void Abort() const override
+		{
+			CurrentStep->StepPointer->Abort();
+		}
+		static void WriteInfo(std::ostream &OutStream)
+		{
+			OutStream << WriteStructSize(2) << WriteStepID(UID::Step_Random) << static_cast<uint8_t>(UID::Property_Steps) << static_cast<uint8_t>(UID::Type_Array) << static_cast<uint8_t>(sizeof...(Steps));
+			int _[] = {(OutStream << WriteStructSize(2) << static_cast<uint8_t>(UID::Property_Step), Steps::WriteInfo(OutStream), OutStream << static_cast<uint8_t>(UID::Property_Repeat) << static_cast<uint8_t>(UID::Type_UInt16) << Repeats, 0)...};
+		}
+		struct Repeatable
+		{
+			static_assert(false, "Random::WithRepeats不允许Repeatable");
+		};
+
+	protected:
+		std::tuple<Steps...> StepsTuple;
+		_StepWithRepeat StepPointers[sizeof...(Steps)];
+		_StepWithRepeat *CurrentStep;
+		std::move_only_function<void() const> const ChildCallback;
+		std::unordered_map<UID, uint16_t> *TrialsDoneLeft;
+	};
+
+protected:
+	std::unordered_map<UID, uint16_t> *TrialsDoneLeft;
+};
+template <typename... Steps>
+using _Random_Selector = std::conditional_t<_Any<_ContainTrials<Steps>::value...>::value, _Random_WithTrials<Steps...>, _Random_Simple<Steps...>>;
+template <typename... Steps>
+struct Random : _Random_Selector<Steps...>
+{
+	using _Random_Selector<Steps...>::_Random_Selector;
 };
 #define UidPairClass(Uid, Class) {UID::Uid, []() { return new Class; }}

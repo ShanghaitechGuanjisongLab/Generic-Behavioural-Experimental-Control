@@ -75,6 +75,7 @@ struct DigitalWrite : Step
 	}
 	using Repeatable = DigitalWrite<Pin, HighOrLow>;
 };
+
 // 向串口写出UID
 template <UID Value>
 struct SerialWrite : Step
@@ -93,6 +94,7 @@ struct SerialWrite : Step
 	}
 	using Repeatable = SerialWrite<Value>;
 };
+
 template <uint16_t Count>
 struct Milliseconds
 {
@@ -185,18 +187,29 @@ protected:
 };
 
 // 使用此容器时必须禁止中断
-extern std::map<uint8_t, std::move_only_function<void() const> const *> PinMonitors;
 extern std::move_only_function<void() const> const NullCallback;
 #define WriteStep(FieldName)                         \
 	static_cast<uint8_t>(UID::Property_##FieldName); \
 	FieldName::WriteInfo(OutStream);
-template <uint8_t Pin>
-struct PinStates
+
+// 引脚监视模块
+struct _PinInterrupt
 {
-	static std::move_only_function<void() const> Monitor;
+	uint8_t const Pin;
+	bool Pending = false;
+	std::move_only_function<void() const> const &Handler;
+	_PinInterrupt(uint8_t Pin, std::move_only_function<void() const> const &Handler) : Pin(Pin), Handler(Handler)
+	{
+		Quick_digital_IO_interrupt::AttachInterrupt<RISING>(Pin, [&Pending = Pending]
+															{ Pending = true; });
+	}
+	~_PinInterrupt()
+	{
+		Quick_digital_IO_interrupt::DetachInterrupt(Pin);
+	}
+	static std::map<uint8_t, _PinInterrupt> RunningMonitors;
 };
-template <uint8_t Pin>
-std::move_only_function<void() const> PinStates<Pin>::Monitor;
+
 template <typename StepType, typename = bool>
 struct _ContainTrials
 {
@@ -260,12 +273,10 @@ struct StartMonitor : Step
 	{
 		static_assert(!_ContainTrials<Reporter>::value, "StartMonitor步骤的Reporter不能包含Trial");
 		Quick_digital_IO_interrupt::PinMode<Pin, INPUT>();
-		PinStates<Pin>::Monitor = [R = Reporter(NullCallback)]()
-		{ R.Start(); };
 	}
 	bool Start() override
 	{
-		PinMonitors[Pin] = &PinStates<Pin>::Monitor;
+		_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
 		return true;
 	}
 	static void WriteInfo(std::ostream &OutStream)
@@ -273,6 +284,10 @@ struct StartMonitor : Step
 		OutStream << WriteStructSize(3) << WriteStepID(UID::Step_StartMonitor) << WriteField(Pin) << WriteStep(Reporter);
 	}
 	using Repeatable = StartMonitor<Pin, Reporter>;
+
+protected:
+	std::move_only_function<void() const> const MonitorCallback{[R = Reporter(NullCallback)]()
+																{ R.Start(); }};
 };
 // 与StartMonitor相对应的步骤，停止监视引脚
 template <uint8_t Pin>
@@ -281,7 +296,7 @@ struct StopMonitor : Step
 	StopMonitor(std::move_only_function<void() const> const &) {}
 	bool Start() override
 	{
-		PinMonitors.erase(Pin);
+		_PinInterrupt::RunningMonitors.erase(Pin);
 		return true;
 	}
 	static void WriteInfo(std::ostream &OutStream)
@@ -296,7 +311,7 @@ struct RepeatIfPin : Repeatee::Repeatable // 有些步骤的Repeatable不继承�
 {
 	RepeatIfPin(std::move_only_function<void() const> const &ParentCallback) : ChildCallback{[ParentCallback]()
 																							 {
-			PinMonitors.erase(Pin);
+			_PinInterrupt::RunningMonitors.erase(Pin);
 			ParentCallback(); }},
 																			   Repeatee::Repeatable(ChildCallback), MonitorCallback{[this]()
 																																	{
@@ -309,7 +324,7 @@ struct RepeatIfPin : Repeatee::Repeatable // 有些步骤的Repeatable不继承�
 	{
 		if (Repeatee::Repeatable::Start())
 			return true;
-		PinMonitors[Pin] = &MonitorCallback;
+		_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
 		return false;
 	}
 	struct Repeatable : RepeatIfPin<Repeatee::Repeatable, Pin>
@@ -319,7 +334,7 @@ struct RepeatIfPin : Repeatee::Repeatable // 有些步骤的Repeatable不继承�
 		{
 			if (Repeatee::Repeatable::Repeat())
 				return true;
-			PinMonitors[Pin] = &MonitorCallback;
+			_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
 			return false;
 		}
 		using Repeatable = Repeatable;
@@ -327,17 +342,17 @@ struct RepeatIfPin : Repeatee::Repeatable // 有些步骤的Repeatable不继承�
 	void Pause() const override
 	{
 		Repeatee::Repeatable::Pause();
-		PinMonitors.erase(Pin);
+		_PinInterrupt::RunningMonitors.erase(Pin);
 	}
 	void Continue() const override
 	{
 		Repeatee::Repeatable::Continue();
-		PinMonitors[Pin] = &MonitorCallback;
+		_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
 	}
 	void Abort() const override
 	{
 		Repeatee::Repeatable::Abort();
-		PinMonitors.erase(Pin);
+		_PinInterrupt::RunningMonitors.erase(Pin);
 	}
 	static void WriteInfo(std::ostream &OutStream)
 	{
@@ -355,19 +370,19 @@ struct _SwitchIfPin : Step
 	{
 		Current->Pause();
 		if (Current == &From)
-			PinMonitors.erase(Pin);
+			_PinInterrupt::RunningMonitors.erase(Pin);
 	}
 	void Continue() const override
 	{
 		Current->Continue();
 		if (Current == &From)
-			PinMonitors[Pin] = &MonitorCallback;
+			_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
 	}
 	void Abort() const override
 	{
 		Current->Abort();
 		if (Current == &From)
-			PinMonitors.erase(Pin);
+			_PinInterrupt::RunningMonitors.erase(Pin);
 	}
 	static void WriteInfo(std::ostream &OutStream)
 	{
@@ -383,7 +398,7 @@ protected:
 	SwitchTo To;
 	_SwitchIfPin(std::move_only_function<void() const> const &ParentCallback, std::move_only_function<void() const> &&MonitorCallback) : FromCallback([ParentCallback]()
 																																					  {
-		PinMonitors.erase(Pin);
+		_PinInterrupt::RunningMonitors.erase(Pin);
 		ParentCallback(); }),
 																																		 MonitorCallback(std::move(MonitorCallback)), From{FromCallback}, To{ParentCallback}
 	{
@@ -400,7 +415,7 @@ struct SwitchIfPin : _SwitchIfPin<SwitchFrom, Pin, SwitchTo>
 		Repeatable(std::move_only_function<void() const> const &ParentCallback) : _SwitchIfPin<SwitchFrom::Repeatable, Pin, SwitchTo::Repeatable>(ParentCallback, [this, ParentCallback]()
 																																				  {
 			From.Abort();
-			PinMonitors.erase(Pin);
+			_PinInterrupt::RunningMonitors.erase(Pin);
 			if (Repeating?To.Repeat():To.Start())
 				ParentCallback();
 			else
@@ -411,14 +426,14 @@ struct SwitchIfPin : _SwitchIfPin<SwitchFrom, Pin, SwitchTo>
 				return true;
 			Current = &From;
 			Repeating = false;
-			PinMonitors[Pin] = &MonitorCallback;
+			_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
 			return false;
 		}
 		bool Repeat() override
 		{
 			if (From.Repeat())
 				return true;
-			PinMonitors[Pin] = &MonitorCallback;
+			_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
 			Current = &From;
 			Repeating = true;
 			return false;
@@ -431,7 +446,7 @@ struct SwitchIfPin : _SwitchIfPin<SwitchFrom, Pin, SwitchTo>
 	SwitchIfPin(std::move_only_function<void() const> const &ParentCallback) : _SwitchIfPin<SwitchFrom, Pin, SwitchTo>(ParentCallback, [this, ParentCallback]()
 																													   {
 		From.Abort();
-		PinMonitors.erase(Pin);
+		_PinInterrupt::RunningMonitors.erase(Pin);
 		if (To.Start())
 			ParentCallback();
 		else
@@ -441,7 +456,7 @@ struct SwitchIfPin : _SwitchIfPin<SwitchFrom, Pin, SwitchTo>
 		if (From.Start())
 			return true;
 		Current = &From;
-		PinMonitors[Pin] = &MonitorCallback;
+		_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
 		return false;
 	}
 };
@@ -455,19 +470,19 @@ struct _AppendIfPin : Step
 	{
 		Current->Pause();
 		if (Current == &UnconditionalStep)
-			PinMonitors.erase(Pin);
+			_PinInterrupt::RunningMonitors.erase(Pin);
 	}
 	void Continue() const override
 	{
 		Current->Continue();
 		if (Current == &UnconditionalStep)
-			PinMonitors[Pin] = &MonitorCallback;
+			_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
 	}
 	void Abort() const override
 	{
 		Current->Abort();
 		if (Current == &UnconditionalStep)
-			PinMonitors.erase(Pin);
+			_PinInterrupt::RunningMonitors.erase(Pin);
 	}
 
 protected:
@@ -492,7 +507,7 @@ struct AppendIfPin : Step
 	{
 		Repeatable(std::move_only_function<void() const> const &ParentCallback) : _AppendIfPin<Unconditional::Repeatable, Pin, Conditional::Repeatable>(ParentCallback, [this, ParentCallback]()
 																																						{
-			PinMonitors.erase(Pin);
+			_PinInterrupt::RunningMonitors.erase(Pin);
 			if (!PinDetected||(Repeating?ConditionalStep.Repeat():ConditionalStep.Start()))
 				ParentCallback();
 			else
@@ -503,7 +518,7 @@ struct AppendIfPin : Step
 				return true;
 			Current = &UnconditionalStep;
 			PinDetected = false;
-			PinMonitors[Pin] = &MonitorCallback;
+			_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
 			Repeating = false;
 			return false;
 		}
@@ -511,7 +526,7 @@ struct AppendIfPin : Step
 		{
 			if (UnconditionalStep.Repeat())
 				return true;
-			PinMonitors[Pin] = &MonitorCallback;
+			_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
 			PinDetected = false;
 			Current = &UnconditionalStep;
 			Repeating = true;
@@ -523,7 +538,7 @@ struct AppendIfPin : Step
 	};
 	AppendIfPin(std::move_only_function<void() const> const &ParentCallback) : _AppendIfPin<Unconditional, Pin, Conditional>(ParentCallback, [this, ParentCallback]()
 																															 {
-		PinMonitors.erase(Pin);
+		_PinInterrupt::RunningMonitors.erase(Pin);
 		if (!PinDetected || ConditionalStep.Start())
 			ParentCallback();
 		else
@@ -534,7 +549,7 @@ struct AppendIfPin : Step
 			return true;
 		Current = &UnconditionalStep;
 		PinDetected = false;
-		PinMonitors[Pin] = &MonitorCallback;
+		_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
 		return false;
 	}
 };
@@ -878,7 +893,7 @@ template <typename... Steps>
 struct _Random_Simple : _Random_Base<Steps...>
 {
 	_Random_Simple(std::move_only_function<void() const> const &ParentCallback) : _Random_Base<Steps...>([ParentCallback, this]()
-																												 {
+																										 {
 		while (++CurrentStep < std::end(StepPointers))
 			if (!CurrentStep->Start())
 				return;
@@ -886,7 +901,7 @@ struct _Random_Simple : _Random_Base<Steps...>
 	struct Repeatable : _Random_Base<Steps...>
 	{
 		Repeatable(std::move_only_function<void() const> const &ParentCallback) : _Random_Base<Steps...>([ParentCallback, this]()
-																											 {
+																										 {
 			while (++CurrentStep < std::end(StepPointers))
 				if (!(Repeating?CurrentStep->Repeat():CurrentStep->Start()))
 					return;
@@ -918,7 +933,7 @@ struct _Random_WithTrials : _Random_Base<Steps...>
 {
 	static constexpr bool _ContainTrials = true;
 	_Random_WithTrials(std::move_only_function<void() const> const &ParentCallback) : _Random_Base<Steps...>([ParentCallback, this]()
-																													 {
+																											 {
 		while (++CurrentStep < std::end(StepPointers))
 			if (TrialsDoneLeft)
 			{
@@ -965,20 +980,21 @@ struct _Random_WithTrials : _Random_Base<Steps...>
 																								 {
 																									 for (;;)
 																									 {
-																										 if (!--CurrentStep->RepeatCount && ++CurrentStep == std::end(StepPointers))
+																										 PickRandomStep();
+																										 if (!CurrentStep)
 																										 {
 																											 ParentCallback();
 																											 return;
 																										 }
 																										 if (TrialsDoneLeft)
 																										 {
-																											 bool const Finished = CurrentStep->StepPointer->Restore(*TrialsDoneLeft);
+																											 bool const Finished = CurrentStep->Restore(*TrialsDoneLeft);
 																											 if (TrialsDoneLeft->empty())
 																												 TrialsDoneLeft = nullptr;
 																											 if (!Finished)
 																												 break;
 																										 }
-																										 else if (!CurrentStep->StepPointer->Start())
+																										 else if (!CurrentStep->Start())
 																											 break;
 																									 }
 																								 }},
@@ -990,47 +1006,47 @@ struct _Random_WithTrials : _Random_Base<Steps...>
 		}
 		bool Start() override
 		{
-			CurrentStep = std::begin(StepPointers);
-			uint16_t const _[] = {CurrentStep++->RepeatCount = Repeats...};
-			CurrentStep = std::begin(StepPointers);
-			while (CurrentStep->StepPointer->Start())
-				if (!--CurrentStep->RepeatCount && ++CurrentStep == std::end(StepPointers))
-					return true;
-			TrialsDoneLeft = nullptr;
-			return false;
-		}
-		bool Restore(std::unordered_map<UID, uint16_t> &TrialsDone) override
-		{
-			CurrentStep = std::begin(StepPointers);
-			uint16_t const _[] = {CurrentStep++->RepeatCount = Repeats...};
-			CurrentStep = std::begin(StepPointers);
-			while (CurrentStep->StepPointer->Restore(TrialsDone))
+			_StepWithRepeat *CurrentSR = std::begin(StepPointers);
+			uint16_t const _[] = {CurrentSR++->RepeatCount = Repeats...};
+			for (;;)
 			{
-				if (!--CurrentStep->RepeatCount && ++CurrentStep == std::end(StepPointers))
+				PickRandomStep();
+				if (!CurrentStep)
 					return true;
-				if (TrialsDoneLeft->empty())
+				if (!CurrentStep->Start())
 				{
-					while (CurrentStep->StepPointer->Start())
-						if (!--CurrentStep->RepeatCount && ++CurrentStep == std::end(StepPointers))
-							return true;
 					TrialsDoneLeft = nullptr;
 					return false;
 				}
 			}
-			TrialsDoneLeft = &TrialsDone;
-			return false;
+		}
+		bool Restore(std::unordered_map<UID, uint16_t> &TrialsDone) override
+		{
+			_StepWithRepeat *CurrentSR = std::begin(StepPointers);
+			uint16_t const _[] = {CurrentSR++->RepeatCount = Repeats...};
+			for (;;)
+			{
+				PickRandomStep();
+				if (!CurrentStep)
+					return true;
+				if (!CurrentStep->Restore(TrialsDone))
+				{
+					TrialsDoneLeft = &TrialsDone;
+					return false;
+				}
+			}
 		}
 		void Pause() const override
 		{
-			CurrentStep->StepPointer->Pause();
+			CurrentStep->Pause();
 		}
 		void Continue() const override
 		{
-			CurrentStep->StepPointer->Continue();
+			CurrentStep->Continue();
 		}
 		void Abort() const override
 		{
-			CurrentStep->StepPointer->Abort();
+			CurrentStep->Abort();
 		}
 		static void WriteInfo(std::ostream &OutStream)
 		{
@@ -1045,9 +1061,30 @@ struct _Random_WithTrials : _Random_Base<Steps...>
 	protected:
 		std::tuple<Steps...> StepsTuple;
 		_StepWithRepeat StepPointers[sizeof...(Steps)];
-		_StepWithRepeat *CurrentStep;
+		Step *CurrentStep;
 		std::move_only_function<void() const> const ChildCallback;
 		std::unordered_map<UID, uint16_t> *TrialsDoneLeft;
+		void PickRandomStep()
+		{
+			uint16_t RepeatsLeft = 0;
+			for (_StepWithRepeat &S : StepPointers)
+				RepeatsLeft += S.RepeatCount;
+			if (!RepeatsLeft)
+			{
+				CurrentStep = nullptr;
+				return;
+			}
+			RepeatsLeft = random(0, RepeatsLeft);
+			for (_StepWithRepeat &S : StepPointers)
+				if (RepeatsLeft < S.RepeatCount)
+				{
+					S.RepeatCount--;
+					CurrentStep = S.StepPointer;
+					break;
+				}
+				else
+					RepeatsLeft -= S.RepeatCount;
+		}
 	};
 
 protected:

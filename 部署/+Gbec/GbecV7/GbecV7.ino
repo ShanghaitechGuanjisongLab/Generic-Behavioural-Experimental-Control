@@ -1,4 +1,4 @@
-#include "Objects.h"
+#include "BuildingBlocks.hpp"
 #include <set>
 #include <sstream>
 #include <map>
@@ -147,17 +147,19 @@ void setup()
 								  { std::ArduinoUrng::seed(RandomSeed); });
 #endif
 }
-std::map<uint8_t, std::move_only_function<void() const> const *> PinMonitors;
+std::map<uint8_t, _PinInterrupt> _PinInterrupt::RunningMonitors;
 void loop()
 {
-	Async_stream_IO::ExecuteTransactionsInQueue();
 	noInterrupts();
-	for (uint8_t P = 0; P < NUM_DIGITAL_PINS; ++P)
+	for (auto &M : _PinInterrupt::RunningMonitors)
 	{
-		const auto Monitor = PinMonitors.find(P);
-		if (Monitor != PinMonitors.end())
-			Monitor->second->operator()();
+		if (M.second.Pending)
+		{
+			M.second.Handler();
+			M.second.Pending = false;
+		}
 	}
 	interrupts();
+	Async_stream_IO::ExecuteTransactionsInQueue();
 }
 #include <TimersOneForAll_Define.hpp>

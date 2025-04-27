@@ -28,7 +28,6 @@ protected:
 
 // 访问全局容器时必须禁用中断，调用move_only_function前必须启用中断。
 
-static std::queue<std::move_only_function<void() const>> TransactionQueue;
 static std::unordered_map<uint8_t, std::move_only_function<void() const>> Listeners;
 static std::set<Stream *> StreamsInvolved;
 
@@ -89,26 +88,10 @@ namespace Async_stream_IO
 	{
 		ToStream.setTimeout(-1);
 		InterruptGuard const _;
-		StreamsInvolved.insert(&ToStream);
-		TransactionQueue.push([Message, Length, &ToStream, ToPort]()
-							  {
-				ToStream.write(MagicByte);
-				ToStream.write(ToPort);
-				ToStream.write(Length);
-				ToStream.write(reinterpret_cast<const char*>(Message), Length); });
-	}
-	void Send(std::move_only_function<void(const std::move_only_function<void(const void *Message, uint8_t Size) const> &MessageSender) const> &&Callback, uint8_t ToPort, Stream &ToStream = Serial)
-	{
-		ToStream.setTimeout(-1);
-		InterruptGuard const _;
-		StreamsInvolved.insert(&ToStream);
-		TransactionQueue.push([&ToStream, ToPort, Callback = std::move(Callback)]()
-							  { Callback([&ToStream, ToPort](const void *Message, uint8_t Size)
-										 {
-					ToStream.write(MagicByte);
-					ToStream.write(ToPort);
-					ToStream.write(Size);
-					ToStream.write(reinterpret_cast<const char*>(Message), Size); }); });
+		ToStream.write(MagicByte);
+		ToStream.write(ToPort);
+		ToStream.write(Length);
+		ToStream.write(reinterpret_cast<const char *>(Message), Length);
 	}
 
 #define DoIfPortIdle(Action)             \
@@ -165,15 +148,6 @@ namespace Async_stream_IO
 
 	void ExecuteTransactionsInQueue()
 	{
-		static std::queue<std::move_only_function<void() const>> TransactionQueueSwap;
-		noInterrupts();
-		std::swap(TransactionQueue, TransactionQueueSwap); // 交换到局部，确保执行期间新产生的事务延迟到下一次执行
-		interrupts();
-		while (TransactionQueue.size())
-		{
-			TransactionQueue.front()();
-			TransactionQueue.pop();
-		}
 		std::set<Stream *> StreamsSwap;
 		noInterrupts();
 		std::swap(StreamsInvolved, StreamsSwap); // 交换到局部，避免在遍历时被修改

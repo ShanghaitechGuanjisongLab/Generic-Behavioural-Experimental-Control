@@ -49,6 +49,9 @@ enum class UID : uint8_t
 	Property_Steps,
 	Property_Step,
 	Property_Repeat,
+	Property_Abortable,
+	Property_WhenAbort,
+	Property_BackgroundID,
 
 	Type_Bool,
 	Type_UInt8,
@@ -60,6 +63,7 @@ enum class UID : uint8_t
 	Type_Empty,
 	Type_Seconds,
 	Type_Milliseconds,
+	Type_Infinite,
 
 	State_ObjectRunning,
 	State_ObjectPaused,
@@ -69,6 +73,8 @@ enum class UID : uint8_t
 	State_Restore,
 
 	Signal_TrialStart,
+	Signal_ObjectFinished,
+	Signal_ObjectStarted,
 
 	Test_BlueLed,
 
@@ -84,6 +90,13 @@ enum class UID : uint8_t
 	Step_Async,
 	Step_Sequential,
 	Step_Random,
+	Step_CustomFunction,
+	Step_DoWhenAborted,
+	Step_StartBackgroundRepeat,
 
 	Trial_Invalid,
+
+	BackgroundID_Default,
+
+	Public_BlueLed,
 };

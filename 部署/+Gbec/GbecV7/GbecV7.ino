@@ -1,17 +1,31 @@
-#include "BuildingBlocks.hpp"
-#include <set>
+#include "ExperimentDesign.hpp"
 #include <sstream>
 #include <map>
+#include <vector>
+
+static std::move_only_function<void()const> const FinishCallback = []()
+{
+	Async_stream_IO::Send(UID::Signal_ObjectFinished, static_cast<uint8_t>(UID::Port_Signal));
+};
+
+template <typename T>
+struct StepConstructors;
+template <typename... Pairs>
+struct StepConstructors<std::tuple<Pairs...>>
+{
+	static std::unordered_map<UID, Step *(*)()> value;
+};
+template <typename... Pairs>
+std::unordered_map<UID, Step *(*)()> StepConstructors<std::tuple<Pairs...>>::value{{Pairs::ID, []()
+																					{ return new typename Pairs::StepType(FinishCallback); }...}};
+static std::set<Step *> RootSteps;
+
 template <typename T>
 inline void BindFunctionToPort(T &&Function, UID Port)
 {
 	Async_stream_IO::BindFunctionToPort(std::forward<T>(Function), static_cast<uint8_t>(Port));
 }
-// 此全局对象不上锁，禁止使用中断处理方法访问
-std::set<RootObject *> AllObjects;
-std::unordered_map<UID, ChildObject *> AsyncObjects;
-// 此全局对象可以被中断处理方法访问，因此在中断启用时禁止访问。从此容器中删除的任务，仍可能会被执行最后一次，因此任务的资源应当由任务本身负责释放
-extern const std::unordered_map<UID, RootObject *(*)()> ObjectCreators;
+
 ArchUrng Urng;
 std::move_only_function<void() const> const NullCallback = []() {};
 void setup()
@@ -22,20 +36,19 @@ void setup()
 					   { return static_cast<uint8_t>(sizeof(size_t)); }, UID::Port_PointerSize);
 	BindFunctionToPort([](UID Subclass, uint8_t ProgressPort)
 					   {
-			const auto Iterator = ObjectCreators.find(Subclass);
-			if (Iterator == ObjectCreators.end())
-				return static_cast<RootObject*>(nullptr);
-			RootObject* const NewObject = Iterator->second();
-			AllObjects.insert(NewObject);
-			return NewObject; }, UID::Port_ObjectCreate);
-	BindFunctionToPort([](RootObject *O)
+			const auto Iterator = StepConstructors<PublicSteps>::value.find(Subclass);
+			if (Iterator == StepConstructors<PublicSteps>::value.end())
+				return static_cast<Step*>(nullptr);
+			Step*const NewStep = Iterator->second();
+			RootSteps.insert(NewStep);
+			return NewStep; }, UID::Port_ObjectCreate);
+	BindFunctionToPort([](Step *O)
 					   {
-			if (AllObjects.contains(O))
+			if (RootSteps.contains(O))
 			{
-				noInterrupts();
-				const UID Result = O->Start();
-				interrupts();
-				return Result;
+				if(O->Start())
+				FinishCallback();
+				return UID::Signal_ObjectStarted;
 			}
 			else
 				return UID::Exception_InvalidObject; }, UID::Port_ObjectStart);
@@ -48,11 +61,11 @@ void setup()
 			const struct RestoreHeader
 			{
 				uint8_t RemotePort;
-				RootObject* O;
+				Step* O;
 				char* ProgressInfo() const { return (char*)(this + 1); }
 			} &Arguments = *reinterpret_cast<RestoreHeader*>(Message.data());
 #pragma pack(pop)
-			if (AllObjects.contains(Arguments.O))
+			if (RootSteps.contains(Arguments.O))
 			{
 				noInterrupts();
 				Async_stream_IO::Send(Arguments.O->Restore(std::span<const char>(Arguments.ProgressInfo(), MessageSize - sizeof(RestoreHeader))), Arguments.RemotePort);
@@ -60,9 +73,9 @@ void setup()
 			}
 			else
 				Async_stream_IO::Send(UID::Exception_InvalidObject, Arguments.RemotePort); }, static_cast<uint8_t>(UID::Port_ObjectRestore));
-	BindFunctionToPort([](RootObject *O, uint16_t Times)
+	BindFunctionToPort([](Step *O, uint16_t Times)
 					   {
-			if (AllObjects.contains(O))
+			if (RootSteps.contains(O))
 			{
 				noInterrupts();
 				const UID Result = O->Repeat(Times);
@@ -71,9 +84,9 @@ void setup()
 			}
 			else
 				return UID::Exception_InvalidObject; }, UID::Port_ObjectRepeat);
-	BindFunctionToPort([](RootObject *O)
+	BindFunctionToPort([](Step *O)
 					   {
-			if (AllObjects.contains(O))
+			if (RootSteps.contains(O))
 			{
 				noInterrupts();
 				const UID Result = O->Pause();
@@ -82,9 +95,9 @@ void setup()
 			}
 			else
 				return UID::Exception_InvalidObject; }, UID::Port_ObjectPause);
-	BindFunctionToPort([](RootObject *O)
+	BindFunctionToPort([](Step *O)
 					   {
-			if (AllObjects.contains(O))
+			if (RootSteps.contains(O))
 			{
 				noInterrupts();
 				const UID Result = O->Continue();
@@ -93,9 +106,9 @@ void setup()
 			}
 			else
 				return UID::Exception_InvalidObject; }, UID::Port_ObjectContinue);
-	BindFunctionToPort([](RootObject *O)
+	BindFunctionToPort([](Step *O)
 					   {
-			if (AllObjects.contains(O))
+			if (RootSteps.contains(O))
 			{
 				noInterrupts();
 				const UID Result = O->Abort();
@@ -104,9 +117,9 @@ void setup()
 			}
 			else
 				return UID::Exception_InvalidObject; }, UID::Port_ObjectAbort);
-	BindFunctionToPort([](RootObject *O, uint8_t RemotePort)
+	BindFunctionToPort([](Step *O, uint8_t RemotePort)
 					   {
-			if (AllObjects.contains(O))
+			if (RootSteps.contains(O))
 			{
 				std::dynarray<char> Information;
 				noInterrupts();
@@ -122,9 +135,9 @@ void setup()
 			}
 			else
 				return UID::Exception_InvalidObject; }, UID::Port_ObjectGetInformation);
-	BindFunctionToPort([](RootObject *O)
+	BindFunctionToPort([](Step *O)
 					   {
-			if (AllObjects.erase(O))
+			if (RootSteps.erase(O))
 			{
 				noInterrupts();
 				delete O;
@@ -136,10 +149,10 @@ void setup()
 	BindFunctionToPort([](uint8_t ToPort)
 					   { Async_stream_IO::Send([](const std::move_only_function<void(const void *Message, uint8_t Size) const> &MessageSender)
 											   {
-				const size_t MessageSize = sizeof(RootObject*) * AllObjects.size() + sizeof(uint8_t);
+				const size_t MessageSize = sizeof(Step*) * RootSteps.size() + sizeof(uint8_t);
 				std::unique_ptr<uint8_t[]>Message = std::make_unique_for_overwrite<uint8_t[]>(MessageSize);
-				Message[0] = AllObjects.size();
-				std::copy(AllObjects.cbegin(), AllObjects.cend(), reinterpret_cast<RootObject**>(Message.get() + 1));
+				Message[0] = RootSteps.size();
+				std::copy(RootSteps.cbegin(), RootSteps.cend(), reinterpret_cast<Step**>(Message.get() + 1));
 				MessageSender(Message.get(), MessageSize); }, ToPort); },
 					   UID::Port_AllObjects);
 #ifdef ARDUINO_ARCH_AVR
@@ -147,18 +160,13 @@ void setup()
 								  { std::ArduinoUrng::seed(RandomSeed); });
 #endif
 }
-std::map<uint8_t, _PinInterrupt> _PinInterrupt::RunningMonitors;
+std::set<std::move_only_function<void() const> const *> _PendingInterrupts;
 void loop()
 {
 	noInterrupts();
-	for (auto &M : _PinInterrupt::RunningMonitors)
-	{
-		if (M.second.Pending)
-		{
-			M.second.Handler();
-			M.second.Pending = false;
-		}
-	}
+	for (auto M : _PendingInterrupts)
+		M->operator()();
+	_PendingInterrupts.clear();
 	interrupts();
 	Async_stream_IO::ExecuteTransactionsInQueue();
 }

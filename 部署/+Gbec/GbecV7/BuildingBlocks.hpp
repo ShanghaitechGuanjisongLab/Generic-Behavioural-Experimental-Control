@@ -5,15 +5,10 @@
 #include <chrono>
 #include <unordered_map>
 #include <ostream>
-#include <set>
-#include <map>
 #include <cmath>
 #include <random>
+#include <set>
 #include "Async_stream_IO.hpp"
-struct AutomaticallyEndedTest
-{
-	virtual void Run(uint16_t RepeatTimes) = 0;
-};
 // 通用步骤接口。实际步骤不一定实现所有方法。
 struct Step
 {
@@ -40,9 +35,13 @@ struct Step
 	}
 	virtual ~Step() {}
 	// 将步骤信息写入流中
-	static void WriteInfo(std::ostream &OutStream)
+	static void WriteInfoS(std::ostream &OutStream)
 	{
 		OutStream << static_cast<uint8_t>(UID::Type_Empty);
+	}
+	virtual void WriteInfoD(std::ostream &OutStream) const
+	{
+		WriteInfoS(OutStream);
 	}
 };
 using NullStep = Step;
@@ -69,11 +68,15 @@ struct DigitalWrite : Step
 		Quick_digital_IO_interrupt::DigitalWrite<Pin, HighOrLow>();
 		return true;
 	}
-	static void WriteInfo(std::ostream &OutStream)
+	static void WriteInfoS(std::ostream &OutStream)
 	{
 		OutStream << WriteStructSize(3) << WriteStepID(UID::Step_DigitalWrite) << WriteField(Pin) << WriteField(HighOrLow);
 	}
 	using Repeatable = DigitalWrite<Pin, HighOrLow>;
+	void WriteInfoD(std::ostream &OutStream) const override
+	{
+		WriteInfoS(OutStream);
+	}
 };
 
 // 向串口写出UID
@@ -88,18 +91,22 @@ struct SerialWrite : Step
 		Async_stream_IO::Send(Value, static_cast<uint8_t>(UID::Port_Signal));
 		return true;
 	}
-	static void WriteInfo(std::ostream &OutStream)
+	static void WriteInfoS(std::ostream &OutStream)
 	{
 		OutStream << WriteStructSize(2) << WriteStepID(UID::Step_SerialWrite) << WriteField(Value);
 	}
 	using Repeatable = SerialWrite<Value>;
+	void WriteInfoD(std::ostream &OutStream) const override
+	{
+		WriteInfoS(OutStream);
+	}
 };
 
 template <uint16_t Count>
 struct Milliseconds
 {
 	static constexpr std::chrono::milliseconds Get() { return std::chrono::milliseconds(Count) }
-	static void WriteInfo(std::ostream &OutStream)
+	static void WriteInfoS(std::ostream &OutStream)
 	{
 		OutStream << static_cast<uint8_t>(UID::Type_Milliseconds) << Count;
 	}
@@ -108,7 +115,7 @@ template <uint8_t Count>
 struct Seconds
 {
 	static constexpr std::chrono::seconds Get() { return std::chrono::milliseconds(Count) }
-	static void WriteInfo(std::ostream &OutStream)
+	static void WriteInfoS(std::ostream &OutStream)
 	{
 		OutStream << static_cast<uint8_t>(UID::Type_Seconds) << Count;
 	}
@@ -124,14 +131,15 @@ public:
 		constexpr float MinCount = Min::Get().count();
 		return DurationType(pow(std::chrono::duration_cast<DurationType>(Min::Get()).count() / MinCount, random() / RANDOM_MAX) * MinCount);
 	}
-	static void WriteInfo(std::ostream &OutStream)
+	static void WriteInfoS(std::ostream &OutStream)
 	{
 		OutStream << WriteStructSize(2) << static_cast<uint8_t>(UID::Property_Min);
-		Min::WriteInfo(OutStream);
+		Min::WriteInfoS(OutStream);
 		OutStream << static_cast<uint8_t>(UID::Property_Max);
-		Max::WriteInfo(OutStream);
+		Max::WriteInfoS(OutStream);
 	}
 };
+struct InfiniteDuration;
 #define WriteDuration(FieldName, Duration) static_cast<uint8_t>(UID::Property_##FieldName) << static_cast<uint8_t>(Duration::Type) << Duration::Value.count()
 // 等待一段时间，不做任何事
 template <typename Duration>
@@ -159,9 +167,13 @@ struct Delay : Step
 		Timer->Stop();
 		Timer->Allocatable = true;
 	}
-	static void WriteInfo(std::ostream &OutStream)
+	static void WriteInfoS(std::ostream &OutStream)
 	{
 		OutStream << WriteStructSize(2) << WriteStepID(UID::Step_Delay) << WriteDuration(Duration, Duration);
+	}
+	void WriteInfoD(std::ostream &OutStream) const override
+	{
+		WriteInfoS(OutStream);
 	}
 	struct Repeatable : Delay<Duration>
 	{
@@ -185,30 +197,53 @@ protected:
 	std::move_only_function<void() const> const TimerCallback;
 	Timers_one_for_all::TimerClass *Timer;
 };
+template <>
+struct Delay<InfiniteDuration> : Step
+{
+	bool Start() override
+	{
+		return false;
+	}
+	static void WriteInfoS(std::ostream &OutStream)
+	{
+		OutStream << WriteStructSize(2) << WriteStepID(UID::Step_Delay) << static_cast<uint8_t>(UID::Property_Duration) << static_cast<uint8_t>(UID::Type_Infinite);
+	}
+	void WriteInfoD(std::ostream &OutStream) const override
+	{
+		WriteInfoS(OutStream);
+	}
+	using Repeatable = Delay<InfiniteDuration>;
+};
 
-// 使用此容器时必须禁止中断
 extern std::move_only_function<void() const> const NullCallback;
 #define WriteStep(FieldName)                         \
 	static_cast<uint8_t>(UID::Property_##FieldName); \
-	FieldName::WriteInfo(OutStream);
+	FieldName::WriteInfoS(OutStream);
 
 // 引脚监视模块
+extern std::set<std::move_only_function<void() const> const *> _PendingInterrupts;
+template <uint8_t Pin>
 struct _PinInterrupt
 {
-	uint8_t const Pin;
-	bool Pending = false;
-	std::move_only_function<void() const> const &Handler;
-	_PinInterrupt(uint8_t Pin, std::move_only_function<void() const> const &Handler) : Pin(Pin), Handler(Handler)
+	static std::set<std::move_only_function<void() const> const *> Handlers;
+	static void AddHandler(std::move_only_function<void() const> const &Handler)
 	{
-		Quick_digital_IO_interrupt::AttachInterrupt<RISING>(Pin, [&Pending = Pending]
-															{ Pending = true; });
+		if (Handlers.empty())
+			Quick_digital_IO_interrupt::AttachInterrupt<RISING>(Pin, []()
+																{ for (auto H : Handlers)
+																   _PendingInterrupts.insert(H); });
+		Handlers.insert(&Handler);
 	}
-	~_PinInterrupt()
+	static void RemoveHandler(std::move_only_function<void() const> const &Handler)
 	{
-		Quick_digital_IO_interrupt::DetachInterrupt(Pin);
+		Handlers.erase(&Handler);
+		if (Handlers.empty())
+			Quick_digital_IO_interrupt::DetachInterrupt(Pin);
+		_PendingInterrupts.erase(&Handler);
 	}
-	static std::map<uint8_t, _PinInterrupt> RunningMonitors;
 };
+template <uint8_t Pin>
+std::set<std::move_only_function<void() const> const *> _PinInterrupt<Pin>::Handlers;
 
 template <typename StepType, typename = bool>
 struct _ContainTrials
@@ -260,58 +295,22 @@ struct Trial : TrialStep
 			return Start();
 		}
 	}
-	static void WriteInfo(std::ostream &OutStream)
+	static void WriteInfoS(std::ostream &OutStream)
 	{
 		OutStream << WriteStructSize(3) << WriteStepID(UID::Step_Trial) << WriteField(TrialID) << WriteStep(TrialStep);
 	}
+	void WriteInfoD(std::ostream &OutStream) const override
+	{
+		WriteInfoS(OutStream);
+	}
 };
-// 开始监视引脚，每次检测到高电平执行Reporter步骤。此步骤开始后立即结束，但监视会持续在后台执行，直到调用StopMonitor步骤。
-template <uint8_t Pin, typename Reporter>
-struct StartMonitor : Step
-{
-	StartMonitor(std::move_only_function<void() const> const &)
-	{
-		static_assert(!_ContainTrials<Reporter>::value, "StartMonitor步骤的Reporter不能包含Trial");
-		Quick_digital_IO_interrupt::PinMode<Pin, INPUT>();
-	}
-	bool Start() override
-	{
-		_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
-		return true;
-	}
-	static void WriteInfo(std::ostream &OutStream)
-	{
-		OutStream << WriteStructSize(3) << WriteStepID(UID::Step_StartMonitor) << WriteField(Pin) << WriteStep(Reporter);
-	}
-	using Repeatable = StartMonitor<Pin, Reporter>;
-
-protected:
-	std::move_only_function<void() const> const MonitorCallback{[R = Reporter(NullCallback)]()
-																{ R.Start(); }};
-};
-// 与StartMonitor相对应的步骤，停止监视引脚
-template <uint8_t Pin>
-struct StopMonitor : Step
-{
-	StopMonitor(std::move_only_function<void() const> const &) {}
-	bool Start() override
-	{
-		_PinInterrupt::RunningMonitors.erase(Pin);
-		return true;
-	}
-	static void WriteInfo(std::ostream &OutStream)
-	{
-		OutStream << WriteStructSize(2) << WriteStepID(UID::Step_StopMonitor) << WriteField(Pin);
-	}
-	using Repeatable = StopMonitor<Pin>;
-};
-// 执行Repeatee步骤，同时监控引脚。如果Repeatee执行完之前检测到引脚电平，放弃当前执行并重启。
+// 执行Repeatee步骤，同时监控引脚。如果Repeatee执行完之前检测到引脚电平，放弃当前执行并重启。Repeatee步骤不能包含Trial。对于包含随机内容的步骤，将不会重新抽取随机，而是保持一致。
 template <typename Repeatee, uint8_t Pin>
 struct RepeatIfPin : Repeatee::Repeatable // 有些步骤的Repeatable不继承自那个步骤类型
 {
 	RepeatIfPin(std::move_only_function<void() const> const &ParentCallback) : ChildCallback{[ParentCallback]()
 																							 {
-			_PinInterrupt::RunningMonitors.erase(Pin);
+			_PinInterrupt<Pin>::RemoveHandler(MonitorCallback);
 			ParentCallback(); }},
 																			   Repeatee::Repeatable(ChildCallback), MonitorCallback{[this]()
 																																	{
@@ -324,7 +323,7 @@ struct RepeatIfPin : Repeatee::Repeatable // 有些步骤的Repeatable不继承�
 	{
 		if (Repeatee::Repeatable::Start())
 			return true;
-		_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
+		_PinInterrupt<Pin>::AddHandler(MonitorCallback);
 		return false;
 	}
 	struct Repeatable : RepeatIfPin<Repeatee::Repeatable, Pin>
@@ -334,7 +333,7 @@ struct RepeatIfPin : Repeatee::Repeatable // 有些步骤的Repeatable不继承�
 		{
 			if (Repeatee::Repeatable::Repeat())
 				return true;
-			_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
+			_PinInterrupt<Pin>::AddHandler(MonitorCallback);
 			return false;
 		}
 		using Repeatable = Repeatable;
@@ -342,21 +341,25 @@ struct RepeatIfPin : Repeatee::Repeatable // 有些步骤的Repeatable不继承�
 	void Pause() const override
 	{
 		Repeatee::Repeatable::Pause();
-		_PinInterrupt::RunningMonitors.erase(Pin);
+		_PinInterrupt<Pin>::RemoveHandler(MonitorCallback);
 	}
 	void Continue() const override
 	{
 		Repeatee::Repeatable::Continue();
-		_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
+		_PinInterrupt<Pin>::AddHandler(MonitorCallback);
 	}
 	void Abort() const override
 	{
 		Repeatee::Repeatable::Abort();
-		_PinInterrupt::RunningMonitors.erase(Pin);
+		_PinInterrupt<Pin>::RemoveHandler(MonitorCallback);
 	}
-	static void WriteInfo(std::ostream &OutStream)
+	static void WriteInfoS(std::ostream &OutStream)
 	{
 		OutStream << WriteStructSize(3) << WriteStepID(UID::Step_RepeatIfPin) << WriteField(Pin) << WriteStep(Repeatee);
+	}
+	void WriteInfoD(std::ostream &OutStream) const override
+	{
+		WriteInfoS(OutStream);
 	}
 
 protected:
@@ -370,24 +373,28 @@ struct _SwitchIfPin : Step
 	{
 		Current->Pause();
 		if (Current == &From)
-			_PinInterrupt::RunningMonitors.erase(Pin);
+			_PinInterrupt<Pin>::RemoveHandler(MonitorCallback);
 	}
 	void Continue() const override
 	{
 		Current->Continue();
 		if (Current == &From)
-			_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
+			_PinInterrupt<Pin>::AddHandler(MonitorCallback);
 	}
 	void Abort() const override
 	{
 		Current->Abort();
 		if (Current == &From)
-			_PinInterrupt::RunningMonitors.erase(Pin);
+			_PinInterrupt<Pin>::RemoveHandler(MonitorCallback);
 	}
-	static void WriteInfo(std::ostream &OutStream)
+	static void WriteInfoS(std::ostream &OutStream)
 	{
 		OutStream << WriteStructSize(4) << WriteStepID(UID::Step_SwitchIfPin) << WriteStep(SwitchFrom);
 		OutStream << WriteField(Pin) << WriteStep(SwitchTo);
+	}
+	void WriteInfoD(std::ostream &OutStream) const override
+	{
+		WriteInfoS(OutStream);
 	}
 
 protected:
@@ -398,7 +405,7 @@ protected:
 	SwitchTo To;
 	_SwitchIfPin(std::move_only_function<void() const> const &ParentCallback, std::move_only_function<void() const> &&MonitorCallback) : FromCallback([ParentCallback]()
 																																					  {
-		_PinInterrupt::RunningMonitors.erase(Pin);
+		_PinInterrupt<Pin>::RemoveHandler(MonitorCallback);
 		ParentCallback(); }),
 																																		 MonitorCallback(std::move(MonitorCallback)), From{FromCallback}, To{ParentCallback}
 	{
@@ -415,7 +422,7 @@ struct SwitchIfPin : _SwitchIfPin<SwitchFrom, Pin, SwitchTo>
 		Repeatable(std::move_only_function<void() const> const &ParentCallback) : _SwitchIfPin<SwitchFrom::Repeatable, Pin, SwitchTo::Repeatable>(ParentCallback, [this, ParentCallback]()
 																																				  {
 			From.Abort();
-			_PinInterrupt::RunningMonitors.erase(Pin);
+			_PinInterrupt<Pin>::RemoveHandler(MonitorCallback);
 			if (Repeating?To.Repeat():To.Start())
 				ParentCallback();
 			else
@@ -426,14 +433,14 @@ struct SwitchIfPin : _SwitchIfPin<SwitchFrom, Pin, SwitchTo>
 				return true;
 			Current = &From;
 			Repeating = false;
-			_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
+			_PinInterrupt<Pin>::AddHandler(MonitorCallback);
 			return false;
 		}
 		bool Repeat() override
 		{
 			if (From.Repeat())
 				return true;
-			_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
+			_PinInterrupt<Pin>::AddHandler(MonitorCallback);
 			Current = &From;
 			Repeating = true;
 			return false;
@@ -446,7 +453,7 @@ struct SwitchIfPin : _SwitchIfPin<SwitchFrom, Pin, SwitchTo>
 	SwitchIfPin(std::move_only_function<void() const> const &ParentCallback) : _SwitchIfPin<SwitchFrom, Pin, SwitchTo>(ParentCallback, [this, ParentCallback]()
 																													   {
 		From.Abort();
-		_PinInterrupt::RunningMonitors.erase(Pin);
+		_PinInterrupt<Pin>::RemoveHandler(MonitorCallback);
 		if (To.Start())
 			ParentCallback();
 		else
@@ -456,7 +463,7 @@ struct SwitchIfPin : _SwitchIfPin<SwitchFrom, Pin, SwitchTo>
 		if (From.Start())
 			return true;
 		Current = &From;
-		_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
+		_PinInterrupt<Pin>::AddHandler(MonitorCallback);
 		return false;
 	}
 };
@@ -470,19 +477,19 @@ struct _AppendIfPin : Step
 	{
 		Current->Pause();
 		if (Current == &UnconditionalStep)
-			_PinInterrupt::RunningMonitors.erase(Pin);
+			_PinInterrupt<Pin>::RemoveHandler(MonitorCallback);
 	}
 	void Continue() const override
 	{
 		Current->Continue();
 		if (Current == &UnconditionalStep)
-			_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
+			_PinInterrupt<Pin>::AddHandler(MonitorCallback);
 	}
 	void Abort() const override
 	{
 		Current->Abort();
 		if (Current == &UnconditionalStep)
-			_PinInterrupt::RunningMonitors.erase(Pin);
+			_PinInterrupt<Pin>::RemoveHandler(MonitorCallback);
 	}
 
 protected:
@@ -507,7 +514,7 @@ struct AppendIfPin : Step
 	{
 		Repeatable(std::move_only_function<void() const> const &ParentCallback) : _AppendIfPin<Unconditional::Repeatable, Pin, Conditional::Repeatable>(ParentCallback, [this, ParentCallback]()
 																																						{
-			_PinInterrupt::RunningMonitors.erase(Pin);
+			_PinInterrupt<Pin>::RemoveHandler(MonitorCallback);
 			if (!PinDetected||(Repeating?ConditionalStep.Repeat():ConditionalStep.Start()))
 				ParentCallback();
 			else
@@ -518,7 +525,7 @@ struct AppendIfPin : Step
 				return true;
 			Current = &UnconditionalStep;
 			PinDetected = false;
-			_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
+			_PinInterrupt<Pin>::AddHandler(MonitorCallback);
 			Repeating = false;
 			return false;
 		}
@@ -526,7 +533,7 @@ struct AppendIfPin : Step
 		{
 			if (UnconditionalStep.Repeat())
 				return true;
-			_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
+			_PinInterrupt<Pin>::AddHandler(MonitorCallback);
 			PinDetected = false;
 			Current = &UnconditionalStep;
 			Repeating = true;
@@ -538,7 +545,7 @@ struct AppendIfPin : Step
 	};
 	AppendIfPin(std::move_only_function<void() const> const &ParentCallback) : _AppendIfPin<Unconditional, Pin, Conditional>(ParentCallback, [this, ParentCallback]()
 																															 {
-		_PinInterrupt::RunningMonitors.erase(Pin);
+		_PinInterrupt<Pin>::RemoveHandler(MonitorCallback);
 		if (!PinDetected || ConditionalStep.Start())
 			ParentCallback();
 		else
@@ -549,7 +556,7 @@ struct AppendIfPin : Step
 			return true;
 		Current = &UnconditionalStep;
 		PinDetected = false;
-		_PinInterrupt::RunningMonitors[Pin] = {Pin, MonitorCallback};
+		_PinInterrupt<Pin>::AddHandler(MonitorCallback);
 		return false;
 	}
 };
@@ -575,9 +582,13 @@ struct Async : AsyncStep
 			return true;
 		}
 	};
-	static void WriteInfo(std::ostream &OutStream)
+	static void WriteInfoS(std::ostream &OutStream)
 	{
 		OutStream << WriteStructSize(2) << WriteStepID(UID::Step_Async) << WriteStep(AsyncStep);
+	}
+	void WriteInfoD(std::ostream &OutStream) const override
+	{
+		WriteInfoS(OutStream);
 	}
 };
 template <bool V, bool... Vs>
@@ -648,10 +659,14 @@ struct _Sequential_Base : Step
 	{
 		CurrentStep->Abort();
 	}
-	static void WriteInfo(std::ostream &OutStream)
+	static void WriteInfoS(std::ostream &OutStream)
 	{
 		OutStream << WriteStructSize(2) << WriteStepID(UID::Step_Sequential) << static_cast<uint8_t>(UID::Property_Steps) << static_cast<uint8_t>(UID::Type_Cell) << static_cast<uint8_t>(sizeof...(Steps));
-		int _[] = {(Steps::WriteInfo(OutStream), 0)...};
+		int _[] = {(Steps::WriteInfoS(OutStream), 0)...};
+	}
+	void WriteInfoD(std::ostream &OutStream) const override
+	{
+		WriteInfoS(OutStream);
 	}
 
 protected:
@@ -740,6 +755,7 @@ struct _Sequential_WithTrials : _Sequential_Base<Steps...>
 	{
 		static_assert(false, "Sequential::Repeatable不允许包含Trial");
 	};
+	// 扩展指定每个步骤的重复次数。上一个步骤的所有重复结束后才会执行下一个步骤。只有包含Trial的步骤支持重复。
 	template <uint16_t... Repeats>
 	struct WithRepeats : Step
 	{
@@ -815,10 +831,14 @@ struct _Sequential_WithTrials : _Sequential_Base<Steps...>
 		{
 			CurrentStep->StepPointer->Abort();
 		}
-		static void WriteInfo(std::ostream &OutStream)
+		static void WriteInfoS(std::ostream &OutStream)
 		{
 			OutStream << WriteStructSize(2) << WriteStepID(UID::Step_Sequential) << static_cast<uint8_t>(UID::Property_Steps) << static_cast<uint8_t>(UID::Type_Array) << static_cast<uint8_t>(sizeof...(Steps));
-			int _[] = {(OutStream << WriteStructSize(2) << static_cast<uint8_t>(UID::Property_Step), Steps::WriteInfo(OutStream), OutStream << static_cast<uint8_t>(UID::Property_Repeat) << static_cast<uint8_t>(UID::Type_UInt16) << Repeats, 0)...};
+			int _[] = {(OutStream << WriteStructSize(2) << static_cast<uint8_t>(UID::Property_Step), Steps::WriteInfoS(OutStream), OutStream << static_cast<uint8_t>(UID::Property_Repeat) << static_cast<uint8_t>(UID::Type_UInt16) << Repeats, 0)...};
+		}
+		void WriteInfoD(std::ostream &OutStream) const override
+		{
+			WriteInfoS(OutStream);
 		}
 		struct Repeatable
 		{
@@ -838,6 +858,7 @@ protected:
 };
 template <typename... Steps>
 using _Sequential_Selector = std::conditional_t<_Any<_ContainTrials<Steps>::value...>::value, _Sequential_WithTrials<Steps...>, _Sequential_Simple<Steps...>>;
+// 按顺序执行步骤。支持扩展::WithRepeats，以将每个步骤重复执行多次
 template <typename... Steps>
 struct Sequential : _Sequential_Selector<Steps...>
 {
@@ -877,10 +898,14 @@ struct _Random_Base : Step
 	{
 		CurrentStep->Abort();
 	}
-	static void WriteInfo(std::ostream &OutStream)
+	static void WriteInfoS(std::ostream &OutStream)
 	{
 		OutStream << WriteStructSize(2) << WriteStepID(UID::Step_Random) << static_cast<uint8_t>(UID::Property_Steps) << static_cast<uint8_t>(UID::Type_Cell) << static_cast<uint8_t>(sizeof...(Steps));
-		int _[] = {(Steps::WriteInfo(OutStream), 0)...};
+		int _[] = {(Steps::WriteInfoS(OutStream), 0)...};
+	}
+	void WriteInfoD(std::ostream &OutStream) const override
+	{
+		WriteInfoS(OutStream);
 	}
 
 protected:
@@ -972,6 +997,7 @@ struct _Random_WithTrials : _Random_Base<Steps...>
 	{
 		static_assert(false, "Random::Repeatable不允许包含Trial");
 	};
+	// 扩展指定每个步骤的随机重复次数。所有步骤将彼此随机穿插，最终重复各自指定的次数。
 	template <uint16_t... Repeats>
 	struct WithRepeats : Step
 	{
@@ -1048,10 +1074,14 @@ struct _Random_WithTrials : _Random_Base<Steps...>
 		{
 			CurrentStep->Abort();
 		}
-		static void WriteInfo(std::ostream &OutStream)
+		static void WriteInfoS(std::ostream &OutStream)
 		{
 			OutStream << WriteStructSize(2) << WriteStepID(UID::Step_Random) << static_cast<uint8_t>(UID::Property_Steps) << static_cast<uint8_t>(UID::Type_Array) << static_cast<uint8_t>(sizeof...(Steps));
-			int _[] = {(OutStream << WriteStructSize(2) << static_cast<uint8_t>(UID::Property_Step), Steps::WriteInfo(OutStream), OutStream << static_cast<uint8_t>(UID::Property_Repeat) << static_cast<uint8_t>(UID::Type_UInt16) << Repeats, 0)...};
+			int _[] = {(OutStream << WriteStructSize(2) << static_cast<uint8_t>(UID::Property_Step), Steps::WriteInfoS(OutStream), OutStream << static_cast<uint8_t>(UID::Property_Repeat) << static_cast<uint8_t>(UID::Type_UInt16) << Repeats, 0)...};
+		}
+		void WriteInfoD(std::ostream &OutStream) const override
+		{
+			WriteInfoS(OutStream);
 		}
 		struct Repeatable
 		{
@@ -1092,9 +1122,113 @@ protected:
 };
 template <typename... Steps>
 using _Random_Selector = std::conditional_t<_Any<_ContainTrials<Steps>::value...>::value, _Random_WithTrials<Steps...>, _Random_Simple<Steps...>>;
+// 按随机顺序执行步骤。支持::withRepeats扩展，以指定每个步骤的随机重复次数。
 template <typename... Steps>
 struct Random : _Random_Selector<Steps...>
 {
 	using _Random_Selector<Steps...>::_Random_Selector;
 };
-#define UidPairClass(Uid, Class) {UID::Uid, []() { return new Class; }}
+
+// 将任意函数指针包装为步骤。可以额外指定一个自定义UID作为标识信息。
+template <void (*Custom)(), UID FunctionID = UID::Step_CustomFunction>
+struct FunctionToStep : Step
+{
+	FunctionToStep(std::move_only_function<void() const> const &) {}
+	bool Start() override
+	{
+		Custom();
+		return true;
+	}
+	static void WriteInfoS(std::ostream &OutStream)
+	{
+		OutStream << static_cast<uint8_t>(UID::Type_UID) << static_cast<uint8_t>(FunctionID);
+	}
+	void WriteInfoD(std::ostream &OutStream) const override
+	{
+		WriteInfoS(OutStream);
+	}
+	using Repeatable = FunctionToStep<Custom, FunctionID>;
+};
+
+// 执行一个Abortable步骤。如果该步骤被Abort，将转而执行Do步骤。此机制可用于执行自定义的步骤后清理工作。
+template <typename Abortable, typename WhenAbort>
+struct DoWhenAborted : Abortable
+{
+	WhenAbort WA;
+	DoWhenAborted(std::move_only_function<void() const> const &ParentCallback) : Abortable{ParentCallback}, WA{ParentCallback} {}
+	void Abort() const override
+	{
+		Abortable::Abort();
+		WA.Start();
+	}
+	static void WriteInfoS(std::ostream &OutStream)
+	{
+		OutStream << WriteStructSize(3) << WriteStepID(UID::Step_DoWhenAborted) << WriteStep(Abortable);
+		OutStream << WriteStep(WhenAbort);
+	}
+	void WriteInfoD(std::ostream &OutStream) const override
+	{
+		WriteInfoS(OutStream);
+	}
+	using Repeatable = DoWhenAborted<Abortable, WhenAbort>;
+};
+
+// 在后台无限重复Repeatee，直到执行StopBackgroundRepeat为止。Repeatee的Start方法不能总是返回true，否则此步骤永不结束。如果Repeatee包含随机内容，每次都会重新随机抽取。
+template <typename Repeatee, UID BackgroundID = UID::BackgroundID_Default>
+struct StartBackgroundRepeat : Repeatee
+{
+	static StartBackgroundRepeat<Repeatee, BackgroundID> const *RunningInstance;
+	StartBackgroundRepeat(std::move_only_function<void() const> const &) : Repeatee([]
+																					{
+			while(Repeatee::Start()); }) {}
+	bool Start() override
+	{
+		while (Repeatee::Start())
+			;
+		RunningInstance = this;
+		return true;
+	}
+	void Abort() const override
+	{
+		Repeatee::Abort();
+		RunningInstance = nullptr;
+	}
+	static void WriteInfoS(std::ostream &OutStream)
+	{
+		OutStream << WriteStructSize(3) << WriteStepID(UID::Step_StartBackgroundRepeat) << WriteStep(Repeatee);
+		OutStream << WriteField(BackgroundID);
+	}
+	void WriteInfoD(std::ostream &OutStream) const override
+	{
+		WriteInfoS(OutStream);
+	}
+	using Repeatable = StartBackgroundRepeat<Repeatee, BackgroundID>;
+};
+template <typename Repeatee, UID BackgroundID>
+StartBackgroundRepeat<Repeatee, BackgroundID> const *StartBackgroundRepeat<Repeatee, BackgroundID>::RunningInstance = nullptr;
+
+template <typename Repeatee, UID BackgroundID = UID::BackgroundID_Default>
+struct StopBackgroundRepeat : Step
+{
+	bool Start() override
+	{
+		StartBackgroundRepeat<Repeatee, BackgroundID>::RunningInstance->Abort();
+		return true;
+	}
+	using Repeatable = StopBackgroundRepeat<Repeatee, BackgroundID>;
+	static void WriteInfoS(std::ostream &OutStream)
+	{
+		OutStream << WriteStructSize(3) << WriteStepID(UID::Step_StartBackgroundRepeat) << WriteStep(Repeatee);
+		OutStream << WriteField(BackgroundID);
+	}
+	void WriteInfoD(std::ostream &OutStream) const override
+	{
+		WriteInfoS(OutStream);
+	}
+};
+template <UID StepID, typename Step, typename = decltype(new Step)>
+struct Pair
+{
+	static constexpr UID ID = StepID;
+	using StepType = Step;
+};

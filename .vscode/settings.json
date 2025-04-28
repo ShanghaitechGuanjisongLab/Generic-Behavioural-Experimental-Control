@@ -68,7 +68,8 @@
 		"chrono": "cpp",
 		"ratio": "cpp",
 		"string_view": "cpp",
-		"mutex": "cpp"
+		"mutex": "cpp",
+		"iomanip": "cpp"
 	},
 	"C_Cpp.formatting": "clangFormat"
 }

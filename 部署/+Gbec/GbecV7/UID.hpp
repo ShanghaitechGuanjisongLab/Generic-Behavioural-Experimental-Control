@@ -75,6 +75,7 @@ enum class UID : uint8_t
 	Signal_TrialStart,
 	Signal_ObjectFinished,
 	Signal_ObjectStarted,
+	Signal_ObjectRestored,
 
 	Test_BlueLed,
 

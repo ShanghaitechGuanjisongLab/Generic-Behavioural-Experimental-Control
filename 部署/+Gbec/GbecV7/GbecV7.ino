@@ -3,22 +3,60 @@
 #include <map>
 #include <vector>
 
-static std::move_only_function<void()const> const FinishCallback = []()
+static std::move_only_function<void() const> const FinishCallback = []()
 {
 	Async_stream_IO::Send(UID::Signal_ObjectFinished, static_cast<uint8_t>(UID::Port_Signal));
 };
+struct RootStep
+{
+	template <typename StepType>
+	static RootStep New()
+	{
+		RootStep Object;
+		Object.Content = std::make_unique<StepType>([RepeatLeft]()
+	{
 
+	});
+	}
+	void Start()
+	{
+		if (Content->Start())
+			FinishCallback();
+		else
+			Async_stream_IO::Send(UID::Signal_ObjectStarted, static_cast<uint8_t>(UID::Port_Signal));
+	}
+	void Restore(std::unordered_map<UID, uint16_t> &&TD)
+	{
+		if (Content->Restore(TrialsDone = std::move(TD)))
+			FinishCallback();
+		else
+			Async_stream_IO::Send(UID::Signal_ObjectRestored, static_cast<uint8_t>(UID::Port_Signal));
+	}
+	void Repeat(uint16_t Times)
+	{
+		if (Content->Repeat(Times))
+			FinishCallback();
+		else
+			Async_stream_IO::Send(UID::Signal_ObjectRestored, static_cast<uint8_t>(UID::Port_Signal));
+	}
+	static std::set<RootStep *> Existing;
+
+protected:
+	std::unique_ptr<Step> Content;
+	std::unordered_map<UID, uint16_t> TrialsDone;
+	uint16_t RepeatLeft = 0;
+	RootStep() {}
+};
 template <typename T>
 struct StepConstructors;
 template <typename... Pairs>
 struct StepConstructors<std::tuple<Pairs...>>
 {
-	static std::unordered_map<UID, Step *(*)()> value;
+	static std::unordered_map<UID, RootStep (*)()> value;
 };
 template <typename... Pairs>
-std::unordered_map<UID, Step *(*)()> StepConstructors<std::tuple<Pairs...>>::value{{Pairs::ID, []()
-																					{ return new typename Pairs::StepType(FinishCallback); }...}};
-static std::set<Step *> RootSteps;
+std::unordered_map<UID, RootStep (*)()> StepConstructors<std::tuple<Pairs...>>::value{{Pairs::ID, []()
+																					   { return new typename Pairs::StepType(FinishCallback); }...}};
 
 template <typename T>
 inline void BindFunctionToPort(T &&Function, UID Port)
@@ -62,12 +100,22 @@ void setup()
 			{
 				uint8_t RemotePort;
 				Step* O;
-				char* ProgressInfo() const { return (char*)(this + 1); }
+				struct DoneItem
+				{
+					UID TrialID;
+					uint16_t NumDone;
+				}TrialsDone[];
 			} &Arguments = *reinterpret_cast<RestoreHeader*>(Message.data());
 #pragma pack(pop)
 			if (RootSteps.contains(Arguments.O))
 			{
+				uint8_t const NumTrials=(MessageSize - sizeof(RestoreHeader)) / sizeof(RestoreHeader::DoneItem);
+				std::unordered_map<UID, uint16_t> TrialsDone;
+				TrialsDone.reserve(NumTrials);
+				for (uint8_t i = 0; i < NumTrials; ++i)
+					TrialsDone[Arguments.TrialsDone[i].TrialID] = Arguments.TrialsDone[i].NumDone;
 				noInterrupts();
+				Arguments.O->Restore(TrialsDone);
 				Async_stream_IO::Send(Arguments.O->Restore(std::span<const char>(Arguments.ProgressInfo(), MessageSize - sizeof(RestoreHeader))), Arguments.RemotePort);
 				interrupts();
 			}

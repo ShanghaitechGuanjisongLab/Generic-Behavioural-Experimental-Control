@@ -2,215 +2,144 @@
 #include <sstream>
 #include <map>
 #include <vector>
-
-static std::move_only_function<void() const> const FinishCallback = []()
-{
-	Async_stream_IO::Send(UID::Signal_ObjectFinished, static_cast<uint8_t>(UID::Port_Signal));
-};
-struct RootStep
-{
-	template <typename StepType>
-	static RootStep New()
-	{
-		RootStep Object;
-		Object.Content = std::make_unique<StepType>([RepeatLeft]()
-	{
-
-	});
-	}
-	void Start()
-	{
-		if (Content->Start())
-			FinishCallback();
-		else
-			Async_stream_IO::Send(UID::Signal_ObjectStarted, static_cast<uint8_t>(UID::Port_Signal));
-	}
-	void Restore(std::unordered_map<UID, uint16_t> &&TD)
-	{
-		if (Content->Restore(TrialsDone = std::move(TD)))
-			FinishCallback();
-		else
-			Async_stream_IO::Send(UID::Signal_ObjectRestored, static_cast<uint8_t>(UID::Port_Signal));
-	}
-	void Repeat(uint16_t Times)
-	{
-		if (Content->Repeat(Times))
-			FinishCallback();
-		else
-			Async_stream_IO::Send(UID::Signal_ObjectRestored, static_cast<uint8_t>(UID::Port_Signal));
-	}
-	static std::set<RootStep *> Existing;
-
-protected:
-	std::unique_ptr<Step> Content;
-	std::unordered_map<UID, uint16_t> TrialsDone;
-	uint16_t RepeatLeft = 0;
-	RootStep() {}
-};
+std::set<Process*> Process::Existing;
 template <typename T>
-struct StepConstructors;
+struct ProcessConstructors;
 template <typename... Pairs>
-struct StepConstructors<std::tuple<Pairs...>>
-{
-	static std::unordered_map<UID, RootStep (*)()> value;
+struct ProcessConstructors<std::tuple<Pairs...>> {
+	static std::unordered_map<UID, Process* (*)()> value;
 };
 template <typename... Pairs>
-std::unordered_map<UID, RootStep (*)()> StepConstructors<std::tuple<Pairs...>>::value{{Pairs::ID, []()
-																					   { return new typename Pairs::StepType(FinishCallback); }...}};
+std::unordered_map<UID, Process* (*)()> ProcessConstructors<std::tuple<Pairs...>>::value{ {Pairs::ID, Process::New<Pairs::StepType>}... };
 
 template <typename T>
-inline void BindFunctionToPort(T &&Function, UID Port)
-{
+inline void BindFunctionToPort(T&& Function, UID Port) {
 	Async_stream_IO::BindFunctionToPort(std::forward<T>(Function), static_cast<uint8_t>(Port));
 }
 
 ArchUrng Urng;
 std::move_only_function<void() const> const NullCallback = []() {};
-void setup()
-{
+void setup() {
 	Serial.setTimeout(-1);
 	Serial.begin(9600);
-	BindFunctionToPort([]()
-					   { return static_cast<uint8_t>(sizeof(size_t)); }, UID::Port_PointerSize);
-	BindFunctionToPort([](UID Subclass, uint8_t ProgressPort)
-					   {
-			const auto Iterator = StepConstructors<PublicSteps>::value.find(Subclass);
-			if (Iterator == StepConstructors<PublicSteps>::value.end())
-				return static_cast<Step*>(nullptr);
-			Step*const NewStep = Iterator->second();
-			RootSteps.insert(NewStep);
-			return NewStep; }, UID::Port_ObjectCreate);
-	BindFunctionToPort([](Step *O)
-					   {
-			if (RootSteps.contains(O))
-			{
-				if(O->Start())
-				FinishCallback();
-				return UID::Signal_ObjectStarted;
-			}
-			else
-				return UID::Exception_InvalidObject; }, UID::Port_ObjectStart);
-	Async_stream_IO::Listen([](const std::move_only_function<void(void *Message, uint8_t Size) const> &MessageReader, uint8_t MessageSize)
-							{
-			static std::vector<char> Message;
-			Message.resize(MessageSize);
-			MessageReader(Message.data(), MessageSize);
+	BindFunctionToPort([]() { return static_cast<uint8_t>(sizeof(size_t)); }, UID::PortA_PointerSize);
+	Async_stream_IO::Listen([](const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize) {
+		static std::vector<char> Message;
+		Message.resize(MessageSize);
+		MessageReader(Message.data(), MessageSize);
 #pragma pack(push, 1)
-			const struct RestoreHeader
-			{
-				uint8_t RemotePort;
-				Step* O;
-				struct DoneItem
-				{
-					UID TrialID;
-					uint16_t NumDone;
-				}TrialsDone[];
-			} &Arguments = *reinterpret_cast<RestoreHeader*>(Message.data());
+		struct RestoreHeader {
+			UID StepID;
+			struct TrialDone {
+				UID TrialID;
+				uint16_t NumDone;
+			}TrialsDone[];
+		};
+		struct RepeatHeader {
+			UID StepID;
+			uint16_t Times;
+		};
 #pragma pack(pop)
-			if (RootSteps.contains(Arguments.O))
+		switch (MessageSize) {
+			case sizeof(UID) :
 			{
-				uint8_t const NumTrials=(MessageSize - sizeof(RestoreHeader)) / sizeof(RestoreHeader::DoneItem);
-				std::unordered_map<UID, uint16_t> TrialsDone;
-				TrialsDone.reserve(NumTrials);
-				for (uint8_t i = 0; i < NumTrials; ++i)
-					TrialsDone[Arguments.TrialsDone[i].TrialID] = Arguments.TrialsDone[i].NumDone;
-				noInterrupts();
-				Arguments.O->Restore(TrialsDone);
-				Async_stream_IO::Send(Arguments.O->Restore(std::span<const char>(Arguments.ProgressInfo(), MessageSize - sizeof(RestoreHeader))), Arguments.RemotePort);
-				interrupts();
+				const auto Iterator = ProcessConstructors<PublicSteps>::value.find(*reinterpret_cast<UID*>(Message.data()));
+				if (Iterator == ProcessConstructors<PublicSteps>::value.end())
+					Async_stream_IO::Send(UID::Exception_InvalidProcess, static_cast<uint8_t>(UID::PortC_Signal));
+				else {
+					Process* const P = Iterator->second();
+					Async_stream_IO::Send(P, static_cast<uint8_t>(P->Start() ? UID::PortC_ProcessFinished : UID::PortC_ProcessStarted));
+				}
 			}
-			else
-				Async_stream_IO::Send(UID::Exception_InvalidObject, Arguments.RemotePort); }, static_cast<uint8_t>(UID::Port_ObjectRestore));
-	BindFunctionToPort([](Step *O, uint16_t Times)
-					   {
-			if (RootSteps.contains(O))
+			break;
+			case sizeof(RepeatHeader) :
 			{
-				noInterrupts();
-				const UID Result = O->Repeat(Times);
-				interrupts();
-				return Result;
+				RepeatHeader const* const Arguments = reinterpret_cast<RepeatHeader*>(Message.data());
+				const auto Iterator = ProcessConstructors<PublicSteps>::value.find(Arguments->StepID);
+				if (Iterator == ProcessConstructors<PublicSteps>::value.end())
+					Async_stream_IO::Send(UID::Exception_InvalidProcess, static_cast<uint8_t>(UID::PortC_Signal));
+				else {
+					Process* const P = Iterator->second();
+					Async_stream_IO::Send(P, static_cast<uint8_t>(P->Repeat(Arguments->Times) ? UID::PortC_ProcessFinished : UID::PortC_ProcessStarted));
+				}
 			}
-			else
-				return UID::Exception_InvalidObject; }, UID::Port_ObjectRepeat);
-	BindFunctionToPort([](Step *O)
-					   {
-			if (RootSteps.contains(O))
+			break;
+			default:
 			{
-				noInterrupts();
-				const UID Result = O->Pause();
-				interrupts();
-				return Result;
+				RestoreHeader const* const Arguments = reinterpret_cast<RestoreHeader*>(Message.data());
+				const auto Iterator = ProcessConstructors<PublicSteps>::value.find(Arguments->StepID);
+				if (Iterator == ProcessConstructors<PublicSteps>::value.end())
+					Async_stream_IO::Send(UID::Exception_InvalidProcess, static_cast<uint8_t>(UID::PortC_Signal));
+				else {
+					Process* const P = Iterator->second();
+					uint8_t const NumTrialsDone = (MessageSize - sizeof(UID)) / sizeof(RestoreHeader::TrialDone);
+					std::unordered_map<UID, uint16_t> TrialsDone;
+					TrialsDone.reserve(NumTrialsDone);
+					for (uint8_t i = 0; i < NumTrialsDone; ++i)
+						TrialsDone[Arguments->TrialsDone[i].TrialID] = Arguments->TrialsDone[i].NumDone;
+					Async_stream_IO::Send(P, static_cast<uint8_t>(P->Restore(std::move(TrialsDone)) ? UID::PortC_ProcessFinished : UID::PortC_ProcessStarted));
+				}
 			}
-			else
-				return UID::Exception_InvalidObject; }, UID::Port_ObjectPause);
-	BindFunctionToPort([](Step *O)
-					   {
-			if (RootSteps.contains(O))
-			{
+		} }, static_cast<uint8_t>(UID::PortA_CreateProcess));
+		BindFunctionToPort([](Process* P) {
+			if (Process::Existing.contains(P)) {
 				noInterrupts();
-				const UID Result = O->Continue();
-				interrupts();
-				return Result;
-			}
-			else
-				return UID::Exception_InvalidObject; }, UID::Port_ObjectContinue);
-	BindFunctionToPort([](Step *O)
-					   {
-			if (RootSteps.contains(O))
-			{
-				noInterrupts();
-				const UID Result = O->Abort();
-				interrupts();
-				return Result;
-			}
-			else
-				return UID::Exception_InvalidObject; }, UID::Port_ObjectAbort);
-	BindFunctionToPort([](Step *O, uint8_t RemotePort)
-					   {
-			if (RootSteps.contains(O))
-			{
-				std::dynarray<char> Information;
-				noInterrupts();
-				const UID Result = O->GetInformation(Information);
-				interrupts();
-				if (Result == UID::Exception_Success)
-					//不能将O传入Send等实际发送时再获取信息，因为那时O可能已经被销毁
-					Async_stream_IO::Send([Information = std::move(Information)](const std::move_only_function<void(const void* Message, uint8_t Size) const>& MessageSender)
-						{
-							MessageSender(Information.data(), Information.size());
-						}, RemotePort);
-				return Result;
-			}
-			else
-				return UID::Exception_InvalidObject; }, UID::Port_ObjectGetInformation);
-	BindFunctionToPort([](Step *O)
-					   {
-			if (RootSteps.erase(O))
-			{
-				noInterrupts();
-				delete O;
+				P->Pause();
 				interrupts();
 				return UID::Exception_Success;
 			}
 			else
-				return UID::Exception_InvalidObject; }, UID::Port_ObjectDestroy);
-	BindFunctionToPort([](uint8_t ToPort)
-					   { Async_stream_IO::Send([](const std::move_only_function<void(const void *Message, uint8_t Size) const> &MessageSender)
-											   {
-				const size_t MessageSize = sizeof(Step*) * RootSteps.size() + sizeof(uint8_t);
-				std::unique_ptr<uint8_t[]>Message = std::make_unique_for_overwrite<uint8_t[]>(MessageSize);
-				Message[0] = RootSteps.size();
-				std::copy(RootSteps.cbegin(), RootSteps.cend(), reinterpret_cast<Step**>(Message.get() + 1));
-				MessageSender(Message.get(), MessageSize); }, ToPort); },
-					   UID::Port_AllObjects);
+				return UID::Exception_InvalidProcess; }, UID::PortA_PauseProcess);
+		BindFunctionToPort([](Process* P) {
+			if (Process::Existing.contains(P)) {
+				noInterrupts();
+				P->Continue();
+				interrupts();
+				return UID::Exception_Success;
+			}
+			else
+				return UID::Exception_InvalidProcess; }, UID::PortA_ContinueProcess);
+		BindFunctionToPort([](Process* P) {
+			if (Process::Existing.contains(P)) {
+				noInterrupts();
+				P->Abort();
+				interrupts();
+				return UID::Exception_Success;
+			}
+			else
+				return UID::Exception_InvalidProcess; }, UID::PortA_AbortProcess);
+		BindFunctionToPort([](Process* P, uint8_t ReceivePort) {
+			if (Process::Existing.contains(P)) {
+				std::ostringstream OutStream;
+				P->WriteInfo(OutStream);
+				std::string const Message = OutStream.str();
+				Async_stream_IO::Send(Message.data(), Message.size(), ReceivePort);
+				return UID::Exception_Success;
+			}
+			else
+				return UID::Exception_InvalidProcess; }, UID::PortA_GetInformation);
+		BindFunctionToPort([](Process* P) {
+			if (Process::Existing.erase(P)) {
+				noInterrupts();
+				delete P;
+				interrupts();
+				return UID::Exception_Success;
+			}
+			else
+				return UID::Exception_InvalidProcess; }, UID::PortA_DeleteProcess);
+		BindFunctionToPort([](uint8_t ToPort) { Async_stream_IO::Send([](const std::move_only_function<void(const void* Message, uint8_t Size) const>& MessageSender) {
+			const size_t MessageSize = sizeof(Step*) * RootSteps.size() + sizeof(uint8_t);
+			std::unique_ptr<uint8_t[]>Message = std::make_unique_for_overwrite<uint8_t[]>(MessageSize);
+			Message[0] = RootSteps.size();
+			std::copy(RootSteps.cbegin(), RootSteps.cend(), reinterpret_cast<Step**>(Message.get() + 1));
+			MessageSender(Message.get(), MessageSize); }, ToPort); },
+			UID::Port_AllObjects);
 #ifdef ARDUINO_ARCH_AVR
-	Async_stream_IO::RemoteInvoke(static_cast<uint8_t>(UID::Port_RandomSeed), [](Async_stream_IO::Exception, uint32_t RandomSeed)
-								  { std::ArduinoUrng::seed(RandomSeed); });
+		Async_stream_IO::RemoteInvoke(static_cast<uint8_t>(UID::Port_RandomSeed), [](Async_stream_IO::Exception, uint32_t RandomSeed) { std::ArduinoUrng::seed(RandomSeed); });
 #endif
 }
-std::set<std::move_only_function<void() const> const *> _PendingInterrupts;
-void loop()
-{
+std::set<std::move_only_function<void() const> const*> _PendingInterrupts;
+void loop() {
 	noInterrupts();
 	for (auto M : _PendingInterrupts)
 		M->operator()();

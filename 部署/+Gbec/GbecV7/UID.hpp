@@ -2,23 +2,27 @@
 #include <stdint.h>
 enum class UID : uint8_t
 {
-	Port_PointerSize,
-	Port_ObjectCreate,
-	Port_ObjectStart,
-	Port_ObjectRestore,
-	Port_ObjectRepeat,
-	Port_ObjectPause,
-	Port_ObjectContinue,
-	Port_ObjectAbort,
-	Port_ObjectGetInformation,
-	Port_ObjectDestroy,
+	//Arduino提供的服务端口
+
+	PortA_PointerSize,
+	PortA_CreateProcess,
+	PortA_PauseProcess,
+	PortA_ContinueProcess,
+	PortA_AbortProcess,
+	PortA_GetInformation,
+	PortA_DeleteProcess,
 	Port_AllObjects,
 	Port_RandomSeed,
-	Port_TrialStart,
-	Port_Signal,
+
+	//Computer提供的服务端口
+
+	PortC_ProcessFinished,
+	PortC_Signal,
+	PortC_TrialStart,
+	PortC_ProcessStarted,
 
 	Exception_Success,
-	Exception_InvalidObject,
+	Exception_InvalidProcess,
 	Exception_MethodNotSupported,
 	Exception_StillRunning,
 	Exception_ObjectNotIdle,
@@ -73,9 +77,8 @@ enum class UID : uint8_t
 	State_Restore,
 
 	Signal_TrialStart,
-	Signal_ObjectFinished,
-	Signal_ObjectStarted,
-	Signal_ObjectRestored,
+	Signal_ProcessFinished,
+	Signal_ProcessStarted,
 
 	Test_BlueLed,
 

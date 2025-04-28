@@ -152,16 +152,11 @@ namespace Async_stream_IO
 #pragma pack(push, 1)
 				struct ReturnMessage
 				{
-					const Exception Result = Exception::Success;
-					const ReturnType ReturnValue;
-					void operator()(const std::move_only_function<void(const void *Message, uint8_t Size) const> &MessageSender) const
-					{
-						MessageSender(this, sizeof(*this));
-					}
-					constexpr ReturnMessage(ReturnType ReturnValue) : ReturnValue(std::move(ReturnValue)) {}
+					Exception Result;
+					ReturnType ReturnValue;
 				};
 #pragma pack(pop)
-				Send(ReturnMessage{_InvokeWithMemoryOffsets<typename _CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>::Invoke<ReturnType, ArgumentType...>(Function, Arguments.get() + 1)});
+				Send(ReturnMessage{Exception::Success,<typename _CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>::Invoke<ReturnType, ArgumentType...>(Function, Arguments.get() + 1)}, Arguments[0], ToStream);
 			}
 			else
 				Send(Exception::Argument_message_incomplete, Arguments[0], ToStream);

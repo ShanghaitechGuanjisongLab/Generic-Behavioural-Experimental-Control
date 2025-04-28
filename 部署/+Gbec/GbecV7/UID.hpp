@@ -11,8 +11,7 @@ enum class UID : uint8_t
 	PortA_AbortProcess,
 	PortA_GetInformation,
 	PortA_DeleteProcess,
-	Port_AllObjects,
-	Port_RandomSeed,
+	PortA_AllProcesses,
 
 	//Computer提供的服务端口
 
@@ -20,6 +19,7 @@ enum class UID : uint8_t
 	PortC_Signal,
 	PortC_TrialStart,
 	PortC_ProcessStarted,
+	PortC_RandomSeed,
 
 	Exception_Success,
 	Exception_InvalidProcess,
@@ -56,6 +56,8 @@ enum class UID : uint8_t
 	Property_Abortable,
 	Property_WhenAbort,
 	Property_BackgroundID,
+	Property_HighOrLow,
+	Property_Value,
 
 	Type_Bool,
 	Type_UInt8,

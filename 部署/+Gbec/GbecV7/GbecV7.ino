@@ -2,6 +2,59 @@
 #include <sstream>
 #include <map>
 #include <vector>
+struct Process {
+	template <typename StepType>
+	static Process* New() {
+		Process* NewProcess = new Process();
+		NewProcess->Content = std::make_unique<StepType>(NewProcess->ChildCallback, NewProcess);
+		Existing.insert(NewProcess);
+		return NewProcess;
+	}
+	bool Start() {
+		RepeatLeft = 0;
+		return Content->Start();
+	}
+	bool Restore(std::unordered_map<UID, uint16_t>&& TD) {
+		return Content->Restore(TrialsDone = std::move(TD));
+	}
+	bool Repeat(uint16_t Times) {
+		for (;;) {
+			if (!Content->Start()) {
+				RepeatLeft = Times - 1;
+				return false;
+			}
+			if (!--Times)
+				return true;
+		}
+	}
+	void Pause() const {
+		Content->Pause();
+	}
+	void Continue() const {
+		Content->Continue();
+	}
+	void Abort() const {
+		Content->Abort();
+	}
+	void WriteInfo(std::ostream& OutStream) const {
+		Content->WriteInfoD(OutStream);
+	}
+	static std::set<Process*> Existing;
+
+protected:
+	std::move_only_function<void() const> const ChildCallback{ [this]() {
+		while (RepeatLeft) {
+			RepeatLeft--;
+			if (!Content->Start())
+				return;
+		}
+		Async_stream_IO::Send(this, static_cast<uint8_t>(UID::PortC_ProcessFinished));
+	} };
+	std::unique_ptr<Step> Content;
+	std::unordered_map<UID, uint16_t> TrialsDone;
+	uint16_t RepeatLeft;
+	Process() {}
+};
 std::set<Process*> Process::Existing;
 template <typename T>
 struct ProcessConstructors;
@@ -127,15 +180,18 @@ void setup() {
 			}
 			else
 				return UID::Exception_InvalidProcess; }, UID::PortA_DeleteProcess);
-		BindFunctionToPort([](uint8_t ToPort) { Async_stream_IO::Send([](const std::move_only_function<void(const void* Message, uint8_t Size) const>& MessageSender) {
-			const size_t MessageSize = sizeof(Step*) * RootSteps.size() + sizeof(uint8_t);
+		Async_stream_IO::Listen([](const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize) {
+			uint8_t ToPort;
+			for (uint8_t M = 0;M < MessageSize;M++)
+				MessageReader(&ToPort, 1);
+			MessageSize = sizeof(Process*) * Process::Existing.size() + sizeof(uint8_t);
 			std::unique_ptr<uint8_t[]>Message = std::make_unique_for_overwrite<uint8_t[]>(MessageSize);
-			Message[0] = RootSteps.size();
-			std::copy(RootSteps.cbegin(), RootSteps.cend(), reinterpret_cast<Step**>(Message.get() + 1));
-			MessageSender(Message.get(), MessageSize); }, ToPort); },
-			UID::Port_AllObjects);
+			Message[0] = Process::Existing.size();
+			std::copy(Process::Existing.cbegin(), Process::Existing.cend(), reinterpret_cast<Process**>(Message.get() + 1));
+			Async_stream_IO::Send(Message.get(), MessageSize, ToPort);},
+			static_cast<uint8_t>(UID::PortA_AllProcesses));
 #ifdef ARDUINO_ARCH_AVR
-		Async_stream_IO::RemoteInvoke(static_cast<uint8_t>(UID::Port_RandomSeed), [](Async_stream_IO::Exception, uint32_t RandomSeed) { std::ArduinoUrng::seed(RandomSeed); });
+		Async_stream_IO::RemoteInvoke(static_cast<uint8_t>(UID::PortC_RandomSeed), [](Async_stream_IO::Exception, uint32_t RandomSeed) { std::ArduinoUrng::seed(RandomSeed); });
 #endif
 }
 std::set<std::move_only_function<void() const> const*> _PendingInterrupts;

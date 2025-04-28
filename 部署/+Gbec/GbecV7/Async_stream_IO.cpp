@@ -110,7 +110,7 @@ namespace Async_stream_IO
 	{
 		DoIfPortIdle(AddReceiveListener<true>(reinterpret_cast<char *>(Message), Capacity, std::move(Callback), FromStream, FromPort));
 	}
-	Exception Receive(std::move_only_function<void(const std::move_only_function<void(void *Message, uint8_t Size) const> &MessageReader, uint8_t MessageSize) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial)
+	Exception Receive(std::move_only_function<void(const std::move_only_function<void(void *Message, uint8_t Size) const> &MessageReader, uint8_t MessageSize) const> &&Callback, uint8_t FromPort, Stream &FromStream)
 	{
 		DoIfPortIdle(AddReceiveListener<true>(std::move(Callback), FromPort, FromStream));
 	}
@@ -118,7 +118,7 @@ namespace Async_stream_IO
 	{
 		DoWithNewPort(AddReceiveListener<true>(reinterpret_cast<char *>(Message), Capacity, std::move(Callback), FromStream, FromPort));
 	}
-	uint8_t Receive(std::move_only_function<void(const std::move_only_function<void(void *Message, uint8_t Size) const> &MessageReader, uint8_t MessageSize) const> &&Callback, Stream &FromStream = Serial)
+	uint8_t Receive(std::move_only_function<void(const std::move_only_function<void(void *Message, uint8_t Size) const> &MessageReader, uint8_t MessageSize) const> &&Callback, Stream &FromStream)
 	{
 		DoWithNewPort(AddReceiveListener<true>(std::move(Callback), FromPort, FromStream));
 	}
@@ -127,7 +127,7 @@ namespace Async_stream_IO
 	{
 		DoIfPortIdle(AddReceiveListener<false>(reinterpret_cast<char *>(Message), Capacity, std::move(Callback), FromStream, FromPort));
 	}
-	Exception Listen(std::move_only_function<void(const std::move_only_function<void(void *Message, uint8_t Size) const> &MessageReader, uint8_t MessageSize) const> &&Callback, uint8_t FromPort, Stream &FromStream = Serial)
+	Exception Listen(std::move_only_function<void(const std::move_only_function<void(void *Message, uint8_t Size) const> &MessageReader, uint8_t MessageSize) const> &&Callback, uint8_t FromPort, Stream &FromStream)
 	{
 		DoIfPortIdle(AddReceiveListener<false>(std::move(Callback), FromPort, FromStream));
 	}
@@ -135,7 +135,7 @@ namespace Async_stream_IO
 	{
 		DoWithNewPort(AddReceiveListener<false>(reinterpret_cast<char *>(Message), Capacity, std::move(Callback), FromStream, FromPort));
 	}
-	uint8_t Listen(std::move_only_function<void(const std::move_only_function<void(void *Message, uint8_t Size) const> &MessageReader, uint8_t MessageSize) const> &&Callback, Stream &FromStream = Serial)
+	uint8_t Listen(std::move_only_function<void(const std::move_only_function<void(void *Message, uint8_t Size) const> &MessageReader, uint8_t MessageSize) const> &&Callback, Stream &FromStream)
 	{
 		DoWithNewPort(AddReceiveListener<false>(std::move(Callback), FromPort, FromStream));
 	}

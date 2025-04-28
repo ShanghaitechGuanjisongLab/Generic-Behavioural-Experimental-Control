@@ -156,7 +156,7 @@ namespace Async_stream_IO
 					ReturnType ReturnValue;
 				};
 #pragma pack(pop)
-				Send(ReturnMessage{Exception::Success,<typename _CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>::Invoke<ReturnType, ArgumentType...>(Function, Arguments.get() + 1)}, Arguments[0], ToStream);
+				Send(ReturnMessage{Exception::Success,_InvokeWithMemoryOffsets<typename _CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>::Invoke(Function, Arguments.get() + 1)}, Arguments[0], ToStream);
 			}
 			else
 				Send(Exception::Argument_message_incomplete, Arguments[0], ToStream);

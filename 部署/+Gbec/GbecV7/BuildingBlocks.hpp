@@ -240,7 +240,7 @@ struct Trial : TrialStep {
 	static constexpr bool _iContainTrials = true;
 	Trial(std::move_only_function<void() const> const& FinishCallback, Process const* Container)
 	  : TrialStep(FinishCallback, Container), Signal{ Container, TrialID } {
-		static_assert(!_ContainTrials<TrialStep>::value, "Trial步骤的TrialStep不能包含Trial");
+		static_assert(!_ContainTrials<TrialStep>::value, "Trial步骤的TrialStep不能嵌套Trial");
 	}
 	bool Start() override {
 		Async_stream_IO::Send(Signal, static_cast<uint8_t>(UID::PortC_TrialStart));
@@ -277,7 +277,7 @@ struct Trial : TrialStep {
 protected:
 	ProcessSignal const Signal;
 };
-// 执行Repeatee步骤，同时监控引脚。如果Repeatee执行完之前检测到引脚电平，放弃当前执行并重启。Repeatee步骤不能包含Trial。对于包含随机内容的步骤，将不会重新抽取随机，而是保持一致。
+// 执行Repeatee步骤，同时监控引脚。如果Repeatee执行完之前检测到引脚电平，放弃当前执行并重启。对于包含随机内容的步骤，将不会重新抽取随机，而是保持一致。
 template<typename Repeatee, uint8_t Pin>
 struct RepeatIfPin : Repeatee::Repeatable  // 有些步骤的Repeatable不继承自那个步骤类型
 {
@@ -290,7 +290,6 @@ struct RepeatIfPin : Repeatee::Repeatable  // 有些步骤的Repeatable不继承
 		    Repeatee::Repeatable::Abort();
 		    Repeatee::Repeatable::Repeat();
 		  } } {
-		static_assert(!_ContainTrials<typename Repeatee::Repeatable>::value, "RepeatIfPin步骤的Repeatee不能包含Trial");
 	}
 	bool Start() override {
 		if (Repeatee::Repeatable::Start())
@@ -369,8 +368,6 @@ protected:
 		    ParentCallback();
 	    }),
 	    MonitorCallback(std::move(_MonitorCallback)), From{ FromCallback, Container }, To{ ParentCallback, Container } {
-		static_assert(!_ContainTrials<SwitchFrom>::value, "SwitchIfPin步骤的SwitchFrom不能包含Trial");
-		static_assert(!_ContainTrials<SwitchTo>::value, "SwitchIfPin步骤的SwitchTo不能包含Trial");
 	}
 };
 // 执行SwitchFrom步骤并监控引脚。如果SwitchFrom结束前检测到引脚电平，放弃SwitchFrom，转而执行SwitchTo步骤。可以不指定SwitchTo，则检测到电平后仅放弃SwitchFrom，然后本步骤结束。
@@ -466,8 +463,6 @@ protected:
 	Conditional ConditionalStep;
 	_AppendIfPin(std::move_only_function<void() const> const& ParentCallback, std::move_only_function<void() const>&& UnconditionalCallback, Process const* Container)
 	  : UnconditionalCallback(std::move(UnconditionalCallback)), UnconditionalStep{ UnconditionalCallback, Container }, ConditionalStep{ ParentCallback, Container } {
-		static_assert(!_ContainTrials<Unconditional>::value, "AppendIfPin步骤的Unconditional不能包含Trial");
-		static_assert(!_ContainTrials<Conditional>::value, "AppendIfPin步骤的Conditional不能包含Trial");
 	}
 };
 // 执行Unconditional步骤并监控引脚，如果Unconditional结束前检测到引脚电平，则在Unconditional结束后额外执行Conditional步骤。
@@ -626,7 +621,8 @@ protected:
 };
 template<typename... Steps>
 struct _Sequential_Simple : _Sequential_Base<Steps...> {
-	using _RepeatableBase = _Sequential_Base<typename Steps::Repeatable...> struct Repeatable : _RepeatableBase {
+	using _RepeatableBase = _Sequential_Base<typename Steps::Repeatable...>;
+	struct Repeatable : _RepeatableBase {
 		Repeatable(std::move_only_function<void() const> const& ParentCallback, Process const* Container)
 		  : _RepeatableBase([ParentCallback, this]() {
 			    while (++_RepeatableBase::CurrentStep < std::end(_RepeatableBase::StepPointers))
@@ -682,7 +678,7 @@ struct _Sequential_WithTrials : _Sequential_Base<Steps...> {
 				    return;
 		    ParentCallback();
 	    },
-	                               Container) {
+	           Container) {
 	}
 	bool Start() override {
 		for (MyBase::CurrentStep = std::begin(MyBase::StepPointers); MyBase::CurrentStep < std::end(MyBase::StepPointers); ++MyBase::CurrentStep)
@@ -700,9 +696,6 @@ struct _Sequential_WithTrials : _Sequential_Base<Steps...> {
 			}
 		return true;
 	}
-	struct Repeatable {
-		static_assert(false, "Sequential::Repeatable不允许包含Trial");
-	};
 	// 扩展指定每个步骤的重复次数。上一个步骤的所有重复结束后才会执行下一个步骤。只有包含Trial的步骤支持重复。
 	template<uint16_t... Repeats>
 	struct WithRepeats : Step {
@@ -726,7 +719,7 @@ struct _Sequential_WithTrials : _Sequential_Base<Steps...> {
 			  } },
 		    StepsTuple{ Steps{ ChildCallback, Container }... } {
 			static_assert(sizeof...(Steps) == sizeof...(Repeats), "WithRepeats的Steps和Repeats数量不匹配");
-			static_assert(!_All<Repeats>::value, "WithRepeats的Repeats不能包含0");
+			static_assert(!_All<Repeats...>::value, "WithRepeats的Repeats不能包含0");
 			_CopyTupleToPointers<std::make_index_sequence<sizeof...(Steps)>>::Copy(StepsTuple, StepPointers);
 		}
 		bool Start() override {
@@ -773,9 +766,6 @@ struct _Sequential_WithTrials : _Sequential_Base<Steps...> {
 		void WriteInfoD(std::ostream& OutStream) const override {
 			WriteInfoS(OutStream);
 		}
-		struct Repeatable {
-			static_assert(false, "Sequential::WithRepeats不允许Repeatable");
-		};
 
 	protected:
 		std::tuple<Steps...> StepsTuple;
@@ -787,7 +777,7 @@ struct _Sequential_WithTrials : _Sequential_Base<Steps...> {
 
 protected:
 	std::unordered_map<UID, uint16_t>* TrialsDoneLeft;
-	using MyBase=_Sequential_Base<Steps...>;
+	using MyBase = _Sequential_Base<Steps...>;
 };
 template<typename... Steps>
 using _Sequential_Selector = std::conditional_t<_Any<_ContainTrials<Steps>::value...>::value, _Sequential_WithTrials<Steps...>, _Sequential_Simple<Steps...>>;
@@ -841,37 +831,28 @@ protected:
 };
 template<typename... Steps>
 struct _Random_Simple : _Random_Base<Steps...> {
-	_Random_Simple(std::move_only_function<void() const> const& ParentCallback, Process const* Container)
-	  : _Random_Base<Steps...>([ParentCallback, this]() {
-		    while (++CurrentStep < std::end(StepPointers))
-			    if (!CurrentStep->Start())
-				    return;
-		    ParentCallback();
-	    },
-	                           Container) {
-	}
-	struct Repeatable : _Random_Base<typename Steps::Repeatable...> {
+	using _RepeatableBase = _Random_Base<typename Steps::Repeatable...>;
+	struct Repeatable : _RepeatableBase {
 		Repeatable(std::move_only_function<void() const> const& ParentCallback, Process const* Container)
-		  : _Random_Base<typename Steps::Repeatable...>([ParentCallback, this]() {
-			    while (++CurrentStep < std::end(StepPointers))
-				    if (!(Repeating ? CurrentStep->Repeat() : CurrentStep->Start()))
+		  : _RepeatableBase([ParentCallback, this]() {
+			    while (++_RepeatableBase::CurrentStep < std::end(_RepeatableBase::StepPointers))
+				    if (!(Repeating ? (*_RepeatableBase::CurrentStep)->Repeat() : (*_RepeatableBase::CurrentStep)->Start()))
 					    return;
 			    ParentCallback();
 		    },
-		                                                Container) {
-		}
+		                    Container) {}
 		bool Start() override {
 			Repeating = false;
-			std::shuffle(std::begin(StepPointers), std::end(StepPointers), Urng);
-			for (CurrentStep = std::begin(StepPointers); CurrentStep < std::end(StepPointers); ++CurrentStep)
-				if (!CurrentStep->Start())
+			std::shuffle(std::begin(_RepeatableBase::StepPointers), std::end(_RepeatableBase::StepPointers), Urng);
+			for (_RepeatableBase::CurrentStep = std::begin(_RepeatableBase::StepPointers); _RepeatableBase::CurrentStep < std::end(_RepeatableBase::StepPointers); ++_RepeatableBase::CurrentStep)
+				if (!(*_RepeatableBase::CurrentStep)->Start())
 					return false;
 			return true;
 		}
 		bool Repeat() override {
 			Repeating = true;
-			for (CurrentStep = std::begin(StepPointers); CurrentStep < std::end(StepPointers); ++CurrentStep)
-				if (!CurrentStep->Repeat())
+			for (_RepeatableBase::CurrentStep = std::begin(_RepeatableBase::StepPointers); _RepeatableBase::CurrentStep < std::end(_RepeatableBase::StepPointers); ++_RepeatableBase::CurrentStep)
+				if (!(*_RepeatableBase::CurrentStep)->Repeat())
 					return false;
 			return true;
 		}
@@ -879,46 +860,53 @@ struct _Random_Simple : _Random_Base<Steps...> {
 	protected:
 		bool Repeating;
 	};
+	_Random_Simple(std::move_only_function<void() const> const& ParentCallback, Process const* Container)
+	  : MyBase([ParentCallback, this]() {
+		    while (++MyBase::CurrentStep < std::end(MyBase::StepPointers))
+			    if (!(*MyBase::CurrentStep)->Start())
+				    return;
+		    ParentCallback();
+	    },
+	           Container) {}
+protected:
+	using MyBase = _Random_Base<Steps...>;
 };
 template<typename... Steps>
 struct _Random_WithTrials : _Random_Base<Steps...> {
 	static constexpr bool _ContainTrials = true;
 	_Random_WithTrials(std::move_only_function<void() const> const& ParentCallback, Process const* Container)
-	  : _Random_Base<Steps...>([ParentCallback, this]() {
-		    while (++CurrentStep < std::end(StepPointers))
+	  : MyBase([ParentCallback, this]() {
+		    while (++MyBase::CurrentStep < std::end(MyBase::StepPointers))
 			    if (TrialsDoneLeft) {
-				    bool const Finished = CurrentStep->Restore(*TrialsDoneLeft);
+				    bool const Finished = (*MyBase::CurrentStep)->Restore(*TrialsDoneLeft);
 				    if (TrialsDoneLeft->empty())
 					    TrialsDoneLeft = nullptr;
 				    if (!Finished)
 					    return;
-			    } else if (!CurrentStep->Start())
+			    } else if (!(*MyBase::CurrentStep)->Start())
 				    return;
 		    ParentCallback();
 	    },
-	                           Container) {
+	           Container) {
 	}
 	bool Start() override {
-		std::shuffle(std::begin(StepPointers), std::end(StepPointers), Urng);
-		for (CurrentStep = std::begin(StepPointers); CurrentStep < std::end(StepPointers); ++CurrentStep)
-			if (!CurrentStep->Start()) {
+		std::shuffle(std::begin(MyBase::StepPointers), std::end(MyBase::StepPointers), Urng);
+		for (MyBase::CurrentStep = std::begin(MyBase::StepPointers); MyBase::CurrentStep < std::end(MyBase::StepPointers); ++MyBase::CurrentStep)
+			if (!(*MyBase::CurrentStep)->Start()) {
 				TrialsDoneLeft = nullptr;
 				return false;
 			}
 		return true;
 	}
 	bool Restore(std::unordered_map<UID, uint16_t>& TrialsDone) override {
-		std::shuffle(std::begin(StepPointers), std::end(StepPointers), Urng);
-		for (CurrentStep = std::begin(StepPointers); CurrentStep < std::end(StepPointers); ++CurrentStep)
-			if (!CurrentStep->Restore(TrialsDone)) {
+		std::shuffle(std::begin(MyBase::StepPointers), std::end(MyBase::StepPointers), Urng);
+		for (MyBase::CurrentStep = std::begin(MyBase::StepPointers); MyBase::CurrentStep < std::end(MyBase::StepPointers); ++MyBase::CurrentStep)
+			if (!(*MyBase::CurrentStep)->Restore(TrialsDone)) {
 				TrialsDoneLeft = &TrialsDone;
 				return false;
 			}
 		return true;
 	}
-	struct Repeatable {
-		static_assert(false, "Random::Repeatable不允许包含Trial");
-	};
 	// 扩展指定每个步骤的随机重复次数。所有步骤将彼此随机穿插，最终重复各自指定的次数。
 	template<uint16_t... Repeats>
 	struct WithRepeats : Step {
@@ -943,7 +931,7 @@ struct _Random_WithTrials : _Random_Base<Steps...> {
 			  } },
 		    StepsTuple{ Steps{ ChildCallback, Container }... } {
 			static_assert(sizeof...(Steps) == sizeof...(Repeats), "WithRepeats的Steps和Repeats数量不匹配");
-			static_assert(!_All<Repeats>::value, "WithRepeats的Repeats不能包含0");
+			static_assert(!_All<Repeats...>::value, "WithRepeats的Repeats不能包含0");
 			_CopyTupleToPointers<std::make_index_sequence<sizeof...(Steps)>>::Copy(StepsTuple, StepPointers);
 		}
 		bool Start() override {
@@ -988,9 +976,6 @@ struct _Random_WithTrials : _Random_Base<Steps...> {
 		void WriteInfoD(std::ostream& OutStream) const override {
 			WriteInfoS(OutStream);
 		}
-		struct Repeatable {
-			static_assert(false, "Random::WithRepeats不允许Repeatable");
-		};
 
 	protected:
 		std::tuple<Steps...> StepsTuple;
@@ -1019,6 +1004,7 @@ struct _Random_WithTrials : _Random_Base<Steps...> {
 
 protected:
 	std::unordered_map<UID, uint16_t>* TrialsDoneLeft;
+	using MyBase = _Random_Base<Steps...>;
 };
 template<typename... Steps>
 using _Random_Selector = std::conditional_t<_Any<_ContainTrials<Steps>::value...>::value, _Random_WithTrials<Steps...>, _Random_Simple<Steps...>>;
@@ -1048,7 +1034,6 @@ struct FunctionToStep : Step {
 // 执行一个Abortable步骤。如果该步骤被放弃，将转而执行WhenAbort步骤。此机制可用于执行自定义的步骤后清理工作。WhenAbort步骤不能暂停或放弃。
 template<typename Abortable, typename WhenAbort>
 struct DoWhenAborted : Abortable {
-	WhenAbort WA;
 	DoWhenAborted(std::move_only_function<void() const> const& ParentCallback, Process const* Container)
 	  : Abortable{ ParentCallback, Container }, WA{ ParentCallback, Container } {}
 	void Abort() const override {
@@ -1062,10 +1047,32 @@ struct DoWhenAborted : Abortable {
 	void WriteInfoD(std::ostream& OutStream) const override {
 		WriteInfoS(OutStream);
 	}
-	using Repeatable = DoWhenAborted<Abortable, WhenAbort>;
+	using _RepeatableBase = DoWhenAborted<typename Abortable::Repeatable, typename WhenAbort::Repeatable>;
+	struct Repeatable : _RepeatableBase {
+		using _RepeatableBase::_RepeatableBase;
+		bool Start() override {
+			Repeating = false;
+			return _RepeatableBase::Start();
+		}
+		bool Repeat() override {
+			Repeating = true;
+			return _RepeatableBase::Repeat();
+		}
+		void Abort() const override {
+			Abortable::Abort();
+			if (Repeating)
+				_RepeatableBase::WA.Repeat();
+			else
+				_RepeatableBase::WA.Start();
+		}
+	protected:
+		bool Repeating;
+	};
+protected:
+	WhenAbort WA;
 };
 
-// 在后台无限重复Repeatee，直到执行StopBackgroundRepeat为止。Repeatee的Start方法不能总是返回true，否则此步骤永不结束。如果Repeatee包含随机内容，每次都会重新随机抽取。
+// 在后台无限重复Repeatee::Start，直到执行StopBackgroundRepeat为止。Repeatee的Start方法不能总是返回true，否则此步骤永不结束。如果Repeatee包含随机内容，每次都会重新随机抽取，不会调用Repeat方法。
 template<typename Repeatee, UID BackgroundID = UID::BackgroundID_Default>
 struct StartBackgroundRepeat : Repeatee {
 	static StartBackgroundRepeat<Repeatee, BackgroundID> const* RunningInstance;
@@ -1114,7 +1121,7 @@ struct StopBackgroundRepeat : Step {
 		WriteInfoS(OutStream);
 	}
 };
-template<UID StepID, typename Step, typename = decltype(new Step)>
+template<UID StepID, typename Step>
 struct Pair {
 	static constexpr UID ID = StepID;
 	using StepType = Step;

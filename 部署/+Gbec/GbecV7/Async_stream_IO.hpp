@@ -129,7 +129,7 @@ constexpr size_t _TypesSize() {
 template<typename Signature>
 struct _FunctionListener;
 template<typename ReturnType, typename... ArgumentType>
-struct _FunctionListener<ReturnType(ArgumentType...)> {
+struct _FunctionListener<ReturnType(ArgumentType...) const> {
 	_FunctionListener(std::move_only_function<ReturnType(ArgumentType...) const> &&Function, Stream &ToStream)
 	  : Function(std::move(Function)), ToStream(ToStream) {}
 	void operator()(const std::move_only_function<void(void *Message, uint8_t Size) const> &MessageReader, uint8_t MessageSize) const {
@@ -149,11 +149,13 @@ struct _FunctionListener<ReturnType(ArgumentType...)> {
 	}
 
 protected:
-	const std::move_only_function<ReturnType(ArgumentType...) const> Function;
+	std::move_only_function<ReturnType(ArgumentType...) const> Function;//不能const，否则整个对象无法移动了
 	Stream &ToStream;
 };
+#ifdef __cpp_deduction_guides
 template<typename T>
-_FunctionListener(const T &, Stream &) -> _FunctionListener<typename std::_FunctionSignature<T>::type>;
+_FunctionListener(const T &, Stream &) -> _FunctionListener<std::_FunctionSignature_t<T>>;
+#endif
 
 /* 将任意可调用对象绑定到指定本地端口上，当收到消息时调用。如果本地端口被占用，返回Port_occupied。
 	远程要调用此对象，需要将所有参数序列化拼接称一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。如果消息字节数不足，将向远程调用方发送Parameter_message_incomplete。

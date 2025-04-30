@@ -651,7 +651,7 @@ struct _Sequential_Simple : _Sequential_Base<Steps...> {
 		bool Repeating;
 	};
 	_Sequential_Simple(std::move_only_function<void() const> const& ParentCallback, Process const* Container)
-	  : MyBase([ParentCallback, this]() {
+	  : MParentCallback, this]() {
 		    while (++MyBase::CurrentStep < std::end(MyBase::StepPointers))
 			    if (!(*MyBase::CurrentStep)->Start())
 				    return;

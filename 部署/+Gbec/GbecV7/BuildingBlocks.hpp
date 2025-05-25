@@ -587,7 +587,7 @@ struct _CopyTupleToPointers<std::index_sequence<Indices...>> {
 template<typename... Steps>
 struct _Sequential_Base : Step {
 	_Sequential_Base(std::move_only_function<void() const>&& ChildCallback, Process const* Container)
-	  : ChildCallback{ std::move(ChildCallback) }, StepsTuple{ Steps{ ChildCallback, Container }... } {
+	  : ChildCallback{ std::move(ChildCallback) }, StepsTuple{ std::make_tuple(Steps{ ChildCallback, Container }...) } {
 		_CopyTupleToPointers<std::make_index_sequence<sizeof...(Steps)>>::Copy(StepsTuple, StepPointers);
 	}
 	bool Start() override {
@@ -651,7 +651,7 @@ struct _Sequential_Simple : _Sequential_Base<Steps...> {
 		bool Repeating;
 	};
 	_Sequential_Simple(std::move_only_function<void() const> const& ParentCallback, Process const* Container)
-	  : MParentCallback, this]() {
+	  : MyBase([&ParentCallback, this]() {
 		    while (++MyBase::CurrentStep < std::end(MyBase::StepPointers))
 			    if (!(*MyBase::CurrentStep)->Start())
 				    return;

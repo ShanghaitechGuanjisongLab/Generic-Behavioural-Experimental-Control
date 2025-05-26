@@ -48,6 +48,10 @@ template<>
 struct TypeToUID<uint8_t> {
 	static constexpr UID Value = UID::Type_UInt8;
 };
+template<>
+struct TypeToUID<bool> {
+	static constexpr UID Value = UID::Type_Bool;
+};
 inline static std::ostream& operator<<(std::ostream& OutStream, UID Value) {
 	return OutStream << static_cast<uint8_t>(Value);
 }
@@ -72,7 +76,6 @@ struct DigitalWrite : Step {
 		WriteInfoS(OutStream);
 	}
 };
-
 #pragma pack(push, 1)
 struct ProcessSignal {
 	Process const* P;
@@ -125,7 +128,7 @@ class RandomDuration {
 public:
 	static DurationType Get() {
 		constexpr float MinCount = Min::Get().count();
-		return DurationType(pow(std::chrono::duration_cast<DurationType>(Min::Get()).count() / MinCount, random() / RANDOM_MAX) * MinCount);
+		return DurationType(pow(std::chrono::duration_cast<DurationType>(Min::Get()).count() / MinCount, random(__LONG_MAX__) / (__LONG_MAX__-1)) * MinCount);
 	}
 	static void WriteInfoS(std::ostream& OutStream) {
 		OutStream << WriteStructSize(2) << static_cast<uint8_t>(UID::Property_Min);
@@ -135,12 +138,11 @@ public:
 	}
 };
 struct InfiniteDuration;
-#define WriteDuration(FieldName, Duration) static_cast<uint8_t>(UID::Property_##FieldName) << static_cast<uint8_t>(Duration::Type) << Duration::Value.count()
 // 等待一段时间，不做任何事
 template<typename Duration>
 struct Delay : Step {
 	Delay(std::move_only_function<void() const> const& FinishCallback, Process const*)
-	  : TimerCallback([this, FinishCallback]() {
+	  : TimerCallback([this, &FinishCallback]() {
 		    Timer->Allocatable = true;
 		    FinishCallback();
 	    }) {
@@ -160,7 +162,8 @@ struct Delay : Step {
 		Timer->Allocatable = true;
 	}
 	static void WriteInfoS(std::ostream& OutStream) {
-		OutStream << WriteStructSize(2) << WriteStepID(UID::Step_Delay) << WriteDuration(Duration, Duration);
+		OutStream << WriteStructSize(2) << WriteStepID(UID::Step_Delay) << static_cast<uint8_t>(UID::Property_Duration);
+		Duration::WriteInfoS(OutStream);
 	}
 	void WriteInfoD(std::ostream& OutStream) const override {
 		WriteInfoS(OutStream);
@@ -181,7 +184,7 @@ struct Delay : Step {
 	};
 
 protected:
-	std::move_only_function<void() const> const TimerCallback;
+	std::move_only_function<void() const> TimerCallback;  //所有MOF成员都不能const，会导致整个类型无法移动
 	Timers_one_for_all::TimerClass* Timer;
 };
 template<>
@@ -198,7 +201,6 @@ struct Delay<InfiniteDuration> : Step {
 	}
 	using Repeatable = Delay<InfiniteDuration>;
 };
-
 extern std::move_only_function<void() const> const NullCallback;
 #define WriteStep(FieldName) \
 	static_cast<uint8_t>(UID::Property_##FieldName); \
@@ -328,8 +330,8 @@ struct RepeatIfPin : Repeatee::Repeatable  // 有些步骤的Repeatable不继承
 	}
 
 protected:
-	std::move_only_function<void() const> const ChildCallback;
-	std::move_only_function<void() const> const MonitorCallback;
+	std::move_only_function<void() const> ChildCallback;
+	std::move_only_function<void() const> MonitorCallback;
 };
 template<typename SwitchFrom, uint8_t Pin, typename SwitchTo>
 struct _SwitchIfPin : Step {
@@ -358,8 +360,8 @@ struct _SwitchIfPin : Step {
 
 protected:
 	Step* Current;
-	std::move_only_function<void() const> const FromCallback;
-	std::move_only_function<void() const> const MonitorCallback;
+	std::move_only_function<void() const> FromCallback;
+	std::move_only_function<void() const> MonitorCallback;
 	SwitchFrom From;
 	SwitchTo To;
 	_SwitchIfPin(std::move_only_function<void() const> const& ParentCallback, std::move_only_function<void() const>&& _MonitorCallback, Process const* Container)
@@ -455,10 +457,10 @@ struct _AppendIfPin : Step {
 protected:
 	Step* Current;
 	bool PinDetected;
-	std::move_only_function<void() const> const MonitorCallback{ [&PinDetected = PinDetected]() {
+	std::move_only_function<void() const> MonitorCallback{ [&PinDetected = PinDetected]() {
 		PinDetected = true;
 	} };
-	std::move_only_function<void() const> const UnconditionalCallback;
+	std::move_only_function<void() const> UnconditionalCallback;
 	Unconditional UnconditionalStep;
 	Conditional ConditionalStep;
 	_AppendIfPin(std::move_only_function<void() const> const& ParentCallback, std::move_only_function<void() const>&& UnconditionalCallback, Process const* Container)
@@ -575,19 +577,18 @@ struct _CopyTupleToPointers;
 template<size_t... Indices>
 struct _CopyTupleToPointers<std::index_sequence<Indices...>> {
 	template<typename... Types>
-	static void Copy(std::tuple<Types...> const& Source, Step* const* Destination) {
+	static void Copy(std::tuple<Types...>& Source, Step** Destination) {
 		Step* const _[] = { Destination[Indices] = &std::get<Indices>(Source)... };
 	}
 	template<typename... Types>
-	static void Copy(std::tuple<Types...> const& Source, _StepWithRepeat* Destination) {
+	static void Copy(std::tuple<Types...>& Source, _StepWithRepeat* Destination) {
 		Step* const _[] = { Destination[Indices].StepPointer = &std::get<Indices>(Source)... };
 	}
 };
-
 template<typename... Steps>
 struct _Sequential_Base : Step {
 	_Sequential_Base(std::move_only_function<void() const>&& ChildCallback, Process const* Container)
-	  : ChildCallback{ std::move(ChildCallback) }, StepsTuple{ std::make_tuple(Steps{ ChildCallback, Container }...) } {
+	  : ChildCallback{ std::move(ChildCallback) }, StepsTuple(Steps{ ChildCallback, Container }...) {
 		_CopyTupleToPointers<std::make_index_sequence<sizeof...(Steps)>>::Copy(StepsTuple, StepPointers);
 	}
 	bool Start() override {
@@ -617,7 +618,7 @@ protected:
 	std::tuple<Steps...> StepsTuple;
 	Step* StepPointers[sizeof...(Steps)];
 	Step* const* CurrentStep;
-	std::move_only_function<void() const> const ChildCallback;
+	std::move_only_function<void() const> ChildCallback;
 };
 template<typename... Steps>
 struct _Sequential_Simple : _Sequential_Base<Steps...> {
@@ -771,7 +772,7 @@ struct _Sequential_WithTrials : _Sequential_Base<Steps...> {
 		std::tuple<Steps...> StepsTuple;
 		_StepWithRepeat StepPointers[sizeof...(Steps)];
 		_StepWithRepeat* CurrentStep;
-		std::move_only_function<void() const> const ChildCallback;
+		std::move_only_function<void() const> ChildCallback;
 		std::unordered_map<UID, uint16_t>* TrialsDoneLeft;
 	};
 
@@ -827,7 +828,7 @@ protected:
 	std::tuple<Steps...> StepsTuple;
 	Step* StepPointers[sizeof...(Steps)];
 	Step* const* CurrentStep;
-	std::move_only_function<void() const> const ChildCallback;
+	std::move_only_function<void() const> ChildCallback;
 };
 template<typename... Steps>
 struct _Random_Simple : _Random_Base<Steps...> {
@@ -981,7 +982,7 @@ struct _Random_WithTrials : _Random_Base<Steps...> {
 		std::tuple<Steps...> StepsTuple;
 		_StepWithRepeat StepPointers[sizeof...(Steps)];
 		Step* CurrentStep;
-		std::move_only_function<void() const> const ChildCallback;
+		std::move_only_function<void() const> ChildCallback;
 		std::unordered_map<UID, uint16_t>* TrialsDoneLeft;
 		void PickRandomStep() {
 			uint16_t RepeatsLeft = 0;
@@ -1097,7 +1098,7 @@ struct StartBackgroundRepeat : Repeatee {
 	}
 	using Repeatable = StartBackgroundRepeat<Repeatee, BackgroundID>;
 protected:
-	std::move_only_function<void() const> const ChildCallback{ [this]() {
+	std::move_only_function<void() const> ChildCallback{ [this]() {
 		while (Repeatee::Start())
 			;
 	} };

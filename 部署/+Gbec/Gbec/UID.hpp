@@ -1,7 +1,6 @@
 #pragma once
 #include <stdint.h>
-enum class UID : uint8_t
-{
+enum class UID : uint8_t {
 	//Arduino提供的服务端口
 
 	PortA_PointerSize,
@@ -12,7 +11,7 @@ enum class UID : uint8_t
 	PortA_GetInformation,
 	PortA_DeleteProcess,
 	PortA_AllProcesses,
-	ProtA_IsReady,
+	PortA_IsReady,
 
 	//Computer提供的服务端口
 

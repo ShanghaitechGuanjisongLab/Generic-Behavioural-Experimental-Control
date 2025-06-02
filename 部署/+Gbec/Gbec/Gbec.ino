@@ -2,6 +2,7 @@
 #include <sstream>
 #include <map>
 #include <vector>
+Async_stream_IO::AsyncStream SerialStream{ Serial };
 struct Process {
 	template<typename StepType>
 	static Process* New() {
@@ -48,7 +49,7 @@ protected:
 			if (!Content->Start())
 				return;
 		}
-		Async_stream_IO::Send(this, static_cast<uint8_t>(UID::PortC_ProcessFinished));
+		SerialStream.Send(this, static_cast<uint8_t>(UID::PortC_ProcessFinished));
 	} };
 	std::unique_ptr<Step> Content;
 	std::unordered_map<UID, uint16_t> TrialsDone;
@@ -67,7 +68,7 @@ std::unordered_map<UID, Process* (*)()> ProcessConstructors<std::tuple<Pairs...>
 
 template<typename T>
 inline void BindFunctionToPort(T&& Function, UID Port) {
-	Async_stream_IO::BindFunctionToPort(std::forward<T>(Function), static_cast<uint8_t>(Port));
+	SerialStream.BindFunctionToPort(std::forward<T>(Function), static_cast<uint8_t>(Port));
 }
 
 ArchUrng Urng;
@@ -77,9 +78,9 @@ void setup() {
 	Serial.begin(9600);
 	BindFunctionToPort([]() {
 		return static_cast<uint8_t>(sizeof(size_t));
-		},
-		UID::PortA_PointerSize);
-	Async_stream_IO::Listen([](const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize) {
+	},
+	                   UID::PortA_PointerSize);
+	SerialStream.Listen([](const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize) {
 		static std::vector<char> Message;
 		Message.resize(MessageSize);
 		MessageReader(Message.data(), MessageSize);
@@ -97,123 +98,118 @@ void setup() {
 		};
 #pragma pack(pop)
 		switch (MessageSize) {
-			case sizeof(UID) :
-			{
-				const auto Iterator = ProcessConstructors<PublicSteps>::value.find(*reinterpret_cast<UID*>(Message.data()));
-				if (Iterator == ProcessConstructors<PublicSteps>::value.end())
-					Async_stream_IO::Send(UID::Exception_InvalidProcess, static_cast<uint8_t>(UID::PortC_Signal));
-				else {
-					Process* const P = Iterator->second();
-					Async_stream_IO::Send(P, static_cast<uint8_t>(P->Start() ? UID::PortC_ProcessFinished : UID::PortC_ProcessStarted));
+			case sizeof(UID):
+				{
+					const auto Iterator = ProcessConstructors<PublicSteps>::value.find(*reinterpret_cast<UID*>(Message.data()));
+					if (Iterator == ProcessConstructors<PublicSteps>::value.end())
+						SerialStream.Send(UID::Exception_InvalidProcess, static_cast<uint8_t>(UID::PortC_Signal));
+					else {
+						Process* const P = Iterator->second();
+						SerialStream.Send(P, static_cast<uint8_t>(P->Start() ? UID::PortC_ProcessFinished : UID::PortC_ProcessStarted));
+					}
 				}
-			}
-			break;
-			case sizeof(RepeatHeader) :
-			{
-				RepeatHeader const* const Arguments = reinterpret_cast<RepeatHeader*>(Message.data());
-				const auto Iterator = ProcessConstructors<PublicSteps>::value.find(Arguments->StepID);
-				if (Iterator == ProcessConstructors<PublicSteps>::value.end())
-					Async_stream_IO::Send(UID::Exception_InvalidProcess, static_cast<uint8_t>(UID::PortC_Signal));
-				else {
-					Process* const P = Iterator->second();
-					Async_stream_IO::Send(P, static_cast<uint8_t>(P->Repeat(Arguments->Times) ? UID::PortC_ProcessFinished : UID::PortC_ProcessStarted));
+				break;
+			case sizeof(RepeatHeader):
+				{
+					RepeatHeader const* const Arguments = reinterpret_cast<RepeatHeader*>(Message.data());
+					const auto Iterator = ProcessConstructors<PublicSteps>::value.find(Arguments->StepID);
+					if (Iterator == ProcessConstructors<PublicSteps>::value.end())
+						SerialStream.Send(UID::Exception_InvalidProcess, static_cast<uint8_t>(UID::PortC_Signal));
+					else {
+						Process* const P = Iterator->second();
+						SerialStream.Send(P, static_cast<uint8_t>(P->Repeat(Arguments->Times) ? UID::PortC_ProcessFinished : UID::PortC_ProcessStarted));
+					}
 				}
-			}
-			break;
+				break;
 			default:
-			{
-				RestoreHeader const* const Arguments = reinterpret_cast<RestoreHeader*>(Message.data());
-				const auto Iterator = ProcessConstructors<PublicSteps>::value.find(Arguments->StepID);
-				if (Iterator == ProcessConstructors<PublicSteps>::value.end())
-					Async_stream_IO::Send(UID::Exception_InvalidProcess, static_cast<uint8_t>(UID::PortC_Signal));
-				else {
-					Process* const P = Iterator->second();
-					uint8_t const NumTrialsDone = (MessageSize - sizeof(UID)) / sizeof(RestoreHeader::TrialDone);
-					std::unordered_map<UID, uint16_t> TrialsDone;
-					TrialsDone.reserve(NumTrialsDone);
-					for (uint8_t i = 0; i < NumTrialsDone; ++i)
-						TrialsDone[Arguments->TrialsDone[i].TrialID] = Arguments->TrialsDone[i].NumDone;
-					Async_stream_IO::Send(P, static_cast<uint8_t>(P->Restore(std::move(TrialsDone)) ? UID::PortC_ProcessFinished : UID::PortC_ProcessStarted));
+				{
+					RestoreHeader const* const Arguments = reinterpret_cast<RestoreHeader*>(Message.data());
+					const auto Iterator = ProcessConstructors<PublicSteps>::value.find(Arguments->StepID);
+					if (Iterator == ProcessConstructors<PublicSteps>::value.end())
+						SerialStream.Send(UID::Exception_InvalidProcess, static_cast<uint8_t>(UID::PortC_Signal));
+					else {
+						Process* const P = Iterator->second();
+						uint8_t const NumTrialsDone = (MessageSize - sizeof(UID)) / sizeof(RestoreHeader::TrialDone);
+						std::unordered_map<UID, uint16_t> TrialsDone;
+						TrialsDone.reserve(NumTrialsDone);
+						for (uint8_t i = 0; i < NumTrialsDone; ++i)
+							TrialsDone[Arguments->TrialsDone[i].TrialID] = Arguments->TrialsDone[i].NumDone;
+						SerialStream.Send(P, static_cast<uint8_t>(P->Restore(std::move(TrialsDone)) ? UID::PortC_ProcessFinished : UID::PortC_ProcessStarted));
+					}
 				}
-			}
 		}
-		},
-		static_cast<uint8_t>(UID::PortA_CreateProcess));
+	},
+	                    static_cast<uint8_t>(UID::PortA_CreateProcess));
 	BindFunctionToPort([](Process* P) {
 		if (Process::Existing.contains(P)) {
 			noInterrupts();
 			P->Pause();
 			interrupts();
 			return UID::Exception_Success;
-		}
-		else
+		} else
 			return UID::Exception_InvalidProcess;
-		},
-		UID::PortA_PauseProcess);
+	},
+	                   UID::PortA_PauseProcess);
 	BindFunctionToPort([](Process* P) {
 		if (Process::Existing.contains(P)) {
 			noInterrupts();
 			P->Continue();
 			interrupts();
 			return UID::Exception_Success;
-		}
-		else
+		} else
 			return UID::Exception_InvalidProcess;
-		},
-		UID::PortA_ContinueProcess);
+	},
+	                   UID::PortA_ContinueProcess);
 	BindFunctionToPort([](Process* P) {
 		if (Process::Existing.contains(P)) {
 			noInterrupts();
 			P->Abort();
 			interrupts();
 			return UID::Exception_Success;
-		}
-		else
+		} else
 			return UID::Exception_InvalidProcess;
-		},
-		UID::PortA_AbortProcess);
+	},
+	                   UID::PortA_AbortProcess);
 	BindFunctionToPort([](Process* P, uint8_t ReceivePort) {
 		if (Process::Existing.contains(P)) {
 			std::ostringstream OutStream;
 			P->WriteInfo(OutStream);
 			std::string const Message = OutStream.str();
-			Async_stream_IO::Send(Message.data(), Message.size(), ReceivePort);
+			SerialStream.Send(Message.data(), Message.size(), ReceivePort);
 			return UID::Exception_Success;
-		}
-		else
+		} else
 			return UID::Exception_InvalidProcess;
-		},
-		UID::PortA_GetInformation);
+	},
+	                   UID::PortA_GetInformation);
 	BindFunctionToPort([](Process* P) {
 		if (Process::Existing.erase(P)) {
 			noInterrupts();
 			delete P;
 			interrupts();
 			return UID::Exception_Success;
-		}
-		else
+		} else
 			return UID::Exception_InvalidProcess;
-		},
-		UID::PortA_DeleteProcess);
-	Async_stream_IO::Listen([](const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize) {
+	},
+	                   UID::PortA_DeleteProcess);
+	SerialStream.Listen([](const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize) {
 		uint8_t ToPort;
 		for (uint8_t M = 0; M < MessageSize; M++)
 			MessageReader(&ToPort, 1);
-		MessageSize = sizeof(Process*) * Process::Existing.size() + sizeof(uint8_t);
-		std::unique_ptr<uint8_t[]> Message = std::make_unique_for_overwrite<uint8_t[]>(MessageSize);
-		Message[0] = Process::Existing.size();
-		std::copy(Process::Existing.cbegin(), Process::Existing.cend(), reinterpret_cast<Process**>(Message.get() + 1));
-		Async_stream_IO::Send(Message.get(), MessageSize, ToPort);
-		},
-		static_cast<uint8_t>(UID::PortA_AllProcesses));
+		Async_stream_IO::SendSession const Session{ sizeof(Process*) * Process::Existing.size() + sizeof(uint8_t), ToPort, Serial };
+		Serial.write(Process::Existing.size());
+		for (Process* const P : Process::Existing)
+			Serial.write(reinterpret_cast<const char*>(&P), sizeof(P));
+	},
+	                    static_cast<uint8_t>(UID::PortA_AllProcesses));
 #ifdef ARDUINO_ARCH_AVR
-	Async_stream_IO::RemoteInvoke(static_cast<uint8_t>(UID::PortC_RandomSeed), [](Async_stream_IO::Exception, uint32_t RandomSeed) {
+	SerialStream.RemoteInvoke(static_cast<uint8_t>(UID::PortC_RandomSeed), [](Async_stream_IO::Exception, uint32_t RandomSeed) {
 		std::ArduinoUrng::seed(RandomSeed);
-		});
+	});
 #endif
 	BindFunctionToPort([]() {
 		return true;
-		}, UID::PortA_IsReady);
+	},
+	                   UID::PortA_IsReady);
 }
 std::set<std::move_only_function<void() const> const*> _PendingInterrupts;
 void loop() {
@@ -222,6 +218,6 @@ void loop() {
 		M->operator()();
 	_PendingInterrupts.clear();
 	interrupts();
-	Async_stream_IO::ExecuteTransactionsInQueue();
+	SerialStream.ExecuteTransactionsInQueue();
 }
 #include <TimersOneForAll_Define.hpp>

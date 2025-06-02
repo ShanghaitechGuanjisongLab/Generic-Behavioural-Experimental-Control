@@ -10,6 +10,8 @@
 #include <set>
 #include "Async_stream_IO.hpp"
 struct Process;
+extern Async_stream_IO::AsyncStream SerialStream;
+
 // 通用步骤接口。实际步骤不一定实现所有方法。
 struct Step {
 	// 返回true表示步骤已完成可以进入下一步，返回false表示步骤未完成需要等待FinishCallback。如果不重写此方法，此方法将调用Repeat然后返回true。
@@ -89,7 +91,7 @@ struct SerialWrite : Step {
 	SerialWrite(std::move_only_function<void() const> const&, Process const* Container)
 	  : Container(Container) {}
 	bool Start() override {
-		Async_stream_IO::Send(ProcessSignal{ Container, Value }, static_cast<uint8_t>(UID::PortC_Signal));
+		SerialStream.Send(ProcessSignal{ Container, Value }, static_cast<uint8_t>(UID::PortC_Signal));
 		return true;
 	}
 	static void WriteInfoS(std::ostream& OutStream) {
@@ -206,7 +208,8 @@ extern std::move_only_function<void() const> const NullCallback;
 	static_cast<uint8_t>(UID::Property_##FieldName); \
 	FieldName::WriteInfoS(OutStream);
 
-// 引脚监视模块
+// 引脚监视模块。引脚中断的回调均在无中断模式下执行。
+
 extern std::set<std::move_only_function<void() const> const*> _PendingInterrupts;
 template<uint8_t Pin>
 struct _PinInterrupt {
@@ -245,13 +248,13 @@ struct Trial : TrialStep {
 		static_assert(!_ContainTrials<TrialStep>::value, "Trial步骤的TrialStep不能嵌套Trial");
 	}
 	bool Start() override {
-		Async_stream_IO::Send(Signal, static_cast<uint8_t>(UID::PortC_TrialStart));
+		SerialStream.Send(Signal, static_cast<uint8_t>(UID::PortC_TrialStart));
 		return TrialStep::Start();
 	}
 	struct _Repeatable : Trial<TrialID, typename TrialStep::Repeatable> {
 		using Trial<TrialID, typename TrialStep::Repeatable>::Trial;
 		bool Repeat() override {
-			Async_stream_IO::Send(Signal, static_cast<uint8_t>(UID::PortC_TrialStart));
+			SerialStream.Send(Signal, static_cast<uint8_t>(UID::PortC_TrialStart));
 			return TrialStep::Repeatable::Repeat();
 		}
 		using Repeatable = _Repeatable;

@@ -53,12 +53,20 @@ classdef AsyncSerialStream<handle
 	end
 	methods
 		function obj = AsyncSerialStream(Port,BaudRate)
-			%输入端口号和波特率（可选，默认9600），创建一个异步串口流对象
+			%输入串口号和波特率（可选，默认9600），创建一个异步串口流对象。如果串口被占用，可选强抢，需要提权。
 			arguments
 				Port
 				BaudRate=9600
 			end
-			obj.Serial=serialport(Port,BaudRate);
+			try
+				obj.Serial=serialport(Port,BaudRate);
+			catch ME
+				if ME.identifier=="serialport:serialport:ConnectionFailed"&&ismember(Port,serialportlist)&&questdlg('指定串口被其它进程占用，是否抢夺？','串口被占用','抢夺','放弃','放弃')=="抢夺"
+					obj.Serial=MATLAB.SnatchSerialport(Port,BaudRate);
+				else
+					ME.rethrow;
+				end
+			end
 		end
 		function Send(obj,Message,ToPort)
 			%向远程ToPort发送指定Message。Message必须支持typecast为uint8类型。Message在串口传输时会加上报文头，所以不能多次Send而指望这些消息会自动串联在一起。

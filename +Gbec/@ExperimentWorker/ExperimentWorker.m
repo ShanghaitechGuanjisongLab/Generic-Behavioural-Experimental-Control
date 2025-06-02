@@ -35,7 +35,7 @@ classdef ExperimentWorker<handle
 		MergeData=missing
 	end
 	properties(Access=protected)
-		Serial internal.Serialport
+		Serial Async_stream_IO.AsyncSerialStream
 		State=Gbec.UID.State_SessionInvalid
 		%没有对象无法初始化
 		WatchDog timer

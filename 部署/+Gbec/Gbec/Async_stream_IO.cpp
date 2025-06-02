@@ -7,7 +7,7 @@ namespace Async_stream_IO {
 
 // 调用这些方法前必须禁用中断
 
-static uint8_t AllocatePort(std::unordered_map<uint8_t, std::move_only_function<void() const>> const& _Listeners) {
+uint8_t AsyncStream::AllocatePort()const {
 	static uint8_t Port = 0;
 	while (_Listeners.contains(Port))
 		++Port;
@@ -57,6 +57,7 @@ void AsyncStream::Send(const void* Message, uint8_t Length, uint8_t ToPort) cons
 	BaseStream.write(reinterpret_cast<const char*>(Message), Length);
 }
 SendSession::SendSession(uint8_t Length, uint8_t ToPort, Stream& BaseStream) {
+	BaseStream.setTimeout(-1);
 	BaseStream.write(MagicByte);
 	BaseStream.write(ToPort);
 	BaseStream.write(Length);
@@ -70,7 +71,7 @@ SendSession::SendSession(uint8_t Length, uint8_t ToPort, Stream& BaseStream) {
 	return Exception::Success;
 #define DoWithNewPort(Action) \
 	_InterruptGuard const _; \
-	const uint8_t FromPort = AllocatePort(_Listeners); \
+	const uint8_t FromPort = AllocatePort(); \
 	Action; \
 	return FromPort;
 

@@ -31,7 +31,5 @@ classdef Exception<MATLAB.Lang.IEnumerableException
 		No_right_to_write_SavePath
 		User_canceled_operation
 		Serialport_disconnected
-		AsyncSerialStream_port_exhausted
-		AsyncSerialStream_port_not_found
 	end
 end

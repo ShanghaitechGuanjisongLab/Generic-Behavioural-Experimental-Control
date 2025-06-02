@@ -1,6 +1,9 @@
 classdef AsyncSerialStream<handle
-	properties(SetAccess=immutable,GetAccess=protected)
+	%端口号范围0~255
+	properties(SetAccess=immutable)
 		Serial
+	end
+	properties(SetAccess=immutable,GetAccess=protected)
 		Listeners=dictionary;
 	end
 	properties(Constant,Access=protected)
@@ -9,7 +12,7 @@ classdef AsyncSerialStream<handle
 	methods(Access=protected)
 		function PortForward(obj,varargin)
 			while(obj.Serial.NumBytesAvailable)
-				if obj.Serial.read(1,'uint8')==Gbec.AsyncSerialStream.MagicByte
+				if obj.Serial.read(1,'uint8')==Async_stream_IO.AsyncSerialStream.MagicByte
 					%读取端口号
 					Port=obj.Serial.read(1,'uint8');
 					%读取消息内容。即使端口号不在监听器列表中，也要读取消息内容以避免阻塞。
@@ -26,19 +29,26 @@ classdef AsyncSerialStream<handle
 				end
 			end
 		end
-		function Port=GetFreePort(obj)
+		function P=AllocatePort(obj)
 			%获取一个空闲的端口号
-			Port=0;
-			while obj.Listeners.isKey(Port)
-				Port=Port+1;
-				if Port>255
-					Gbec.Exception.AsyncSerialStream_port_exhausted.Throw;
-				end
+			persistent Port;
+			if isempty(Port)
+				Port=0;
 			end
+			while obj.Listeners.isKey(Port)
+				Port=mod(Port+1,256);
+			end
+			P=Port;
 		end
 		function FunctionCallback(obj,Function,Arguments)
-			%TODO：处理异常情况
-			obj.Send(Function(Arguments(2:end)),Arguments(1));
+			try
+				Result=Function(Arguments(2:end));
+			catch ME
+				obj.Send(Async_stream_IO.Exception.Function_runtime_error,Arguments(1));
+				warning(ME.identifier,'%s',ME.message);
+				return;
+			end
+			obj.Send([uint8(Async_stream_IO.Exception.Success), typecast(Result,'uint8')],Arguments(1));
 		end
 	end
 	methods
@@ -51,8 +61,8 @@ classdef AsyncSerialStream<handle
 			obj.Serial=serialport(Port,BaudRate);
 		end
 		function Send(obj,Message,ToPort)
-			%向远程ToPort发送指定Message。Message必须支持typecast为uint8类型。
-			obj.Serial.write(Gbec.AsyncSerialStream.MagicByte,'uint8');
+			%向远程ToPort发送指定Message。Message必须支持typecast为uint8类型。Message在串口传输时会加上报文头，所以不能多次Send而指望这些消息会自动串联在一起。
+			obj.Serial.write(Async_stream_IO.AsyncSerialStream.MagicByte,'uint8');
 			obj.Serial.write(ToPort,'uint8');
 			Message=typecast(Message,'uint8');
 			obj.Serial.write(numel(Message),'uint8');
@@ -64,7 +74,7 @@ classdef AsyncSerialStream<handle
 			arguments
 				obj
 				Callback
-				FromPort=obj.GetFreePort
+				FromPort=obj.AllocatePort
 			end
 			obj.Listeners(FromPort)=struct(Once=true,Callback=Callback);
 			obj.Serial.configureCallback('byte',1,@obj.PortForward);
@@ -75,7 +85,7 @@ classdef AsyncSerialStream<handle
 			arguments
 				obj
 				Callback
-				FromPort=obj.GetFreePort
+				FromPort=obj.AllocatePort
 			end
 			obj.Listeners(FromPort)=struct(Once=false,Callback=Callback);
 			obj.Serial.configureCallback('byte',1,@obj.PortForward);
@@ -89,17 +99,34 @@ classdef AsyncSerialStream<handle
 					obj.Serial.configureCallback('off');
 				end
 			else
-				Gbec.Exception.AsyncSerialStream_port_not_found.Warn(Port);
+				Async_stream_IO.Exception.AsyncSerialStream_port_not_found.Warn(Port);
 			end
 		end
 		function Port=BindFunctionToPort(obj,Function,Port)
-			%将Function绑定到Port（如果不指定则自动分配空闲端口并返回）作为服务，当收到消息时调用。Function必须接受一个(1,:)uint8输入。远程要调用此对象，也需要将所有参数序列化成一个(1,:)uint8，并且头部额外加上一个uint8的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。Function返回值必须支持typecast为uint8类型。
+			%将Function绑定到Port（如果不指定则自动分配空闲端口并返回）作为服务，当收到消息时调用。Function必须接受一个(1,:)uint8输入。远程要调用此对象，也需要将所有
+			% 参数序列化成一个(1,:)uint8，并且头部额外加上一个uint8的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。Function返回值必须支持typecast
+			% 为uint8类型。
 			arguments
 				obj
 				Function
-				Port=obj.GetFreePort
+				Port=obj.AllocatePort
 			end
 			obj.Listen(@(Arguments)obj.FunctionCallback(Function,Arguments),Port);
 		end
+		function RemoteInvoke(obj,RemotePort,Callback,varargin)
+			%远程调用指定RemotePort上的函数，传入varargin（每个参数都必须能typecast为uint8）。当远程函数返回时，调用Callback，必须接受一个(1,:)uint8参数。如果远程端
+			% 口未被监听，Callback将不会被调用。
+			Arguments=cellfun(@(x)typecast(x,'uint8'),varargin);
+			obj.Send([uint8(obj.Receive(@(Message)InvokeCallback(Callback,Message))),Arguments{:}],RemotePort);
+		end
 	end
+end
+function InvokeCallback(Callback,Message)
+if Message(1)==Async_stream_IO.Exception.Success
+	%如果消息是成功的，调用回调函数
+	Callback(Message(2:end));
+else
+	%否则抛出异常
+	Async_stream_IO.Exception(Message(1)).Throw;
+end
 end

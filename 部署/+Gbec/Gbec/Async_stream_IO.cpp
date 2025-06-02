@@ -50,7 +50,6 @@ inline static void AddReceiveListener(std::move_only_function<void(const std::mo
 constexpr uint8_t MagicByte = 0x5A;
 
 void AsyncStream::Send(const void* Message, uint8_t Length, uint8_t ToPort) const {
-	BaseStream.setTimeout(-1);
 	_InterruptGuard const _;
 	BaseStream.write(MagicByte);
 	BaseStream.write(ToPort);
@@ -58,7 +57,6 @@ void AsyncStream::Send(const void* Message, uint8_t Length, uint8_t ToPort) cons
 	BaseStream.write(reinterpret_cast<const char*>(Message), Length);
 }
 SendSession::SendSession(uint8_t Length, uint8_t ToPort, Stream& BaseStream) {
-	BaseStream.setTimeout(-1);
 	BaseStream.write(MagicByte);
 	BaseStream.write(ToPort);
 	BaseStream.write(Length);

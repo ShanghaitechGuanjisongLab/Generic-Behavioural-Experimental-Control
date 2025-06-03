@@ -31,5 +31,7 @@ classdef Exception<MATLAB.Lang.IEnumerableException
 		No_right_to_write_SavePath
 		User_canceled_operation
 		Serialport_disconnected
+		Server_initialize_timeout
+		Server_runtime_exception
 	end
 end

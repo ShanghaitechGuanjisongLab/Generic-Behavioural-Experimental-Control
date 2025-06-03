@@ -1,6 +1,6 @@
-classdef AsyncSerialStream<handle
+classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 	%端口号范围0~255
-	properties(SetAccess=immutable)
+	properties(SetAccess=immutable,Transient)
 		Serial
 	end
 	properties(SetAccess=immutable,GetAccess=protected)
@@ -21,24 +21,13 @@ classdef AsyncSerialStream<handle
 						%如果有监听器，调用其回调函数
 						Arguments=obj.Listeners(Port);
 						if Arguments.Once
-							%如果是一次性监听器，删除它
+							%如果是一次性监听器，删除它。必须先删除再调用回调，这样回调可以使用该端口。
 							obj.Listeners.remove(Port);
 						end
 						Arguments.Callback(Message);
 					end
 				end
 			end
-		end
-		function P=AllocatePort(obj)
-			%获取一个空闲的端口号
-			persistent Port;
-			if isempty(Port)
-				Port=0;
-			end
-			while obj.Listeners.isKey(Port)
-				Port=mod(Port+1,256);
-			end
-			P=Port;
 		end
 		function FunctionCallback(obj,Function,Arguments)
 			try
@@ -78,7 +67,7 @@ classdef AsyncSerialStream<handle
 		end
 		function FromPort=Receive(obj,Callback,FromPort)
 			%异步接收来自FromPort的消息，传递给Callback函数句柄。Callback必须接受一个(1,:)uint8向量输入。可以不指定FromPort，将自动分配一个空闲端口并返回。收到一次消
-			% 息后将删除监听器，如果要持续监听请使用Listen方法。
+			% 息后将删除监听器并释放端口号，如果要持续监听请使用Listen方法。
 			arguments
 				obj
 				Callback
@@ -89,7 +78,7 @@ classdef AsyncSerialStream<handle
 		end
 		function FromPort=Listen(obj,Callback,FromPort)
 			%持续监听来自FromPort的消息，传递给Callback函数句柄。Callback必须接受一个(1,:)uint8输入。可以不指定FromPort，将自动分配一个空闲端口并返回。收到一次消
-			% 息后将保留监听器，如果只想监听一次请使用Receive方法。
+			% 息后将保留监听器，如果只想监听一次请使用Receive方法。要停止监听请使用ReleasePort。
 			arguments
 				obj
 				Callback
@@ -121,11 +110,28 @@ classdef AsyncSerialStream<handle
 			end
 			obj.Listen(@(Arguments)obj.FunctionCallback(Function,Arguments),Port);
 		end
-		function RemoteInvoke(obj,RemotePort,Callback,varargin)
+		function LocalPort=RemoteInvoke(obj,RemotePort,Callback,varargin)
 			%远程调用指定RemotePort上的函数，传入varargin（每个参数都必须能typecast为uint8）。当远程函数返回时，调用Callback，必须接受一个(1,:)uint8参数。如果远程端
 			% 口未被监听，Callback将不会被调用。
+			%返回监听返回值的端口，该端口为自动分配。使用ReleasePort以放弃接收此返回值。
 			Arguments=cellfun(@(x)typecast(x,'uint8'),varargin);
-			obj.Send([uint8(obj.Receive(@(Message)InvokeCallback(Callback,Message))),Arguments{:}],RemotePort);
+			LocalPort=uint8(obj.Receive(@(Message)InvokeCallback(Callback,Message)));
+			obj.Send([LocalPort,Arguments{:}],RemotePort);
+		end
+		function Correct=CheckArguments(obj,Port,BaudRate)
+			Correct=obj.Serial.Port==Port&&obj.Serial.BaudRate==BaudRate;
+		end
+		function P=AllocatePort(obj)
+			%获取一个空闲的端口号。直到ReleasePort之前该端口不会被自动分配给其它用途。
+			persistent Port;
+			if isempty(Port)
+				Port=0;
+			end
+			while obj.Listeners.isKey(Port)
+				Port=mod(Port+1,256);
+			end
+			P=Port;
+			obj.Listeners(P)=struct(Once=false,Callback=@(Message)Async_stream_IO.Exception.Message_received_on_allocated_port.Warn(Message));
 		end
 	end
 end

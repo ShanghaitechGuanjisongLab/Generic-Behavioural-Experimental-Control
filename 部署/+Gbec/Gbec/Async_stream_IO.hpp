@@ -12,7 +12,7 @@ namespace Async_stream_IO {
 		Port_occupied = 3,
 		Argument_message_incomplete = 4,
 		Corrupted_object_received = 5,
-		Port_exhausted = 6,
+		Message_received_on_allocated_port = 6,
 	};
 	struct _InterruptGuard {
 		_InterruptGuard() {
@@ -84,7 +84,7 @@ namespace Async_stream_IO {
 
 	template<typename>
 	struct _NotMof {
-		using type = void;
+		using type = uint8_t;
 	};
 	template<typename T>
 	struct _NotMof<std::move_only_function<T>> {};
@@ -215,9 +215,9 @@ namespace Async_stream_IO {
 					此方法保证Callback被调用时中断处于启用状态。
 					*/
 		template<typename ReturnType, typename... ArgumentType>
-		void RemoteInvoke(uint8_t RemotePort, std::move_only_function<void(Exception Result, ReturnType ReturnValue) const>&& Callback, ArgumentType... Arguments) {
+		uint8_t RemoteInvoke(uint8_t RemotePort, std::move_only_function<void(Exception Result, ReturnType ReturnValue) const>&& Callback, ArgumentType... Arguments) {
 			SendSession const Session{ sizeof(uint8_t) + _TypesSize<ArgumentType...>::value, RemotePort, BaseStream };
-			BaseStream.write(Receive([Callback = std::move(Callback)](const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize) {
+			uint8_t const LocalPort = Receive([Callback = std::move(Callback)](const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize) {
 				const std::unique_ptr<char[]> Message = std::make_unique_for_overwrite<char[]>(MessageSize);
 				MessageReader(Message.get(), MessageSize);
 				if (MessageSize < sizeof(Exception))
@@ -226,8 +226,10 @@ namespace Async_stream_IO {
 					Callback(*reinterpret_cast<const Exception*>(Message.get()), {});
 				else
 					Callback(*reinterpret_cast<const Exception*>(Message.get()), *reinterpret_cast<const ReturnType*>(reinterpret_cast<const Exception*>(Message.get()) + 1));
-				}));
+				});
+			BaseStream.write(LocalPort);
 			size_t const Written[] = { BaseStream.write(reinterpret_cast<char*>(&Arguments), sizeof(Arguments))... };
+			return LocalPort;
 		}
 		/* 远程调用指定RemotePort上的函数，传入参数Arguments。当远程函数返回时，调用Callback，提供调用结果Result和返回值ReturnValue。
 					如果远程端口未被监听，Callback将不会被调用。
@@ -238,7 +240,7 @@ namespace Async_stream_IO {
 					*/
 		template<typename CallbackType, typename... ArgumentType>
 		inline typename _NotMof<CallbackType>::type RemoteInvoke(uint8_t RemotePort, const CallbackType& Callback, ArgumentType... Arguments) {
-			RemoteInvoke(RemotePort, std::move_only_function<std::_FunctionSignature_t<CallbackType>>(Callback), Arguments...);
+			return RemoteInvoke(RemotePort, std::move_only_function<std::_FunctionSignature_t<CallbackType>>(Callback), Arguments...);
 		}
 		std::unordered_map<uint8_t, std::move_only_function<void() const>> _Listeners;
 	protected:
@@ -246,6 +248,32 @@ namespace Async_stream_IO {
 	};
 	template<typename ReturnType, typename... ArgumentType>
 	struct _FunctionListener<ReturnType(ArgumentType...) const> {
+		_FunctionListener(std::move_only_function<ReturnType(ArgumentType...) const>&& Function, AsyncStream* BaseStream)
+			: Function(std::move(Function)), BaseStream(BaseStream) {
+		}
+		void operator()(const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize) const {
+			const std::unique_ptr<uint8_t[]> Arguments = std::make_unique_for_overwrite<uint8_t[]>(MessageSize);
+			MessageReader(Arguments.get(), MessageSize);
+			constexpr uint8_t ArgumentSize = _TypesSize<ArgumentType...>::value + sizeof(uint8_t);
+			if (MessageSize == ArgumentSize) {
+#pragma pack(push, 1)
+				struct ReturnMessage {
+					Exception Result;
+					ReturnType ReturnValue;
+				};
+#pragma pack(pop)
+				BaseStream->Send(ReturnMessage{ Exception::Success, _InvokeWithMemoryOffsets<typename _CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>::Invoke(Function, Arguments.get() + 1) }, Arguments[0]);
+			}
+			else
+				BaseStream->Send(Exception::Argument_message_incomplete, Arguments[0]);
+		}
+
+	protected:
+		std::move_only_function<ReturnType(ArgumentType...) const> Function;  //不能const，否则整个对象无法移动了
+		AsyncStream* const BaseStream;
+	};
+	template<>
+	struct _FunctionListener<std::unique_ptr<char>(std::unique_ptr) const> {
 		_FunctionListener(std::move_only_function<ReturnType(ArgumentType...) const>&& Function, AsyncStream* BaseStream)
 			: Function(std::move(Function)), BaseStream(BaseStream) {
 		}

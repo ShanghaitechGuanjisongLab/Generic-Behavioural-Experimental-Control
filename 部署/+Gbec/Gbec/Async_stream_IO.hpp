@@ -55,16 +55,6 @@ namespace Async_stream_IO {
 		using type = std::index_sequence<>;
 	};
 
-	template<typename Offsets>
-	struct _InvokeWithMemoryOffsets;
-	template<size_t... Offsets>
-	struct _InvokeWithMemoryOffsets<std::index_sequence<Offsets...>> {
-		template<typename ReturnType, typename... ArgumentType>
-		static ReturnType Invoke(const std::move_only_function<ReturnType(ArgumentType...) const>& Function, const uint8_t* Memory) {
-			return Function(*reinterpret_cast<const ArgumentType*>(Memory + Offsets)...);
-		}
-	};
-
 	template<typename...>
 	struct _TypesSize {
 		static constexpr size_t value = 0;
@@ -78,9 +68,6 @@ namespace Async_stream_IO {
 		static constexpr size_t value = sizeof(First) + _TypesSize<Rest...>::value;
 	};
 	constexpr size_t ST = _TypesSize<int>::value;
-
-	template<typename Signature>
-	struct _FunctionListener;
 
 	template<typename>
 	struct _NotMof {
@@ -105,10 +92,42 @@ namespace Async_stream_IO {
 	struct _FirstNotStream<First, Rest...> {
 		static constexpr bool value = !_CallableAsStream_s<First>::value;
 	};
+	template<typename T, typename = std::_FunctionSignature_t<T>>
+	struct _FunctionTraits {
+	};
+	template<typename TFunction, typename TReturn, typename... TArgument>
+	struct _FunctionTraits<TFunction, TReturn(TArgument...)const> {
+		static constexpr size_t ArgumentsSize = _TypesSize<ArgumentType...>::value;
+		template<typename = _CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>
+		struct InvokeWithMemoryOffsets;
+	};
+	template<typename TFunction, typename TReturn, typename... TArgument>
+	template<uint8_t... Offsets>
+	struct _FunctionTraits<TFunction, TReturn(TArgument...) const>::InvokeWithMemoryOffsets<std::index_sequence<Offsets...>> {
+#pragma pack(push, 1)
+		struct ReturnMessage {
+			Exception Result;
+			TReturn ReturnValue;
+		};
+#pragma pack(pop)
+		static ReturnMessage Invoke(TFunction const& Function, char const* Arguments) {
+			return { Exception::Success,Function(*reinterpret_cast<TArgument const*>(Arguments + Offsets)...) };
+		}
+	};
+	template<typename TFunction, typename... TArgument>
+	template<uint8_t... Offsets>
+	struct _FunctionTraits<TFunction, void(TArgument...) const>::InvokeWithMemoryOffsets<std::index_sequence<Offsets...>> {
+		static Exception Invoke(TFunction const& Function, char const* Arguments) {
+			Function(*reinterpret_cast<TArgument const*>(Arguments + Offsets)...);
+			return Exception::Success;
+		}
+	};
 	struct AsyncStream {
 		Stream& BaseStream;
+		//构造后，不得另外调用BaseStream.setTimeout，否则行为未定义。
 		AsyncStream(Stream& BaseStream)
 			: BaseStream(BaseStream) {
+			BaseStream.setTimeout(-1);
 		}
 
 		/*一般应在loop中调用此方法。它将实际执行所有排队中的监听器。
@@ -126,107 +145,90 @@ namespace Async_stream_IO {
 			Send(&Message, sizeof(T), ToPort);
 		}
 
-		/*监听FromStream流的本地FromPort端口。当远程传来指向FromPort的消息时，那个消息将被拷贝到Message指针最多Capacity字节，并调用Callback，提供消息字节数。在那之前，调用方有义务维持Message指针有效。
-					如果FromPort已被监听，那么新的监听将失败，返回Port_occupied。
-					此监听是一次性的。一旦收到消息，在调用Callback之前，监听就会结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
-					如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，并提供存储该消息所需的字节数。
-					此方法保证Callback被调用时中断处于启用状态。
-					 */
-		Exception Receive(void* Message, uint8_t Capacity, std::move_only_function<void(uint8_t MessageSize) const>&& Callback, uint8_t FromPort);
-		/*监听FromStream流的本地FromPort端口。当远程传来指向FromPort的消息时，调用Callback，提供一个临时接口MessageReader和MessageSize，用于读取消息内容。MessageReader在Callback返回后失效，因此调用方不应试图保存MessageReader。
-					可以多次调用MessageReader，将消息拆分读取到不同的内存位置。但在Callback返回之前，必须不多不少恰好读入全部MessageSize字节，否则行为未定义。
-					如果FromPort已被监听，那么新的监听将失败，返回Port_occupied。
-					此监听是一次性的。一旦收到消息，在调用Callback之前，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
-					此方法是最灵活的接收方法，可以在消息实际到来时再进行任何处理，而不必提前分配接收缓冲区。
-					此方法保证Callback被调用时中断处于启用状态。
-					*/
-		Exception Receive(std::move_only_function<void(const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize) const>&& Callback, uint8_t FromPort);
-		/*监听FromStream流的本地FromPort端口。当远程传来指向FromPort的消息时，那个消息将被拷贝到Message指针最多Capacity字节，并调用Callback，提供消息字节数。在那之前，调用方有义务维持Message指针有效。
-					此监听是一次性的。一旦收到消息，在调用Callback之前，监听就会结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
-					如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，并提供存储该消息所需的字节数。
-					此方法保证Callback被调用时中断处于启用状态。
-					 */
-		uint8_t Receive(void* Message, uint8_t Capacity, std::move_only_function<void(uint8_t MessageSize) const>&& Callback);
-		/*自动分配一个空闲本地端口返回，监听FromStream流的那个端口。当远程传来指向FromPort的消息时，调用Callback，提供一个临时接口MessageReader和MessageSize，用于读取消息内容。MessageReader在Callback返回后失效，因此调用方不应试图保存MessageReader。
-					可以多次调用MessageReader，将消息拆分读取到不同的内存位置。但在Callback返回之前，必须不多不少恰好读入全部MessageSize字节，否则行为未定义。
-					此监听是一次性的。一旦收到消息，在调用Callback之前，监听就结束，端口被释放。这意味着，可以在Callback中再次监听同一个端口。
-					此方法是最灵活的接收方法，可以在消息实际到来时再进行任何处理，而不必提前分配接收缓冲区。
-					此方法保证Callback被调用时中断处于启用状态。
-					*/
-		uint8_t Receive(std::move_only_function<void(const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize) const>&& Callback);
-
-		/*持续监听FromStream流的本地FromPort端口。当远程传来指向FromPort的消息时，那个消息将被拷贝到Message指针最多Capacity字节，并调用Callback，提供消息字节数。在那之前，调用方有义务维持Message指针有效。
-					如果FromPort已被监听，那么新的监听将失败，返回Port_occupied。
-					此监听是持续性的。无论收到多少消息，端口都不会被释放。这意味着，只有在调用方主动ReleasePort时，监听才会结束。
-					如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，并提供存储该消息所需的字节数。
-					此方法保证Callback被调用时中断处于启用状态。
-					 */
-		Exception Listen(void* Message, uint8_t Capacity, std::move_only_function<void(uint8_t MessageSize) const>&& Callback, uint8_t FromPort);
-		/*持续监听FromStream流的本地FromPort端口。当远程传来指向FromPort的消息时，调用Callback，提供一个临时接口MessageReader和MessageSize，用于读取消息内容。MessageReader在Callback返回后失效，因此调用方不应试图保存MessageReader。
-					可以多次调用MessageReader，将消息拆分读取到不同的内存位置。但在Callback返回之前，必须不多不少恰好读入全部MessageSize字节，否则行为未定义。
-					如果FromPort已被监听，那么新的监听将失败，返回Port_occupied。
-					此监听是持续性的。无论收到多少消息，端口都不会被释放。这意味着，只有在调用方主动ReleasePort时，监听才会结束。
-					此方法是最灵活的接收方法，可以在消息实际到来时再进行任何处理，而不必提前分配接收缓冲区。
-					此方法保证Callback被调用时中断处于启用状态。
-					*/
-		Exception Listen(std::move_only_function<void(const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize) const>&& Callback, uint8_t FromPort);
-		/*持续监听FromStream流的本地FromPort端口。当远程传来指向FromPort的消息时，那个消息将被拷贝到Message指针最多Capacity字节，并调用Callback，提供消息字节数。在那之前，调用方有义务维持Message指针有效。
-					此监听是持续性的。无论收到多少消息，端口都不会被释放。这意味着，只有在调用方主动ReleasePort时，监听才会结束。
-					如果消息长度超过Capacity，将不会向Message写入任何内容，但仍会调用Callback，并提供存储该消息所需的字节数。
-					此方法保证Callback被调用时中断处于启用状态。
-					 */
-		uint8_t Listen(void* Message, uint8_t Capacity, std::move_only_function<void(uint8_t MessageSize) const>&& Callback);
-		/*自动分配一个空闲本地端口返回，持续监听FromStream流的那个端口。当远程传来指向FromPort的消息时，调用Callback，提供一个临时接口MessageReader和MessageSize，用于读取消息内容。MessageReader在Callback返回后失效，因此调用方不应试图保存MessageReader。
-					可以多次调用MessageReader，将消息拆分读取到不同的内存位置。但在Callback返回之前，必须不多不少恰好读入全部MessageSize字节，否则行为未定义。
-					此监听是持续性的。无论收到多少消息，端口都不会被释放。这意味着，只有在调用方主动ReleasePort时，监听才会结束。
-					此方法是最灵活的接收方法，可以在消息实际到来时再进行任何处理，而不必提前分配接收缓冲区。
-					此方法保证Callback被调用时中断处于启用状态。
-					*/
-		uint8_t Listen(std::move_only_function<void(const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize) const>&& Callback);
-
-		/*立即释放指定本地端口，取消任何Receive或Listen监听。如果端口未被监听，返回Port_idle。无论如何，此方法返回后即可以在被释放的本地端口上附加新的监听。
-					此方法不能用于取消挂起的Send委托。本库不支持取消Send委托。
-					 */
-		Exception ReleasePort(uint8_t Port);
-
-		/* 将任意可调用对象绑定到指定本地端口上作为服务，当收到消息时调用。如果本地端口被占用，返回Port_occupied。
-					远程要调用此对象，需要将所有参数序列化拼接成一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。如果消息字节数不足，将向远程调用方发送Parameter_message_incomplete。
-					Function的参数和返回值必须是平凡类型。
-					此方法保证Function被调用时中断处于启用状态。
-					*/
-		template<typename T>
-		inline Exception BindFunctionToPort(T&& Function, uint8_t Port) {
-			return Listen(_FunctionListener<std::_FunctionSignature_t<T>>(std::move(Function), this), Port);
+		//分配一个空闲端口号。该端口号将保持被占用状态，不再参与自动分配，直到调用ReleasePort。
+		uint8_t AllocatePort();
+		//检查指定端口Port是否被占用。
+		bool PortOccupied(uint8_t Port) const {
+			_InterruptGuard const _;
+			return _Listeners.contains(Port);
 		}
-		/* 将任意可调用对象绑定到流作为服务，当收到消息时调用。返回远程要调用此对象需要发送消息到的本地端口号。
-					远程要调用此对象，需要将所有参数序列化拼接成一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。如果消息字节数不足，将向远程调用方发送Parameter_message_incomplete。
-					Function的参数和返回值必须是平凡类型。
-					此方法保证Function被调用时中断处于启用状态。
-					*/
+		//立即释放指定本地端口，取消任何监听或绑定函数。
+		void ReleasePort(uint8_t Port) {
+			_InterruptGuard const _;
+			_Listeners.erase(Port);
+		}
+
+		/*持续监听本地FromPort端口。当远程传来指向FromPort的消息时，调用 void Callback(uint8_t MessageSize)，由用户负责从BaseStream读取消息内容。在Callback返回之前，必须不多不少恰好读入全部MessageSize字节，否则行为未定义。
+		如果FromPort已被监听，将覆盖。
+		此监听是持续性的，每次收到消息都会重复调用Callback。如果需要停止监听，可以在Callback中或其它任何位置调用ReleasePort。
+		此方法保证Callback被调用时中断处于启用状态。
+		*/
 		template<typename T>
-		inline uint8_t BindFunctionToPort(T&& Function) {
-			return Listen(_FunctionListener<std::_FunctionSignature_t<T>>(std::move(Function), this));
+		void Listen(T&& Callback, uint8_t FromPort) {
+			_InterruptGuard const _;
+			_Listeners[FromPort] = std::forward<T>(Callback);
+		}
+		/*自动分配一个空闲端口并持续监听。当远程传来指向该端口的消息时，调用 void Callback(uint8_t MessageSize)，由用户负责从BaseStream读取消息内容。在Callback返回之前，必须不多不少恰好读入全部MessageSize字节，否则行为未定义。返回分配的端口号。
+		此监听是持续性的，每次收到消息都会重复调用Callback。如果需要停止监听，可以在Callback中或其它任何位置调用ReleasePort。
+		此方法保证Callback被调用时中断处于启用状态。
+		*/
+		template<typename T>
+		uint8_t Listen(T&& Callback) {
+			_InterruptGuard const _;
+			uint8_t const FromPort = _AllocatePort();
+			_Listeners[FromPort] = std::forward<T>(Callback);
+			return FromPort;
+		}
+
+		/* 将任意可调用对象绑定到指定本地端口上作为服务，当收到消息时调用。如果端口被占用，将覆盖。
+		远程要调用此对象，需要将所有参数序列化拼接成一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。如果消息字节数不足，将向远程调用方发送Argument_message_incomplete。
+		Function的参数和返回值（如果有）必须是平凡类型。
+		此方法保证Function被调用时中断处于启用状态。
+		使用ReleasePort可以取消绑定，释放端口。
+		*/
+		template<typename T>
+		void BindFunctionToPort(T&& Function, uint8_t Port) {
+			Listen([Function = std::forward<T>(Function), this](uint8_t MessageSize) {
+				const std::unique_ptr<uint8_t[]> Arguments = std::make_unique_for_overwrite<uint8_t[]>(MessageSize);
+				BaseStream->readBytes(Arguments.get(), MessageSize);
+				Send(MessageSize == _FunctionTraits<T>::ArgumentsSize + sizeof(uint8_t) ? _FunctionTraits<T>::InvokeWithMemoryOffsets::Invoke(Function, reinterpret_cast<char*>(Arguments.get() + 1)) : Exception::Argument_message_incomplete, Arguments[0]);
+				}, Port);
+		}
+		/* 将任意可调用对象绑定到自动分配的空闲端口上作为服务，当收到消息时调用。返回分配的端口号。
+		远程要调用此对象，需要将所有参数序列化拼接成一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。如果消息字节数不足，将向远程调用方发送Argument_message_incomplete。
+		Function的参数和返回值（如果有）必须是平凡类型。
+		此方法保证Function被调用时中断处于启用状态。
+		使用ReleasePort可以取消绑定，释放端口。
+		*/
+		template<typename T>
+		uint8_t BindFunctionToPort(T&& Function) {
+			return Listen([Function = std::forward<T>(Function), this](uint8_t MessageSize) {
+				const std::unique_ptr<uint8_t[]> Arguments = std::make_unique_for_overwrite<uint8_t[]>(MessageSize);
+				BaseStream->readBytes(Arguments.get(), MessageSize);
+				Send(MessageSize == _FunctionTraits<T>::ArgumentsSize + sizeof(uint8_t) ? _FunctionTraits<T>::InvokeWithMemoryOffsets::Invoke(Function, reinterpret_cast<char*>(Arguments.get() + 1)) : Exception::Argument_message_incomplete, Arguments[0]);
+				});
 		}
 		/* 远程调用指定RemotePort上的函数，传入参数Arguments。当远程函数返回时，调用Callback，提供调用结果Result和返回值ReturnValue。
-					如果远程端口未被监听，Callback将不会被调用。
-					如果Result为Corrupted_object_received，说明收到了意外的返回值。这可能是因为远程函数返回值的类型与预期不符，或者有其它远程对象向本地端口发送了垃圾信息。此次远程调用将被废弃。
-					如果Result为Parameter_message_incomplete，说明远程函数接收到的参数不完整。这可能是因为远程函数的参数类型与预期不符，或者有其它本地对象向远程端口发送了垃圾信息。此次远程调用将被废弃。
-					ReturnType和ArgumentType必须是平凡类型。
-					此方法保证Callback被调用时中断处于启用状态。
-					*/
-		template<typename ReturnType, typename... ArgumentType>
-		uint8_t RemoteInvoke(uint8_t RemotePort, std::move_only_function<void(Exception Result, ReturnType ReturnValue) const>&& Callback, ArgumentType... Arguments) {
-			SendSession const Session{ sizeof(uint8_t) + _TypesSize<ArgumentType...>::value, RemotePort, BaseStream };
-			uint8_t const LocalPort = Receive([Callback = std::move(Callback)](const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize) {
+		如果远程端口未被监听，Callback将不会被调用。
+		如果Result为Corrupted_object_received，说明收到了意外的返回值。这可能是因为远程函数返回值的类型与预期不符，或者有其它远程对象向本地端口发送了垃圾信息。此次远程调用将被废弃。
+		如果Result为Parameter_message_incomplete，说明远程函数接收到的参数不完整。这可能是因为远程函数的参数类型与预期不符，或者有其它本地对象向远程端口发送了垃圾信息。此次远程调用将被废弃。
+		ReturnType和ArgumentType必须是平凡类型。
+		此方法保证Callback被调用时中断处于启用状态。
+		*/
+		template<typename TCallback, typename... TArgument>
+		void RemoteInvoke(uint8_t RemotePort, uint8_t LocalPort, TCallback&& Callback, TArgument... Arguments) {
+			Listen([LocalPort, Callback = std::forward<TCallback>(Callback),this](uint8_t MessageSize) {
+				ReleasePort(LocalPort);
 				const std::unique_ptr<char[]> Message = std::make_unique_for_overwrite<char[]>(MessageSize);
-				MessageReader(Message.get(), MessageSize);
+				BaseStream.readBytes(Message.get(), MessageSize);
 				if (MessageSize < sizeof(Exception))
 					Callback(Exception::Corrupted_object_received, {});
 				else if (MessageSize < sizeof(Exception) + sizeof(ReturnType))
 					Callback(*reinterpret_cast<const Exception*>(Message.get()), {});
 				else
 					Callback(*reinterpret_cast<const Exception*>(Message.get()), *reinterpret_cast<const ReturnType*>(reinterpret_cast<const Exception*>(Message.get()) + 1));
-				});
+				}, LocalPort);
+			SendSession const Session{ sizeof(uint8_t) + _TypesSize<TArgument...>::value, RemotePort, BaseStream };
 			BaseStream.write(LocalPort);
 			size_t const Written[] = { BaseStream.write(reinterpret_cast<char*>(&Arguments), sizeof(Arguments))... };
 			return LocalPort;
@@ -242,60 +244,8 @@ namespace Async_stream_IO {
 		inline typename _NotMof<CallbackType>::type RemoteInvoke(uint8_t RemotePort, const CallbackType& Callback, ArgumentType... Arguments) {
 			return RemoteInvoke(RemotePort, std::move_only_function<std::_FunctionSignature_t<CallbackType>>(Callback), Arguments...);
 		}
-		std::unordered_map<uint8_t, std::move_only_function<void() const>> _Listeners;
+		std::unordered_map<uint8_t, std::move_only_function<void(uint8_t MessageSize) const>> _Listeners;
 	protected:
-		uint8_t AllocatePort()const;
-	};
-	template<typename ReturnType, typename... ArgumentType>
-	struct _FunctionListener<ReturnType(ArgumentType...) const> {
-		_FunctionListener(std::move_only_function<ReturnType(ArgumentType...) const>&& Function, AsyncStream* BaseStream)
-			: Function(std::move(Function)), BaseStream(BaseStream) {
-		}
-		void operator()(const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize) const {
-			const std::unique_ptr<uint8_t[]> Arguments = std::make_unique_for_overwrite<uint8_t[]>(MessageSize);
-			MessageReader(Arguments.get(), MessageSize);
-			constexpr uint8_t ArgumentSize = _TypesSize<ArgumentType...>::value + sizeof(uint8_t);
-			if (MessageSize == ArgumentSize) {
-#pragma pack(push, 1)
-				struct ReturnMessage {
-					Exception Result;
-					ReturnType ReturnValue;
-				};
-#pragma pack(pop)
-				BaseStream->Send(ReturnMessage{ Exception::Success, _InvokeWithMemoryOffsets<typename _CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>::Invoke(Function, Arguments.get() + 1) }, Arguments[0]);
-			}
-			else
-				BaseStream->Send(Exception::Argument_message_incomplete, Arguments[0]);
-		}
-
-	protected:
-		std::move_only_function<ReturnType(ArgumentType...) const> Function;  //不能const，否则整个对象无法移动了
-		AsyncStream* const BaseStream;
-	};
-	template<>
-	struct _FunctionListener<std::unique_ptr<char>(std::unique_ptr) const> {
-		_FunctionListener(std::move_only_function<ReturnType(ArgumentType...) const>&& Function, AsyncStream* BaseStream)
-			: Function(std::move(Function)), BaseStream(BaseStream) {
-		}
-		void operator()(const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize) const {
-			const std::unique_ptr<uint8_t[]> Arguments = std::make_unique_for_overwrite<uint8_t[]>(MessageSize);
-			MessageReader(Arguments.get(), MessageSize);
-			constexpr uint8_t ArgumentSize = _TypesSize<ArgumentType...>::value + sizeof(uint8_t);
-			if (MessageSize == ArgumentSize) {
-#pragma pack(push, 1)
-				struct ReturnMessage {
-					Exception Result;
-					ReturnType ReturnValue;
-				};
-#pragma pack(pop)
-				BaseStream->Send(ReturnMessage{ Exception::Success, _InvokeWithMemoryOffsets<typename _CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>::Invoke(Function, Arguments.get() + 1) }, Arguments[0]);
-			}
-			else
-				BaseStream->Send(Exception::Argument_message_incomplete, Arguments[0]);
-		}
-
-	protected:
-		std::move_only_function<ReturnType(ArgumentType...) const> Function;  //不能const，否则整个对象无法移动了
-		AsyncStream* const BaseStream;
+		uint8_t _AllocatePort()const;
 	};
 }

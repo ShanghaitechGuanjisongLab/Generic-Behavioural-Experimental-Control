@@ -16,7 +16,7 @@ namespace Async_stream_IO {
 	uint8_t AsyncStream::AllocatePort() {
 		_InterruptGuard const _;
 		uint8_t const Port = _AllocatePort();
-		_Listeners[Port] = [](uint8_t MessageSize) {BaseStream.readBytes(std::make_unique_for_overwrite<char[]>(MessageSize).get(), MessageSize)}; // 读入消息，不做任何事，直接丢弃
+		_Listeners[Port] = [this](uint8_t MessageSize) {BaseStream.readBytes(std::make_unique_for_overwrite<char[]>(MessageSize).get(), MessageSize);}; // 读入消息，不做任何事，直接丢弃
 		return Port;
 	}
 
@@ -47,19 +47,22 @@ namespace Async_stream_IO {
 					uint8_t Length;
 				}Header;
 #pragma pack(pop)
-				BaseStream.readBytes(&Header, sizeof(Header));  // 保证读入
+				BaseStream.readBytes(reinterpret_cast<char*>(&Header), sizeof(Header));  // 保证读入
 				noInterrupts();
-				auto const PortListener = _Listeners.find(Header.ToPort);
+				auto PortListener = _Listeners.find(Header.ToPort);
 				if (PortListener == _Listeners.end()) {
 					// 消息指向未监听的端口，丢弃
 					interrupts();
 					BaseStream.readBytes(std::make_unique_for_overwrite<char[]>(Header.Length).get(), Header.Length);
 				}
 				else {
+					//先将回调函数取回本地，这样回调函数可以安全释放端口
 					std::move_only_function<void(uint8_t MessageSize) const> L = std::move(PortListener->second);
 					interrupts();
 					L(Header.Length);
 					noInterrupts();
+
+					//回调函数中可能会释放该端口，必须先检查
 					if ((PortListener = _Listeners.find(Header.ToPort)) != _Listeners.end())
 						PortListener->second = std::move(L);
 					interrupts();

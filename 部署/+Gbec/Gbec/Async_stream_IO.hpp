@@ -33,98 +33,108 @@ namespace Async_stream_IO {
 #endif
 			;
 	};
-	//轻量化的消息发送同步器。对象构造后将禁用中断，保证消息连续发出。此对象生存期内，用户必须直接使用BaseStream.write()方法发送数据，而不能使用Send；此方法发送的所有数据会被字节串联并视为单条消息。在对象析构前，用户必须恰好已发送Length字节的数据，不能多也不能少，否则行为未定义。对象析构时中断会恢复到构造前的状态。
+	//轻量化的消息发送同步器。对象构造后将禁用中断，保证消息连续发出。此对象生存期内，用户必须直接使用BaseStream.write()方法发送数据，而不能使用Send；此方法发送的所有数据会被字节串联并视为单条消息。在对象析构前，用户必须恰好已发送Length字节的数据，不能多也不能少，否则行为未定义。对象析构时中断会恢复到构造前的状态。此对象在BaseStream已被AsyncStream托管的情况下也允许正常使用。
 	struct SendSession : protected _InterruptGuard {
 		SendSession(uint8_t Length, uint8_t ToPort, Stream& BaseStream);
 	};
-	template<size_t Plus, typename T>
-	struct _PlusAndPrepend;
-	template<size_t Plus, size_t... Values>
-	struct _PlusAndPrepend<Plus, std::index_sequence<Values...>> {
-		using type = std::index_sequence<0, Plus + Values...>;
-	};
-
-	template<typename T>
-	struct _CumSum;
-	template<size_t First, size_t... Rest>
-	struct _CumSum<std::index_sequence<First, Rest...>> {
-		using type = typename _PlusAndPrepend<First, typename _CumSum<std::index_sequence<Rest...>>::type>::type;
-	};
-	template<>
-	struct _CumSum<std::index_sequence<>> {
-		using type = std::index_sequence<>;
-	};
-
-	template<typename...>
-	struct _TypesSize {
-		static constexpr size_t value = 0;
-	};
-	template<typename Only>
-	struct _TypesSize<Only> {
-		static constexpr size_t value = sizeof(Only);
-	};
-	template<typename First, typename... Rest>
-	struct _TypesSize<First, Rest...> {
-		static constexpr size_t value = sizeof(First) + _TypesSize<Rest...>::value;
-	};
-	constexpr size_t ST = _TypesSize<int>::value;
-
-	template<typename>
-	struct _NotMof {
-		using type = uint8_t;
-	};
-	template<typename T>
-	struct _NotMof<std::move_only_function<T>> {};
-	template<typename...>
-	struct _FirstNotStream {
-		static constexpr bool value = true;
-	};
-	static void _CallableAsStream_f(Stream&);
-	template<typename T, typename = void>
-	struct _CallableAsStream_s {
-		static constexpr bool value = false;
-	};
-	template<typename T>
-	struct _CallableAsStream_s<T, decltype(_CallableAsStream_f(*std::declval<T*>()))> {
-		static constexpr bool value = true;
-	};
-	template<typename First, typename... Rest>
-	struct _FirstNotStream<First, Rest...> {
-		static constexpr bool value = !_CallableAsStream_s<First>::value;
-	};
-	template<typename T, typename = std::_FunctionSignature_t<T>>
-	struct _FunctionTraits {
-	};
-	template<typename TFunction, typename TReturn, typename... TArgument>
-	struct _FunctionTraits<TFunction, TReturn(TArgument...)const> {
-		static constexpr size_t ArgumentsSize = _TypesSize<ArgumentType...>::value;
-		template<typename = _CumSum<std::index_sequence<sizeof(ArgumentType)...>>::type>
-		struct InvokeWithMemoryOffsets;
-	};
-	template<typename TFunction, typename TReturn, typename... TArgument>
-	template<uint8_t... Offsets>
-	struct _FunctionTraits<TFunction, TReturn(TArgument...) const>::InvokeWithMemoryOffsets<std::index_sequence<Offsets...>> {
-#pragma pack(push, 1)
-		struct ReturnMessage {
-			Exception Result;
-			TReturn ReturnValue;
+	class AsyncStream {
+		template<size_t Plus, typename T>
+		struct _PlusAndPrepend;
+		template<size_t Plus, size_t... Values>
+		struct _PlusAndPrepend<Plus, std::index_sequence<Values...>> {
+			using type = std::index_sequence<0, Plus + Values...>;
 		};
+
+		template<typename T>
+		struct _CumSum {
+			using type = std::index_sequence<>;
+		};
+		template<size_t First, size_t... Rest>
+		struct _CumSum<std::index_sequence<First, Rest...>> {
+			using type = typename _PlusAndPrepend<First, typename _CumSum<std::index_sequence<Rest...>>::type>::type;
+		};
+
+		template<typename...>
+		struct _TypesSize {
+			static constexpr size_t value = 0;
+		};
+		template<typename First, typename... Rest>
+		struct _TypesSize<First, Rest...> {
+			static constexpr size_t value = sizeof(First) + _TypesSize<Rest...>::value;
+		};
+
+		template<typename T, typename = std::_FunctionSignature_t<T>>
+		struct _FunctionTraits;
+		template<typename TFunction, typename TReturn, typename... TArgument>
+		struct _FunctionTraits<TFunction, TReturn(TArgument...)const> {
+			static constexpr size_t ArgumentsSize = _TypesSize<TArgument...>::value;
+			template<typename = typename _CumSum<std::index_sequence<sizeof(TArgument)...>>::type>
+			struct InvokeWithMemoryOffsets;
+			template<uint8_t... Offsets>
+			struct InvokeWithMemoryOffsets<std::index_sequence<Offsets...>> {
+#pragma pack(push, 1)
+				struct ReturnMessage {
+					Exception Result;
+					TReturn ReturnValue;
+				};
 #pragma pack(pop)
-		static ReturnMessage Invoke(TFunction const& Function, char const* Arguments) {
-			return { Exception::Success,Function(*reinterpret_cast<TArgument const*>(Arguments + Offsets)...) };
-		}
-	};
-	template<typename TFunction, typename... TArgument>
-	template<uint8_t... Offsets>
-	struct _FunctionTraits<TFunction, void(TArgument...) const>::InvokeWithMemoryOffsets<std::index_sequence<Offsets...>> {
-		static Exception Invoke(TFunction const& Function, char const* Arguments) {
-			Function(*reinterpret_cast<TArgument const*>(Arguments + Offsets)...);
-			return Exception::Success;
-		}
-	};
-	struct AsyncStream {
+				static ReturnMessage Invoke(TFunction const& Function, char const* Arguments) {
+					return { Exception::Success,Function(*reinterpret_cast<TArgument const*>(Arguments + Offsets)...) };
+				}
+			};
+		};
+		template<typename TFunction, typename... TArgument>
+		struct _FunctionTraits<TFunction, void(TArgument...) const> {
+			static constexpr size_t ArgumentsSize = _TypesSize<TArgument...>::value;
+			template<typename = typename _CumSum<std::index_sequence<sizeof(TArgument)...>>::type>
+			struct InvokeWithMemoryOffsets;
+			template<uint8_t... Offsets>
+			struct InvokeWithMemoryOffsets<std::index_sequence<Offsets...>> {
+				static Exception Invoke(TFunction const& Function, char const* Arguments) {
+					Function(*reinterpret_cast<TArgument const*>(Arguments + Offsets)...);
+					return Exception::Success;
+				}
+			};
+		};
+
+		template<typename T, typename = std::_FunctionSignature_t<T>>
+		struct CallbackTraits
+		{
+			static void Invoke(TCallback const& Callback, void const* Message, size_t MessageSize) {
+				if (MessageSize < sizeof(Exception))
+					Callback(Exception::Corrupted_object_received);
+				else
+					Callback(*reinterpret_cast<const Exception*>(Message));
+			}
+		};
+		template<typename TCallback, typename TReturn>
+		struct CallbackTraits<TCallback, void(Exception, TReturn)> {
+			static void Invoke(TCallback const& Callback, void const* Message, size_t MessageSize) {
+				if (MessageSize < sizeof(Exception))
+					Callback(Exception::Corrupted_object_received, {});
+				else if (MessageSize < sizeof(Exception) + sizeof(TReturn))
+					Callback(*reinterpret_cast<const Exception*>(Message), {});
+				else
+					Callback(*reinterpret_cast<const Exception*>(Message), *reinterpret_cast<const ReturnType*>(reinterpret_cast<const Exception*>(Message) + 1));
+			}
+		};
+
+		uint8_t _AllocatePort()const;
+
+		template<typename T, typename...>
+		struct TypeIfValid
+		{
+			typedef T type;
+		};
+		
+		std::unordered_map<uint8_t, std::move_only_function<void(uint8_t MessageSize) const>> _Listeners;
+	public:
 		Stream& BaseStream;
-		//构造后，不得另外调用BaseStream.setTimeout，否则行为未定义。
+		/*构造后，BaseStream将交由AsyncStream包装接管。不应再对BaseStream直接进行以下操作，否则行为未定义：
+		setTimeout，不支持此方法
+		write，应改用Send方法，或使用SendSession。
+		readBytes，应改用Listen方法，仅在提供给Listen的回调中允许使用readBytes。
+		*/
 		AsyncStream(Stream& BaseStream)
 			: BaseStream(BaseStream) {
 			BaseStream.setTimeout(-1);
@@ -136,11 +146,10 @@ namespace Async_stream_IO {
 					 */
 		void ExecuteTransactionsInQueue();
 
-
 		// 向远程ToPort发送指定Length的Message
 		void Send(const void* Message, uint8_t Length, uint8_t ToPort) const;
-		// 向远程ToPort发送指定Message。这个Message应当可以直接将底层字节发送给串口
-		template<typename T, std::enable_if_t<!std::invocable<T> _CSL_Parentheses11, int> = 0>
+		// 向远程ToPort发送指定Message。这个Message对象应当允许直接序列化。
+		template<typename T>
 		inline void Send(const T& Message, uint8_t ToPort) const {
 			Send(&Message, sizeof(T), ToPort);
 		}
@@ -179,7 +188,14 @@ namespace Async_stream_IO {
 			_Listeners[FromPort] = std::forward<T>(Callback);
 			return FromPort;
 		}
-
+#define _EbolaChan_ASIO_FunctionListener [Function = std::forward<T>(Function), this](uint8_t MessageSize) {\
+	const std::unique_ptr<uint8_t[]> Arguments = std::make_unique_for_overwrite<uint8_t[]>(MessageSize);\
+	BaseStream->readBytes(Arguments.get(), MessageSize);\
+	if (MessageSize == _FunctionTraits<T>::ArgumentsSize + sizeof(uint8_t))\
+		Send(_FunctionTraits<T>::InvokeWithMemoryOffsets::Invoke(Function, reinterpret_cast<char*>(Arguments.get() + 1)), Arguments[0]);\
+	else\
+		Send(Exception::Argument_message_incomplete, Arguments[0]);\
+	}
 		/* 将任意可调用对象绑定到指定本地端口上作为服务，当收到消息时调用。如果端口被占用，将覆盖。
 		远程要调用此对象，需要将所有参数序列化拼接成一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。如果消息字节数不足，将向远程调用方发送Argument_message_incomplete。
 		Function的参数和返回值（如果有）必须是平凡类型。
@@ -188,11 +204,7 @@ namespace Async_stream_IO {
 		*/
 		template<typename T>
 		void BindFunctionToPort(T&& Function, uint8_t Port) {
-			Listen([Function = std::forward<T>(Function), this](uint8_t MessageSize) {
-				const std::unique_ptr<uint8_t[]> Arguments = std::make_unique_for_overwrite<uint8_t[]>(MessageSize);
-				BaseStream->readBytes(Arguments.get(), MessageSize);
-				Send(MessageSize == _FunctionTraits<T>::ArgumentsSize + sizeof(uint8_t) ? _FunctionTraits<T>::InvokeWithMemoryOffsets::Invoke(Function, reinterpret_cast<char*>(Arguments.get() + 1)) : Exception::Argument_message_incomplete, Arguments[0]);
-				}, Port);
+			Listen(_EbolaChan_ASIO_FunctionListener, Port);
 		}
 		/* 将任意可调用对象绑定到自动分配的空闲端口上作为服务，当收到消息时调用。返回分配的端口号。
 		远程要调用此对象，需要将所有参数序列化拼接成一个连续的内存块，并且头部加上一个uint8_t的远程端口号用来接收返回值，然后将此消息发送到此函数绑定的本地端口。如果消息字节数不足，将向远程调用方发送Argument_message_incomplete。
@@ -202,50 +214,41 @@ namespace Async_stream_IO {
 		*/
 		template<typename T>
 		uint8_t BindFunctionToPort(T&& Function) {
-			return Listen([Function = std::forward<T>(Function), this](uint8_t MessageSize) {
-				const std::unique_ptr<uint8_t[]> Arguments = std::make_unique_for_overwrite<uint8_t[]>(MessageSize);
-				BaseStream->readBytes(Arguments.get(), MessageSize);
-				Send(MessageSize == _FunctionTraits<T>::ArgumentsSize + sizeof(uint8_t) ? _FunctionTraits<T>::InvokeWithMemoryOffsets::Invoke(Function, reinterpret_cast<char*>(Arguments.get() + 1)) : Exception::Argument_message_incomplete, Arguments[0]);
-				});
+			return Listen(_EbolaChan_ASIO_FunctionListener);
 		}
-		/* 远程调用指定RemotePort上的函数，传入参数Arguments。当远程函数返回时，调用Callback，提供调用结果Result和返回值ReturnValue。
-		如果远程端口未被监听，Callback将不会被调用。
+#define _EbolaChan_ASIO_CallbackListener [Callback = std::forward<TCallback>(Callback), this](uint8_t MessageSize) {\
+			const std::unique_ptr<char[]> Message = std::make_unique_for_overwrite<char[]>(MessageSize);\
+			BaseStream.readBytes(Message.get(), MessageSize);\
+			CallbackTraits<TCallback>::Invoke(Callback, Message.get(), MessageSize);\
+			}
+		/* 远程调用指定RemotePort上的函数，传入任意参数Arguments，所有参数类型必须支持直接序列化。当远程函数返回时，将发送到LocalPort，然后调用 void Callback(Exception Result,ReturnType Return)，其中ReturnType必须与远程函数定义的返回值类型相同，且支持直接反序列化。如果远程函数没有返回值，则Callback必须只接受一个 Exception Result 参数。
+		如果远程端口未被监听，Callback将永不会被调用，但LocalPort会被持续占用，直到用户手动ReleasePort。
 		如果Result为Corrupted_object_received，说明收到了意外的返回值。这可能是因为远程函数返回值的类型与预期不符，或者有其它远程对象向本地端口发送了垃圾信息。此次远程调用将被废弃。
-		如果Result为Parameter_message_incomplete，说明远程函数接收到的参数不完整。这可能是因为远程函数的参数类型与预期不符，或者有其它本地对象向远程端口发送了垃圾信息。此次远程调用将被废弃。
-		ReturnType和ArgumentType必须是平凡类型。
+		如果Result为Argument_message_incomplete，说明远程函数接收到的参数不完整。这可能是因为远程函数的参数类型与预期不符，或者有其它本地对象向远程端口发送了垃圾信息。此次远程调用将被废弃。
 		此方法保证Callback被调用时中断处于启用状态。
+		如果LocalPort已被占用，将覆盖。Callback被调用前，LocalPort已释放。
 		*/
 		template<typename TCallback, typename... TArgument>
-		void RemoteInvoke(uint8_t RemotePort, uint8_t LocalPort, TCallback&& Callback, TArgument... Arguments) {
-			Listen([LocalPort, Callback = std::forward<TCallback>(Callback),this](uint8_t MessageSize) {
-				ReleasePort(LocalPort);
-				const std::unique_ptr<char[]> Message = std::make_unique_for_overwrite<char[]>(MessageSize);
-				BaseStream.readBytes(Message.get(), MessageSize);
-				if (MessageSize < sizeof(Exception))
-					Callback(Exception::Corrupted_object_received, {});
-				else if (MessageSize < sizeof(Exception) + sizeof(ReturnType))
-					Callback(*reinterpret_cast<const Exception*>(Message.get()), {});
-				else
-					Callback(*reinterpret_cast<const Exception*>(Message.get()), *reinterpret_cast<const ReturnType*>(reinterpret_cast<const Exception*>(Message.get()) + 1));
-				}, LocalPort);
+		std::void_t<std::_FunctionSignature_t<TCallback>>RemoteInvoke(uint8_t RemotePort, uint8_t LocalPort, TCallback&& Callback, TArgument... Arguments) {
+			Listen(_EbolaChan_ASIO_CallbackListener, LocalPort);
+			SendSession const Session{ sizeof(uint8_t) + _TypesSize<TArgument...>::value, RemotePort, BaseStream };
+			BaseStream.write(LocalPort);
+			size_t const Written[] = { BaseStream.write(reinterpret_cast<char*>(&Arguments), sizeof(Arguments))... };
+		}
+		/* 远程调用指定RemotePort上的函数，传入任意参数Arguments，所有参数类型必须支持直接序列化。当远程函数返回时，将发送到自动分配的本地端口，然后调用 void Callback(Exception Result,ReturnType Return)，其中ReturnType必须与远程函数定义的返回值类型相同，且支持直接反序列化。如果远程函数没有返回值，则Callback必须只接受一个 Exception Result 参数。
+		如果远程端口未被监听，Callback将永不会被调用，但本地端口会被持续占用，直到用户手动ReleasePort。
+		如果Result为Corrupted_object_received，说明收到了意外的返回值。这可能是因为远程函数返回值的类型与预期不符，或者有其它远程对象向本地端口发送了垃圾信息。此次远程调用将被废弃。
+		如果Result为Argument_message_incomplete，说明远程函数接收到的参数不完整。这可能是因为远程函数的参数类型与预期不符，或者有其它本地对象向远程端口发送了垃圾信息。此次远程调用将被废弃。
+		此方法保证Callback被调用时中断处于启用状态。
+		此函数返回自动分配的本地端口，用户可以用ReleasePort释放此端口，将放弃等待远程函数的返回结果。Callback被调用前，会自动释放该本地端口。
+		*/
+		template<typename TCallback, typename... TArgument>
+		typename TypeIfValid<uint8_t, std::_FunctionSignature_t<TCallback>>::type RemoteInvoke(uint8_t RemotePort, TCallback&& Callback, TArgument... Arguments) {
+			uint8_t const LocalPort = Listen(_EbolaChan_ASIO_CallbackListener);
 			SendSession const Session{ sizeof(uint8_t) + _TypesSize<TArgument...>::value, RemotePort, BaseStream };
 			BaseStream.write(LocalPort);
 			size_t const Written[] = { BaseStream.write(reinterpret_cast<char*>(&Arguments), sizeof(Arguments))... };
 			return LocalPort;
 		}
-		/* 远程调用指定RemotePort上的函数，传入参数Arguments。当远程函数返回时，调用Callback，提供调用结果Result和返回值ReturnValue。
-					如果远程端口未被监听，Callback将不会被调用。
-					如果Result为Corrupted_object_received，说明收到了意外的返回值。这可能是因为远程函数返回值的类型与预期不符，或者有其它远程对象向本地端口发送了垃圾信息。此次远程调用将被废弃。
-					如果Result为Parameter_message_incomplete，说明远程函数接收到的参数不完整。这可能是因为远程函数的参数类型与预期不符，或者有其它本地对象向远程端口发送了垃圾信息。此次远程调用将被废弃。
-					ReturnType和ArgumentType必须是平凡类型。
-					此方法保证Callback被调用时中断处于启用状态。
-					*/
-		template<typename CallbackType, typename... ArgumentType>
-		inline typename _NotMof<CallbackType>::type RemoteInvoke(uint8_t RemotePort, const CallbackType& Callback, ArgumentType... Arguments) {
-			return RemoteInvoke(RemotePort, std::move_only_function<std::_FunctionSignature_t<CallbackType>>(Callback), Arguments...);
-		}
-		std::unordered_map<uint8_t, std::move_only_function<void(uint8_t MessageSize) const>> _Listeners;
-	protected:
-		uint8_t _AllocatePort()const;
 	};
 }

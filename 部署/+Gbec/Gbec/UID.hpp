@@ -5,6 +5,9 @@ enum class UID : uint8_t {
 
 	PortA_PointerSize,
 	PortA_CreateProcess,
+	PortA_StartProcess,
+	PortA_RestoreProcess,
+	PortA_RepeatProcess,
 	PortA_PauseProcess,
 	PortA_ContinueProcess,
 	PortA_AbortProcess,
@@ -18,7 +21,6 @@ enum class UID : uint8_t {
 	PortC_ProcessFinished,
 	PortC_Signal,
 	PortC_TrialStart,
-	PortC_ProcessStarted,
 	PortC_RandomSeed,
 	PortC_Exception,
 
@@ -26,12 +28,10 @@ enum class UID : uint8_t {
 	Exception_InvalidProcess,
 	Exception_MethodNotSupported,
 	Exception_StillRunning,
-	Exception_ObjectNotIdle,
 	Exception_ProcessNotRunning,
 	Exception_ProcessNotPaused,
-	Exception_ProgressObjectNotFound,
-	Exception_AsyncObjectNotFound,
-	Exception_UnexpectedProcessState,
+	Exception_ProcessNotIdle,
+	Exception_ProcessFinished,
 
 	Property_StepID,
 	Property_Subobjects,
@@ -81,6 +81,7 @@ enum class UID : uint8_t {
 	State_Normal,
 	State_Repeat,
 	State_Restore,
+	State_Idle,
 
 	Signal_TrialStart,
 	Signal_ProcessFinished,

@@ -14,7 +14,7 @@ namespace Async_stream_IO {
 		return Port;
 	}
 	uint8_t AsyncStream::AllocatePort() {
-		_InterruptGuard const _;
+		InterruptGuard const _;
 		uint8_t const Port = _AllocatePort();
 		_Listeners[Port] = [this](uint8_t MessageSize) {BaseStream.readBytes(std::make_unique_for_overwrite<char[]>(MessageSize).get(), MessageSize);}; // 读入消息，不做任何事，直接丢弃
 		return Port;
@@ -24,7 +24,7 @@ namespace Async_stream_IO {
 	constexpr uint8_t MagicByte = 0x5A;
 
 	void AsyncStream::Send(const void* Message, uint8_t Length, uint8_t ToPort) const {
-		_InterruptGuard const _;
+		InterruptGuard const _;
 		BaseStream.write(MagicByte);
 		BaseStream.write(ToPort);
 		BaseStream.write(Length);

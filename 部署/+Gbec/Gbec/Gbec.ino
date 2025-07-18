@@ -2,6 +2,7 @@
 #include <sstream>
 #include <map>
 #include <vector>
+#include <memory>
 Async_stream_IO::AsyncStream SerialStream{ Serial };
 struct Process {
 	template<typename StepType>
@@ -11,42 +12,71 @@ struct Process {
 		Existing.insert(NewProcess);
 		return NewProcess;
 	}
-	void Start() {
+	UID Start() {
+		Quick_digital_IO_interrupt::InterruptGuard const _;
+		if (State != UID::State_Idle)
+			return UID::Exception_ProcessNotIdle;
 		RepeatLeft = 0;
-		State = Content->Start() ? UID::State_Finished : UID::State_Running;
+		if (Content->Start())
+			return UID::Exception_ProcessFinished;
+		State = UID::State_Running;
+		return UID::Exception_Success;
 	}
-	void Restore(std::unordered_map<UID, uint16_t>&& TD) {
-		State = Content->Restore(TrialsDone = std::move(TD)) ? UID::State_Finished : UID::State_Running;
+	UID Restore(std::unordered_map<UID, uint16_t>&& TD) {
+		Quick_digital_IO_interrupt::InterruptGuard const _;
+		if (State != UID::State_Idle)
+			return UID::Exception_ProcessNotIdle;
+		RepeatLeft = 0;
+		if (Content->Restore(TrialsDone = std::move(TD)))
+			return UID::Exception_ProcessFinished;
+		State = UID::State_Running;
+		return UID::Exception_Success;
 	}
-	void Repeat(uint16_t Times) {
+	UID Repeat(uint16_t Times) {
+		Quick_digital_IO_interrupt::InterruptGuard const _;
+		if (State != UID::State_Idle)
+			return UID::Exception_ProcessNotIdle;
 		for (;;) {
 			if (!Content->Start()) {
 				RepeatLeft = Times - 1;
 				State = UID::State_Running;
-				break;
+				return UID::Exception_Success;
 			}
 			if (!--Times) {
-				State = UID::State_Finished;
-				break;
+				State = UID::State_Idle;
+				return UID::Exception_ProcessFinished;
 			}
 		}
 	}
-	void Pause() {
+	UID Pause() {
+		Quick_digital_IO_interrupt::InterruptGuard const _;
+		if (State != UID::State_Running)
+			return UID::Exception_ProcessNotRunning;
 		State = UID::State_Paused;
 		Content->Pause();
+		return UID::Exception_Success;
 	}
-	void Continue() {
+	UID Continue() {
+		Quick_digital_IO_interrupt::InterruptGuard const _;
+		if (State != UID::State_Paused)
+			return UID::Exception_ProcessNotPaused;
 		State = UID::State_Running;
 		Content->Continue();
+		return UID::Exception_Success;
 	}
-	void Abort() {
+	UID Abort() {
+		Quick_digital_IO_interrupt::InterruptGuard const _;
+		if (State == UID::State_Idle)
+			return UID::Exception_ProcessNotRunning;
 		State = UID::State_Aborted;
 		Content->Abort();
+		return UID::Exception_Success;
 	}
 	void WriteInfo(std::ostream& OutStream) const {
 		Content->WriteInfoD(OutStream);
 	}
 	static std::set<Process*> Existing;
+	UID State = UID::State_Idle;
 
 protected:
 	std::move_only_function<void() const> const ChildCallback{ [this]() {
@@ -55,7 +85,7 @@ protected:
 			if (!Content->Start())
 				return;
 		}
-		State = UID::State_Finished;
+		State = UID::State_Idle;
 		SerialStream.Send(this, static_cast<uint8_t>(UID::PortC_ProcessFinished));
 	} };
 	std::unique_ptr<Step> Content;
@@ -87,23 +117,37 @@ void setup() {
 		return static_cast<uint8_t>(sizeof(size_t));
 		},
 		UID::PortA_PointerSize);
-	SerialStream.Listen([](const std::move_only_function<void(void* Message, uint8_t Size) const>& MessageReader, uint8_t MessageSize) {
-		static std::vector<char> Message;
-		Message.resize(MessageSize);
-		MessageReader(Message.data(), MessageSize);
+	BindFunctionToPort([](UID StepID)->Process* {
+		const auto Iterator = ProcessConstructors<PublicSteps>::value.find(StepID);
+		if (Iterator == ProcessConstructors<PublicSteps>::value.end()) {
+			SerialStream.Send(UID::Exception_InvalidProcess, static_cast<uint8_t>(UID::PortC_Exception));
+			return nullptr;
+		}
+		else
+			return Iterator->second();
+		},
+		UID::PortA_CreateProcess);
+	BindFunctionToPort([](Process* P) {
+		return Process::Existing.contains(P) ? P->Start() : UID::Exception_InvalidProcess;
+		}, UID::PortA_StartProcess);
+	BindFunctionToPort([](Process* P, uint8_t Times) {
+		return Process::Existing.contains(P) ? P->Repeat(Times) : UID::Exception_InvalidProcess;
+		}, UID::PortA_RepeatProcess);
+	SerialStream.Listen([](uint8_t MessageSize) {
 #pragma pack(push, 1)
 		struct RestoreHeader {
-			UID StepID;
+			uint8_t ReturnPort;
+			Process* P;
 			struct TrialDone {
 				UID TrialID;
 				uint16_t NumDone;
 			} TrialsDone[];
 		};
-		struct RepeatHeader {
-			UID StepID;
-			uint16_t Times;
-		};
 #pragma pack(pop)
+		std::unique_ptr<char[]>Buffer = std::make_unique_for_overwrite<char[]>(MessageSize);
+		RestoreHeader* RH = reinterpret_cast<RestoreHeader*>(Buffer.get());
+		Serial.readBytes(reinterpret_cast<char*>(RH), static_cast<size_t>(MessageSize));
+
 		Process* P;
 		switch (MessageSize) {
 			case sizeof(UID) :
@@ -156,7 +200,7 @@ void setup() {
 				SerialStream.Send(P, static_cast<uint8_t>(UID::PortC_ProcessFinished));
 		}
 		},
-		static_cast<uint8_t>(UID::PortA_CreateProcess));
+		static_cast<uint8_t>(UID::PortA_RestoreProcess));
 	BindFunctionToPort([](Process* P) {
 		if (Process::Existing.contains(P)) {
 			noInterrupts();

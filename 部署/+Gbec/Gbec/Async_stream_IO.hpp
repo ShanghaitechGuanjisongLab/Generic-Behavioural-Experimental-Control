@@ -14,11 +14,12 @@ namespace Async_stream_IO {
 		Corrupted_object_received = 5,
 		Message_received_on_allocated_port = 6,
 	};
-	struct _InterruptGuard {
-		_InterruptGuard() {
+	//构造此临时对象以禁用中断并保存状态。当前作用域退出时，此对象析构并恢复之前的中断状态。
+	struct InterruptGuard {
+		InterruptGuard() {
 			noInterrupts();
 		}
-		~_InterruptGuard() {
+		~InterruptGuard() {
 			if (InterruptEnabled)
 				interrupts();
 		}
@@ -34,7 +35,7 @@ namespace Async_stream_IO {
 			;
 	};
 	//轻量化的消息发送同步器。对象构造后将禁用中断，保证消息连续发出。此对象生存期内，用户必须直接使用BaseStream.write()方法发送数据，而不能使用Send；此方法发送的所有数据会被字节串联并视为单条消息。在对象析构前，用户必须恰好已发送Length字节的数据，不能多也不能少，否则行为未定义。对象析构时中断会恢复到构造前的状态。此对象在BaseStream已被AsyncStream托管的情况下也允许正常使用。
-	struct SendSession : protected _InterruptGuard {
+	struct SendSession : protected InterruptGuard {
 		SendSession(uint8_t Length, uint8_t ToPort, Stream& BaseStream);
 	};
 	class AsyncStream {
@@ -126,7 +127,7 @@ namespace Async_stream_IO {
 		{
 			typedef T type;
 		};
-		
+
 		std::unordered_map<uint8_t, std::move_only_function<void(uint8_t MessageSize) const>> _Listeners;
 	public:
 		Stream& BaseStream;
@@ -158,12 +159,12 @@ namespace Async_stream_IO {
 		uint8_t AllocatePort();
 		//检查指定端口Port是否被占用。
 		bool PortOccupied(uint8_t Port) const {
-			_InterruptGuard const _;
+			InterruptGuard const _;
 			return _Listeners.contains(Port);
 		}
 		//立即释放指定本地端口，取消任何监听或绑定函数。
 		void ReleasePort(uint8_t Port) {
-			_InterruptGuard const _;
+			InterruptGuard const _;
 			_Listeners.erase(Port);
 		}
 
@@ -174,7 +175,7 @@ namespace Async_stream_IO {
 		*/
 		template<typename T>
 		void Listen(T&& Callback, uint8_t FromPort) {
-			_InterruptGuard const _;
+			InterruptGuard const _;
 			_Listeners[FromPort] = std::forward<T>(Callback);
 		}
 		/*自动分配一个空闲端口并持续监听。当远程传来指向该端口的消息时，调用 void Callback(uint8_t MessageSize)，由用户负责从BaseStream读取消息内容。在Callback返回之前，必须不多不少恰好读入全部MessageSize字节，否则行为未定义。返回分配的端口号。
@@ -183,7 +184,7 @@ namespace Async_stream_IO {
 		*/
 		template<typename T>
 		uint8_t Listen(T&& Callback) {
-			_InterruptGuard const _;
+			InterruptGuard const _;
 			uint8_t const FromPort = _AllocatePort();
 			_Listeners[FromPort] = std::forward<T>(Callback);
 			return FromPort;

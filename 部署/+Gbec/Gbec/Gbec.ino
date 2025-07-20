@@ -3,6 +3,15 @@
 #include <map>
 #include <vector>
 #include <memory>
+
+//SAM编译器bug，此定义必须放前面否则找不到
+#pragma pack(push, 1)
+struct GbecHeader {
+	uint8_t RemotePort;
+	Process* P;
+};
+#pragma pack(pop)
+
 Async_stream_IO::AsyncStream SerialStream{ Serial };
 struct Process {
 	template<typename StepType>
@@ -115,21 +124,16 @@ template<typename T>
 inline void SerialListen(T&& Callback, UID Port) {
 	SerialStream.Listen(std::forward<T>(Callback), static_cast<uint8_t>(Port));
 }
-template<typename T>
-inline void SerialRead(T& Object) {
-	Serial.readBytes(reinterpret_cast<char*>(&Object), sizeof(T));
-}
-bool CommonListenersHeader(uint8_t MessageSize, uint8_t& ReturnPort, Process*& P) {
-	if (MessageSize < sizeof(ReturnPort) + sizeof(P))
+bool CommonListenersHeader(uint8_t& MessageSize, GbecHeader& Header) {
+	if (MessageSize < sizeof(Header))
 		return true;
-	SerialRead(ReturnPort);
-	SerialRead(P);
-	if (Process::Existing.contains(P))
+	SerialStream >> Header;
+	MessageSize -= sizeof(Header);
+	if (Process::Existing.contains(Header.P))
 		return false;
-	else {
-		SerialStream.Send(UID::Exception_InvalidProcess, ReturnPort);
-		return true;
-	}
+	SerialStream.Send(UID::Exception_InvalidProcess, Header.RemotePort);
+	SerialStream.Skip(MessageSize);
+	return true;
 }
 
 ArchUrng Urng;
@@ -143,11 +147,7 @@ void setup() {
 	                   UID::PortA_PointerSize);
 	BindFunctionToPort([](UID StepID) -> Process* {
 		const auto Iterator = ProcessConstructors<PublicSteps>::value.find(StepID);
-		if (Iterator == ProcessConstructors<PublicSteps>::value.end()) {
-			SerialStream.Send(UID::Exception_InvalidProcess, static_cast<uint8_t>(UID::PortC_Exception));
-			return nullptr;
-		} else
-			return Iterator->second();
+		return Iterator == ProcessConstructors<PublicSteps>::value.end() ? nullptr : Iterator->second();
 	},
 	                   UID::PortA_CreateProcess);
 	BindFunctionToPort([](Process* P) {
@@ -159,21 +159,17 @@ void setup() {
 	},
 	                   UID::PortA_RepeatProcess);
 	SerialListen([](uint8_t MessageSize) {
-		uint8_t ReturnPort;
-		Process* P;
-		if (CommonListenersHeader(MessageSize, ReturnPort, P))
+		GbecHeader Header;
+		if (CommonListenersHeader(MessageSize, Header))
 			return;
-		MessageSize = (MessageSize - (sizeof(uint8_t) + sizeof(Process*))) / (sizeof(UID) + sizeof(uint16_t));
+		MessageSize /= (sizeof(UID) + sizeof(uint16_t));
 		std::unordered_map<UID, uint16_t> TrialsDone;
 		TrialsDone.reserve(MessageSize);
 		for (uint8_t i = 0; i < MessageSize; ++i) {
-			UID TrialID;
-			uint16_t NumDone;
-			Serial.readBytes(reinterpret_cast<char*>(&TrialID), sizeof(UID));
-			Serial.readBytes(reinterpret_cast<char*>(&NumDone), sizeof(uint16_t));
-			TrialsDone[TrialID] = NumDone;
+			UID const TrialID = SerialStream.Read<UID>();
+			TrialsDone[TrialID] = SerialStream.Read<uint16_t>();
 		}
-		SerialStream.Send(P->Restore(std::move(TrialsDone)), ReturnPort);
+		SerialStream.Send(Header.P->Restore(std::move(TrialsDone)), Header.RemotePort);
 	},
 	             UID::PortA_RestoreProcess);
 	BindFunctionToPort([](Process* P) {
@@ -189,43 +185,39 @@ void setup() {
 	},
 	                   UID::PortA_AbortProcess);
 	SerialListen([](uint8_t MessageSize) {
-		uint8_t ReturnPort;
-		Process* P;
-		if (CommonListenersHeader(MessageSize, ReturnPort, P))
+		GbecHeader Header;
+		if (CommonListenersHeader(MessageSize, Header))
 			return;
 		std::ostringstream OutStream;
-		P->WriteInfo(OutStream);
+		Header.P->WriteInfo(OutStream);
 		std::string const Info = OutStream.str();
-		SerialStream.Send(Info.data(), Info.size(), ReturnPort);
+		SerialStream.Send(Info.data(), Info.size(), Header.RemotePort);
 	},
 	             UID::PortA_GetInformation);
 	BindFunctionToPort([](Process* P) {
 		if (Process::Existing.erase(P)) {
 			delete P;
 			return UID::Exception_Success;
-		} else
-			return UID::Exception_InvalidProcess;
+		}
+		return UID::Exception_InvalidProcess;
 	},
 	                   UID::PortA_DeleteProcess);
 	SerialListen([](uint8_t MessageSize) {
 		if (MessageSize < sizeof(uint8_t))
 			return;
-		uint8_t ToPort;
-		SerialRead(ToPort);
-		Async_stream_IO::SendSession const Session{ sizeof(Process*) * Process::Existing.size(), ToPort, Serial };
+		Async_stream_IO::SendSession const Session{ sizeof(Process*) * Process::Existing.size(), SerialStream.Read<uint8_t>(), Serial };
 		for (Process* const P : Process::Existing)
-			Serial.write(reinterpret_cast<const char*>(&P), sizeof(P));
+			Session << P;
 	},
 	             UID::PortA_AllProcesses);
-#ifdef ARDUINO_ARCH_AVR
-	SerialStream.RemoteInvoke(static_cast<uint8_t>(UID::PortC_RandomSeed), [](Async_stream_IO::Exception, uint32_t RandomSeed) {
-		std::ArduinoUrng::seed(RandomSeed);
-	});
-#endif
 	BindFunctionToPort([]() {
 		return true;
 	},
 	                   UID::PortA_IsReady);
+#ifdef ARDUINO_ARCH_AVR
+	BindFunctionToPort(std::ArduinoUrng::seed,
+	                   UID::PortA_RandomSeed);
+#endif
 }
 std::set<std::move_only_function<void() const> const*> _PendingInterrupts;
 void loop() {

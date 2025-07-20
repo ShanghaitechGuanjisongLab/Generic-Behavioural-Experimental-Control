@@ -15,13 +15,13 @@ enum class UID : uint8_t {
 	PortA_DeleteProcess,
 	PortA_AllProcesses,
 	PortA_IsReady,
+	PortA_RandomSeed,
 
 	//Computer提供的服务端口
 
 	PortC_ProcessFinished,
 	PortC_Signal,
 	PortC_TrialStart,
-	PortC_RandomSeed,
 	PortC_Exception,
 
 	Exception_Success,

@@ -17,8 +17,8 @@ uint8_t AsyncStream::AllocatePort() {
 	InterruptGuard const _;
 	uint8_t const Port = _AllocatePort();
 	_Listeners[Port] = [this](uint8_t MessageSize) {
-		BaseStream.readBytes(std::make_unique_for_overwrite<char[]>(MessageSize).get(), MessageSize);
-	};  // 读入消息，不做任何事，直接丢弃
+		Skip(MessageSize);
+	};
 	return Port;
 }
 
@@ -32,42 +32,54 @@ void AsyncStream::Send(const void* Message, uint8_t Length, uint8_t ToPort) cons
 	BaseStream.write(Length);
 	BaseStream.write(reinterpret_cast<const char*>(Message), Length);
 }
-SendSession::SendSession(uint8_t Length, uint8_t ToPort, Stream& BaseStream) {
+SendSession::SendSession(uint8_t Length, uint8_t ToPort, Stream& BaseStream)
+  : BaseStream(BaseStream) {
 	BaseStream.setTimeout(-1);
 	BaseStream.write(MagicByte);
 	BaseStream.write(ToPort);
 	BaseStream.write(Length);
 }
+void AsyncStream::PortForward(AsioHeader Header) {
+	noInterrupts();
+	auto PortListener = _Listeners.find(Header.ToPort);
+	if (PortListener == _Listeners.end()) {
+		// 消息指向未监听的端口，丢弃
+		interrupts();
+		Skip(Header.Length);
+		return;
+	}
+	//先将回调函数取回本地，这样回调函数可以安全释放端口
+	std::move_only_function<void(uint8_t) const> L = std::move(PortListener->second);
+	PortListener->second = nullptr;
+	interrupts();
+	L(Header.Length);
+	noInterrupts();
 
+	//检查回调函数是否释放或重新分配了端口。如果释放了，不能满足条件1；如果重新分配了，不能满足条件2。只有未发生这两种情况，才能满足条件1和2，才能将取回本地的回调方法重新放回容器。
+	if ((PortListener = _Listeners.find(Header.ToPort)) != _Listeners.end() && PortListener->second == nullptr)
+		PortListener->second = std::move(L);
+	interrupts();
+}
 void AsyncStream::ExecuteTransactionsInQueue() {
 	interrupts();
 	while (BaseStream.available())
-		if (BaseStream.read() == MagicByte) {
-#pragma pack(push, 1)
-			struct {
-				uint8_t ToPort;
-				uint8_t Length;
-			} Header;
-#pragma pack(pop)
-			BaseStream.readBytes(reinterpret_cast<char*>(&Header), sizeof(Header));  // 保证读入
-			noInterrupts();
-			auto PortListener = _Listeners.find(Header.ToPort);
-			if (PortListener == _Listeners.end()) {
-				// 消息指向未监听的端口，丢弃
-				interrupts();
-				BaseStream.readBytes(std::make_unique_for_overwrite<char[]>(Header.Length).get(), Header.Length);
-			} else {
-				//先将回调函数取回本地，这样回调函数可以安全释放端口
-				std::move_only_function<void(uint8_t MessageSize) const> L = std::move(PortListener->second);
-				interrupts();
-				L(Header.Length);
-				noInterrupts();
-
-				//回调函数中可能会释放该端口，必须先检查
-				if ((PortListener = _Listeners.find(Header.ToPort)) != _Listeners.end())
-					PortListener->second = std::move(L);
-				interrupts();
-			}
+		if (BaseStream.read() == MagicByte)
+			PortForward(Read<AsioHeader>());
+}
+uint8_t AsyncStream::Listen(uint8_t FromPort) {
+	interrupts();
+	for (;;) {
+		if (Read<uint8_t>() == MagicByte) {
+			AsioHeader const Header = Read<AsioHeader>();
+			if (Header.ToPort == FromPort)
+				return Header.Length;
+			PortForward(Header);
 		}
+	}
+}
+void AsyncStream::Skip(uint8_t Length) const {
+	while (Length)
+		if (BaseStream.read() != -1)
+			--Length;
 }
 }

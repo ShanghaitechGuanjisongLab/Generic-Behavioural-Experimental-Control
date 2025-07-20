@@ -110,7 +110,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			end
 			obj.Listen(@(Arguments)obj.FunctionCallback(Function,Arguments),Port);
 		end
-		function LocalPort=RemoteInvoke(obj,RemotePort,Callback,varargin)
+		function LocalPort=AsyncInvoke(obj,RemotePort,Callback,varargin)
 			%远程调用指定RemotePort上的函数，传入varargin（每个参数都必须能typecast为uint8）。当远程函数返回时，调用Callback，必须接受一个(1,:)uint8参数。如果远程端
 			% 口未被监听，Callback将不会被调用。
 			%返回监听返回值的端口，该端口为自动分配。使用ReleasePort以放弃接收此返回值。
@@ -133,6 +133,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			P=Port;
 			obj.Listeners(P)=struct(Once=false,Callback=@(Message)Async_stream_IO.Exception.Message_received_on_allocated_port.Warn(Message));
 		end
+		function 
 	end
 end
 function InvokeCallback(Callback,Message)

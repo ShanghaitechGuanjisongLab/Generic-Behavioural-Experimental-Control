@@ -31,7 +31,7 @@ classdef Server<handle
 			obj.AsyncStream.Listen(@obj.ProcessFinished,Gbec.UID.PortC_ProcessFinished);
 			obj.AsyncStream.Listen(@obj.ProcessStarted,Gbec.UID.PortC_ProcessStarted);
 
-			obj.AsyncStream.RemoteInvoke(Gbec.UID.PortA_PointerSize,@obj.SetPointerSize);
+			obj.AsyncStream.AsyncInvoke(Gbec.UID.PortA_PointerSize,@obj.SetPointerSize);
 			%该方法会随机占用端口，因此必须放在所有Listen之后。
 
 			fprintf('%s %s 服务器初始化成功\n',datetime,obj.Name);
@@ -43,7 +43,7 @@ classdef Server<handle
 				obj.InitializeSuccess;
 			else
 				obj.AsyncStream=Async_stream_IO.AsyncSerialStream(varargin{:});
-				obj.AsyncStream.RemoteInvoke(Gbec.UID.PortA_IsReady,@(IsReady)obj.InitializeIsReadyCallbackB(IsReady,Timer));
+				obj.AsyncStream.AsyncInvoke(Gbec.UID.PortA_IsReady,@(IsReady)obj.InitializeIsReadyCallbackB(IsReady,Timer));
 				Timer.start;
 			end
 		end
@@ -107,7 +107,7 @@ classdef Server<handle
 				Callback=@(IsReady)obj.InitializeIsReadyCallbackA(IsReady,Timer,varargin{:});
 			end
 			obj.AsyncStream.BindFunctionToPort(@(~)randi(intmax('uint32'),'uint32'),Gbec.UID.PortC_RandomSeed);
-			obj.InitializeIsReadyLocalPort=obj.AsyncStream.RemoteInvoke(Gbec.UID.PortA_IsReady,Callback);
+			obj.InitializeIsReadyLocalPort=obj.AsyncStream.AsyncInvoke(Gbec.UID.PortA_IsReady,Callback);
 			Timer.start;
 		end
 		function Process=CreateProcess(obj,ClassID,Repeat)

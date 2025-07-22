@@ -71,5 +71,5 @@
 		"mutex": "cpp",
 		"iomanip": "cpp"
 	},
-	"C_Cpp.formatting": "vcFormat"
+	"C_Cpp.formatting": "default"
 }

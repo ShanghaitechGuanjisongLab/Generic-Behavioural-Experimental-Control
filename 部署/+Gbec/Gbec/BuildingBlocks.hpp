@@ -555,22 +555,6 @@ struct Async : AsyncStep {
 		WriteInfoS(OutStream);
 	}
 };
-template<bool V, bool... Vs>
-struct _Any {
-	static constexpr bool value = V || _Any<Vs...>::value;
-};
-template<bool V>
-struct _Any<V> {
-	static constexpr bool value = V;
-};
-template<bool V, bool... Vs>
-struct _All {
-	static constexpr bool value = V && _Any<Vs...>::value;
-};
-template<bool V>
-struct _All<V> {
-	static constexpr bool value = V;
-};
 struct _StepWithRepeat {
 	Step* StepPointer;
 	uint16_t RepeatCount;
@@ -728,7 +712,7 @@ struct _Sequential_WithTrials : _Sequential_Base<Steps...> {
 			  } },
 		    StepsTuple{ Steps{ ChildCallback, Container }... } {
 			static_assert(sizeof...(Steps) == sizeof...(Repeats), "WithRepeats的Steps和Repeats数量不匹配");
-			static_assert(!_All<Repeats...>::value, "WithRepeats的Repeats不能包含0");
+			static_assert(!std::conjunction<std::bool_constant<Repeats>...>::value, "WithRepeats的Repeats不能包含0");
 			_CopyTupleToPointers<std::make_index_sequence<sizeof...(Steps)>>::Copy(StepsTuple, StepPointers);
 		}
 		bool Start() override {
@@ -789,7 +773,7 @@ protected:
 	using MyBase = _Sequential_Base<Steps...>;
 };
 template<typename... Steps>
-using _Sequential_Selector = std::conditional_t<_Any<_ContainTrials<Steps>::value...>::value, _Sequential_WithTrials<Steps...>, _Sequential_Simple<Steps...>>;
+using _Sequential_Selector = std::conditional_t<std::disjunction<_ContainTrials<Steps>...>::value, _Sequential_WithTrials<Steps...>, _Sequential_Simple<Steps...>>;
 // 按顺序执行步骤。支持扩展::WithRepeats，以将每个步骤重复执行多次
 template<typename... Steps>
 struct Sequential : _Sequential_Selector<Steps...> {
@@ -940,7 +924,7 @@ struct _Random_WithTrials : _Random_Base<Steps...> {
 			  } },
 		    StepsTuple{ Steps{ ChildCallback, Container }... } {
 			static_assert(sizeof...(Steps) == sizeof...(Repeats), "WithRepeats的Steps和Repeats数量不匹配");
-			static_assert(!_All<Repeats...>::value, "WithRepeats的Repeats不能包含0");
+			static_assert(!std::conjunction<std::bool_constant<Repeats>...>::value, "WithRepeats的Repeats不能包含0");
 			_CopyTupleToPointers<std::make_index_sequence<sizeof...(Steps)>>::Copy(StepsTuple, StepPointers);
 		}
 		bool Start() override {
@@ -1016,7 +1000,7 @@ protected:
 	using MyBase = _Random_Base<Steps...>;
 };
 template<typename... Steps>
-using _Random_Selector = std::conditional_t<_Any<_ContainTrials<Steps>::value...>::value, _Random_WithTrials<Steps...>, _Random_Simple<Steps...>>;
+using _Random_Selector = std::conditional_t<std::disjunction<_ContainTrials<Steps>...>::value, _Random_WithTrials<Steps...>, _Random_Simple<Steps...>>;
 // 按随机顺序执行步骤。支持::withRepeats扩展，以指定每个步骤的随机重复次数。
 template<typename... Steps>
 struct Random : _Random_Selector<Steps...> {

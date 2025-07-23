@@ -67,7 +67,6 @@ namespace Async_stream_IO {
 				PortForward(Read<AsioHeader>());
 	}
 	uint8_t AsyncStream::Listen(uint8_t FromPort) {
-		interrupts();
 		for (;;) {
 			if (Read<uint8_t>() == MagicByte) {
 				AsioHeader const Header = Read<AsioHeader>();

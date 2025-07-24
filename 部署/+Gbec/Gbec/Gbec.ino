@@ -210,14 +210,14 @@ void setup() {
 			Session << P;
 	},
 	             UID::PortA_AllProcesses);
-	BindFunctionToPort([]() {
-		return true;
-	},
-	                   UID::PortA_IsReady);
 #ifdef ARDUINO_ARCH_AVR
 	BindFunctionToPort(std::ArduinoUrng::seed,
 	                   UID::PortA_RandomSeed);
 #endif
+	BindFunctionToPort([]() {
+		return true;
+	},
+	                   UID::PortA_IsReady);
 }
 std::set<std::move_only_function<void() const> const*> _PendingInterrupts;
 void loop() {

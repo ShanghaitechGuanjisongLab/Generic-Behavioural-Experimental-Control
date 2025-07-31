@@ -10,6 +10,29 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 		MagicByte=0x5A
 	end
 	methods(Access=protected)
+		function Data=Read(obj,NumBytes)
+			Data=obj.Serial.read(NumBytes,'uint8');
+			NumRead=numel(Data);
+
+			%进入这个循环的概率很小，因此优先保证首次读取的性能
+			while NumRead<NumBytes
+				NewData=obj.Serial.read(NumBytes-NumRead,'uint8');
+				NumNew=numel(NewData);
+
+				%虽然每个回合扩张数组通常是不好的，但每个循环发生的概率指数递减，优先保证本次循环的性能为要
+				Data(NumRead+1:NumRead+NumNew)=NewData;
+
+				NumRead=NumRead+NumNew;
+			end
+		end
+		function Byte=ReadByte(obj)
+			Byte=obj.Serial.read(1,'uint8');
+
+			%进入循环的概率很小，优先保证首次读取性能
+			while isempty(Byte)
+				Byte=obj.Serial.read(1,'uint8');
+			end
+		end
 		function PortForward(obj,Port,MessageSize)
 			%将消息转发到指定端口的监听器
 			if obj.Listeners.isKey(Port)
@@ -23,8 +46,8 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			if~MessageSize
 				return;
 			end
-			Port=obj.Serial.read(1,'uint8');
-			Arguments=obj.Serial.read(MessageSize-1,'uint8');
+			Port=obj.ReadByte;
+			Arguments=obj.Read(MessageSize-1);
 			if Port==255
 				Function(Arguments);
 				return; %不需要返回值
@@ -56,29 +79,29 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 				case 0
 					Callback(Async_stream_IO.Exception.Corrupted_object_received);
 				case 1
-					Callback(Async_stream_IO.Exception(obj.Serial.read(1,'uint8')));
+					Callback(Async_stream_IO.Exception(obj.ReadByte));
 				otherwise
-					Exception=Async_stream_IO.Exception(obj.Serial.read(1,'uint8'));
+					Exception=Async_stream_IO.Exception(obj.ReadByte);
 					if Exception==Async_stream_IO.Exception.Success
 						%如果是成功的，读取返回值并调用回调函数
-						Callback(obj.Serial.read(MessageSize-1,'uint8'));
+						Callback(obj.Read(MessageSize-1));
 					else
 						%否则抛出异常
-						obj.Serial.read(MessageSize-1,'uint8'); %读取剩余字节以避免阻塞
+						obj.Read(MessageSize-1); %读取剩余字节以避免阻塞
 						Callback(Exception);
 					end
 			end
 		end
 		function AllocateListener(obj,Port,MessageSize)
-			obj.Serial.read(MessageSize,'uint8'); %读取消息内容以避免阻塞
+			obj.Read(MessageSize); %读取消息内容以避免阻塞
 			Async_stream_IO.Exception.Message_received_on_allocated_port.Warn(sprintf('Port %u, MessageSize %u',Port,MessageSize));
 		end
 		function ExecuteTransactionsInQueue(obj,varargin)
 			while obj.Serial.NumBytesAvailable
-				if obj.Serial.read(1,'uint8')==Async_stream_IO.AsyncSerialStream.MagicByte
+				if obj.ReadByte==Async_stream_IO.AsyncSerialStream.MagicByte
 					%读取端口号
-					GetPort=obj.Serial.read(1,'uint8');
-					obj.PortForward(GetPort,obj.Serial.read(1,'uint8'));
+					GetPort=obj.ReadByte;
+					obj.PortForward(GetPort,obj.ReadByte);
 				end
 			end
 		end
@@ -213,10 +236,10 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			else
 				ListeningPort=varargin{1};
 				while true
-					if obj.Serial.read(1,'uint8')==Async_stream_IO.AsyncSerialStream.MagicByte
+					if obj.ReadByte==Async_stream_IO.AsyncSerialStream.MagicByte
 						%读取端口号
-						GetPort=obj.Serial.read(1,'uint8');
-						MessageSize=obj.Serial.read(1,'uint8');
+						GetPort=obj.ReadByte;
+						MessageSize=obj.ReadByte;
 						if GetPort==ListeningPort
 							%如果端口号匹配，返回消息字节数
 							PB=MessageSize;
@@ -275,8 +298,8 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			if MessageSize<1
 				Async_stream_IO.Exception.Corrupted_object_received.Throw(sprintf('RemotePort %u, LocalPort %u, MessageSize %u',RemotePort,LocalPort,MessageSize));
 			end
-			Exception=Async_stream_IO.Exception(obj.Serial.read(1,'uint8'));
-			Return=obj.Serial.read(MessageSize-1,'uint8');
+			Exception=Async_stream_IO.Exception(obj.ReadByte);
+			Return=obj.Read(MessageSize-1);
 			if Exception~=Async_stream_IO.Exception.Success
 				Exception.Throw(sprintf('RemotePort %u, LocalPort %u, MessageSize %u',RemotePort,LocalPort,MessageSize));
 			end

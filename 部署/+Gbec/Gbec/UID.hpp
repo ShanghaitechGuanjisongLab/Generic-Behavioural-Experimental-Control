@@ -33,6 +33,7 @@ enum class UID : uint8_t {
 	Exception_ProcessNotIdle,
 	Exception_ProcessFinished,
 	Exception_BrokenRestoreArguments,
+	Exception_MethodNotImplemented,
 
 	Property_StepID,
 	Property_Subobjects,

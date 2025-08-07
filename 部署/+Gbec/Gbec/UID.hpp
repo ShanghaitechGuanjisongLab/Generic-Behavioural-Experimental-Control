@@ -106,6 +106,7 @@ enum class UID : uint8_t {
 	Step_CustomFunction,
 	Step_DoWhenAborted,
 	Step_StartBackgroundRepeat,
+	Step_Meantime,
 
 	Trial_Invalid,
 

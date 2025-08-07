@@ -62,6 +62,7 @@ enum class UID : uint8_t {
 	Property_BackgroundID,
 	Property_HighOrLow,
 	Property_Value,
+	Property_SubSteps,
 
 	Type_Bool,
 	Type_UInt8,

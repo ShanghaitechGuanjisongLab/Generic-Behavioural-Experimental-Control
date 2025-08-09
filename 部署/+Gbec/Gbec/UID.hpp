@@ -63,6 +63,9 @@ enum class UID : uint8_t {
 	Property_HighOrLow,
 	Property_Value,
 	Property_SubSteps,
+	
+	Field_After,
+	Field_Do,
 
 	Type_Bool,
 	Type_UInt8,
@@ -107,7 +110,8 @@ enum class UID : uint8_t {
 	Step_CustomFunction,
 	Step_DoWhenAborted,
 	Step_StartBackgroundRepeat,
-	Step_Meantime,
+	Step_Sequential,
+	Step_Randomize,
 
 	Trial_Invalid,
 

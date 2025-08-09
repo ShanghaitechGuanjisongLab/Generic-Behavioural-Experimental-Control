@@ -3,7 +3,7 @@
         {
             "name": "avr",
             "includePath": [
-                "${workspaceFolder}/部署/+Gbec/GbecV7",
+                "${workspaceFolder}/部署/+Gbec/Gbec",
                 "${USERPROFILE}/Documents/Arduino/libraries/Cpp_Standard_Library/**",
                 "${USERPROFILE}/Documents/Arduino/libraries/Quick_digital_IO_interrupt/**",
                 "${USERPROFILE}/Documents/Arduino/libraries/Timers_one_for_all/**",
@@ -20,17 +20,18 @@
             ],
             "compilerPath": "${LOCALAPPDATA}/Arduino15/packages/arduino/tools/avr-gcc/7.3.0-atmel3.6.1-arduino7/bin/avr-g++.exe",
             "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "gcc-x86"
+            "cppStandard": "c++17"
         },
         {
             "name": "sam",
             "includePath": [
-                "${workspaceFolder}/src",
-                "${LOCALAPPDATA}/Arduino15/packages/arduino/hardware/sam/1.6.12/**",
+                "${workspaceFolder}/部署/+Gbec/Gbec",
                 "${USERPROFILE}/Documents/Arduino/libraries/Cpp_Standard_Library/**",
+                "${USERPROFILE}/Documents/Arduino/libraries/Quick_digital_IO_interrupt/**",
+                "${USERPROFILE}/Documents/Arduino/libraries/Timers_one_for_all/**",
                 "${LOCALAPPDATA}/Arduino15/packages/arduino/tools/arm-none-eabi-gcc/4.8.3-2014q1/arm-none-eabi/include",
-                "${LOCALAPPDATA}/Arduino15/packages/arduino/tools/arm-none-eabi-gcc/4.8.3-2014q1/lib/gcc/arm-none-eabi/4.8.3/include-fixed"
+                "${LOCALAPPDATA}/Arduino15/packages/arduino/tools/arm-none-eabi-gcc/4.8.3-2014q1/lib/gcc/arm-none-eabi/4.8.3/include-fixed",
+                "${LOCALAPPDATA}/Arduino15/packages/arduino/hardware/sam/1.6.12/**"
             ],
             "defines": [
                 "F_CPU=84000000L",
@@ -39,13 +40,10 @@
                 "__SAM3X8E__=1",
                 "VSCODE"
             ],
-            "forcedInclude": [
-                "Arduino.h"
-            ],
             "compilerPath": "${LOCALAPPDATA}/Arduino15/packages/arduino/tools/arm-none-eabi-gcc/4.8.3-2014q1/bin/arm-none-eabi-g++.exe",
             "cStandard": "c11",
             "cppStandard": "c++11"
-        },
+        }
     ],
     "version": 4
 }

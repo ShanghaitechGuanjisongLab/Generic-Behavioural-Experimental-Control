@@ -88,18 +88,22 @@ std::queue<std::move_only_function<void() const> const *> PinListener::PendingCa
 std::unordered_map<uint8_t, std::set<std::move_only_function<void() const> const *>> PinListener::Listening;
 std::unordered_map<uint8_t, std::set<std::move_only_function<void() const> const *>> PinListener::Resting;
 
-inline static void InfoWrite(std::ostringstream &InfoStream, UID InfoMap)
+inline static void InfoWrite(std::ostringstream &InfoStream, UID InfoValue)
 {
-	InfoStream.put(static_cast<char>(InfoMap));
+	InfoStream.put(static_cast<char>(InfoValue));
 }
-inline static void InfoWrite(std::ostringstream &InfoStream, uint16_t InfoMap)
+inline static void InfoWrite(std::ostringstream &InfoStream, uint16_t InfoValue)
 {
-	InfoStream.write(reinterpret_cast<const char *>(&InfoMap), sizeof(InfoMap));
+	InfoStream.write(reinterpret_cast<const char *>(&InfoValue), sizeof(InfoValue));
+}
+inline static void InfoWrite(std::ostringstream &InfoStream, void const *InfoValue)
+{
+	InfoStream.write(reinterpret_cast<const char *>(&InfoValue), sizeof(InfoValue));
 }
 template <typename... T>
-inline static void InfoWrite(std::ostringstream &InfoStream, T... InfoMap)
+inline static void InfoWrite(std::ostringstream &InfoStream, T... InfoValues)
 {
-	int _[] = {(InfoWrite(InfoStream, InfoMap), 0)...};
+	int _[] = {(InfoWrite(InfoStream, InfoValues), 0)...};
 }
 
 // 中断安全
@@ -134,12 +138,12 @@ struct Step
 		Quick_digital_IO_interrupt::InterruptGuard const _;
 		_Abort();
 	}
-	// 返回是否需要等待回调
-	virtual bool Start()
+	// 返回是否需要等待回调。回调函数只能在Start时提供，不能在构造时提供，因为存在复杂的虚继承关系，只能默认构造。
+	virtual bool Start(std::move_only_function<void(Step *) const> const &FinishCallback)
 	{
 		return false;
 	}
-	virtual void WriteInfo(std::map<UID, std::string> &InfoMap) const = 0;
+	virtual void WriteInfo(std::map<void const *, std::string> &InfoMap) const = 0;
 
 protected:
 	std::set<PinListener *> ActiveInterrupts;
@@ -182,55 +186,46 @@ protected:
 			T->Allocatable = true; // 使其可以被重新分配
 		}
 	}
-	template <typename... T>
-	static void _WriteInfo(UID ID, std::map<UID, std::string> &InfoMap, T... InfoValues)
-	{
-		if (!InfoMap.contains(ID))
-		{
-			std::ostringstream InfoStream;
-			InfoWrite(InfoStream, InfoValues...);
-			InfoMap[ID] = InfoStream.str();
-		}
-	}
 };
 // 顺序执行所有子步骤
 template <typename... SubSteps>
 struct Sequential : virtual SubSteps...
 {
-	void NextBlock()
+	static void NextBlock(Step *Me)
 	{
-		while (++CurrentStart < std::end(SubStarts))
-			if ((*CurrentStart)(this))
+		Sequential *TypedMe = reinterpret_cast<Sequential *>(Me);
+		while (++TypedMe->CurrentStart < std::end(TypedMe->SubStarts))
+			if ((*TypedMe->CurrentStart)(TypedMe))
 				return;
-		FinishCallback(this);
+		FinishCallback(TypedMe);
 	}
-	bool Start() override
+	bool Start(std::move_only_function<void(Step *) const> const &FC) override
 	{
 		for (CurrentStart = std::begin(SubStarts); CurrentStart < std::end(SubStarts); ++CurrentStart)
-			if ((*CurrentStart)(this))
+			if ((*CurrentStart)(this, [](Step *Me)
+								{ reinterpret_cast<Sequential *>(Me)->NextBlock(); }))
+			{
+				FinishCallback = &FC;
 				return true;
+			}
 		return false;
 	}
 	static constexpr UID ID = UID::Step_Sequential;
-	void WriteInfo(std::map<UID, std::string> &InfoMap) const override
+	void WriteInfo(std::ostringstream &InfoStream) const override
 	{
-		if (!InfoMap.contains(ID))
+		if (InfoWritten != &InfoStream)
 		{
-			std::ostringstream InfoStream;
 			InfoWrite(InfoStream, UID::Type_Array, sizeof...(SubSteps), UID::Type_UID, SubSteps::ID...);
 			InfoMap[ID] = InfoStream.str();
 			int _[] = {(SubSteps::WriteInfo(InfoMap), 0)...};
 		}
 	}
-	Sequential(std::move_only_function<void(Step *) const> &&FinishCallback) : SubSteps([](Step *Me)
-																						{ reinterpret_cast<Sequential *>(Me)->NextBlock(); })...,
-																			   FinishCallback(std::move(FinishCallback)) {}
 
 protected:
-	static constexpr bool (*SubStarts[])(Sequential *) = {[](Sequential *self)
-														  { return self->SubSteps::Start(); }...};
-	bool (*const *CurrentStart)(Sequential *);
-	std::move_only_function<void(Step *) const> const FinishCallback;
+	static constexpr bool (*SubStarts[])(Sequential *, std::move_only_function<void(Step *) const> const &) = {[](Sequential *Me, std::move_only_function<void(Step *) const> const &FinishCallback)
+																											   { return Me->SubSteps::Start(FinishCallback); }...};
+	bool (*const *CurrentStart)(Sequential *, std::move_only_function<void(Step *) const> const &);
+	std::move_only_function<void(Step *) const> const *FinishCallback;
 };
 static constexpr
 #ifdef ARDUINO_ARCH_AVR
@@ -399,7 +394,21 @@ struct RandomDuration
 		InfoWrite(InfoStream, UID::Type_UID, ID);
 	}
 };
-// 令具有随机性的步骤执行随机化
+// 令具有随机性的步骤或时间执行随机化
+template <typename RandomStep>
+struct Randomize : virtual RandomStep
+{
+	bool Start() override
+	{
+		if (TrialsDone.empty())
+			RandomStep::Randomize();
+		return false;
+	}
+	Randomize(std::move_only_function<void(Step *) const> &&FinishCallback)
+		: RandomStep(std::move(FinishCallback))
+	{
+	}
+};
 template <typename RD>
 struct Randomize : virtual RD
 {

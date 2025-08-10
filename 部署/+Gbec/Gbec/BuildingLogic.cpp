@@ -114,8 +114,9 @@ struct Step {
 		Quick_digital_IO_interrupt::InterruptGuard const _;
 		_Abort();
 	}
-	virtual void Start(std::move_only_function<void()const>&& FinishCallback = []() {}) = 0;
-	virtual void Repeat(uint16_t Times) {
+	virtual void Start() = 0;
+	virtual void Repeat(uint16_t Times)
+	{
 		Start();
 	}
 	virtual void Restore(std::unordered_map<UID, uint16_t>& TrialsDone) {
@@ -166,29 +167,91 @@ protected:
 		}
 	}
 };
+
+template<typename, typename>
+struct _Prepend;
+template<typename...>
+struct _UntilDelayed {
+	using type = _UntilDelayed<>;
+};
+template<typename Current, typename...Rest>
+struct _UntilDelayed<Current, Rest...>
+{
+	using type = std::conditional_t<Current::Instantaneous, typename _Prepend<Current, typename _UntilDelayed<Rest...>::type>::type, _UntilDelayed<Current>>;
+};
+template<typename Head, typename...Tail>
+struct _Prepend<Head, _UntilDelayed<Tail...>>
+{
+	using type = _UntilDelayed<Head, Tail...>;
+};
 // 依次开始所有子步骤
 template <typename... SubSteps>
-struct Sequential :virtual SubSteps...
+struct _Sequential
 {
-	void Start(std::move_only_function<void()const>&& FinishCallback = []() {})override {
-		int _[] = { (SubSteps::Start(std::move(FinishCallback)), 0)... };
-	}
-	void Repeat(uint16_t Times)override {
-		int _[] = { (SubSteps::Repeat(Times), 0)... };
-	}
-	void Restore(std::unordered_map<UID, uint16_t>& TrialsDone)override {
-		int _[] = { (SubSteps::Restore(TrialsDone), 0)... };
-	}
-	static constexpr UID ID = UID::Step_Sequential;
-	void WriteInfo(std::map<UID, std::string>& Info)const override {
-		if (!InfoMap.contains(ID)) {
-			std::ostringstream InfoStream;
-			InfoWrite(InfoStream, UID::Type_Array, sizeof...(SubSteps), UID::Type_UID, SubSteps::ID...);
-			InfoMap[ID] = InfoStream.str();
-			int _[] = { (SubSteps::WriteInfo(Info), 0)... };
+	template<typename T>
+	struct WithIndex;
+	template<uint8_t...Index>
+	class WithIndex<std::integer_sequence<uint8_t, Index...>> :virtual SubSteps... {
+		template<uint8_t Index, typename Current, typename...Rest>
+		struct FromIndex :FromIndex<Index - 1, Rest...> {}
+		template<typename...Rest>
+		struct FromIndex<0, Rest...> { using type = typename _UntilDelayed<Rest...>::type; };
+		template<uint8_t Index>
+		using StepRange = typename FromIndex<Index, SubSteps...>::type;
+
+		std::move_only_function<void(Step*)const> FinishCallback;
+		using BoolArray = bool[];
+		template<typename...BlockSteps>
+		void SequentialBlock(_UntilDelayed<BlockSteps...>)
+		{
+			if (BoolArray{ (BlockSteps::Start(),BlockSteps::Instantaneous)... } [sizeof...(BlockSteps) - 1] )
+				FinishCallback(this);
 		}
+	public:
+		static constexpr bool Instantaneous = std::conjunction<std::bool_constant<SubSteps::Instantaneous>...>::value;
+		void Start()override
+		{
+			SequentialBlock(StepRange<0>{});
+		}
+		void Restore(std::unordered_map<UID, uint16_t>& TrialsDone)override {
+			int _[] = { (SubSteps::Restore(TrialsDone), 0)... };
+		}
+		static constexpr UID ID = UID::Step_Sequential;
+		void WriteInfo(std::map<UID, std::string>& Info)const override {
+			if (!InfoMap.contains(ID)) {
+				std::ostringstream InfoStream;
+				InfoWrite(InfoStream, UID::Type_Array, sizeof...(SubSteps), UID::Type_UID, SubSteps::ID...);
+				InfoMap[ID] = InfoStream.str();
+				int _[] = { (SubSteps::WriteInfo(Info), 0)... };
+			}
+		}
+		WithIndex(std::move_only_function<void(Step*)const>&& FinishCallback) :SubSteps(Instantaneous ? [](Step*) {} : Index < sizeof...(SubSteps) ? [](Step* Me) { reinterpret_cast<WithIndex*>(Me)->SequentialBlock(StepRange<Index + 1>{}); } : std::move(FinishCallback))..., FinishCallback(std::move(FinishCallback)){}
+		struct WithRepeat :virtual WithIndex
+		{
+			void Repeat(uint16_t Times)override {
+				if _GLIBCXX17_CONSTEXPR(Instantaneous)
+					for (uint16_t i = 0; i < Times; ++i)
+						Start();
+				else
+				{
+					RepeatLeft = Times;
+					Start();
+				}
+			}
+			WithRepeat(std::move_only_function<void(Step*)const>&& FinishCallback) :WithIndex(Instantaneous ? [](Step*) {} : [FinishCallback = std::move(FinishCallback), this]() {
+				if (RepeatLeft)
+					Start();
+				else
+					FinishCallback(this);
+				}) {
+			}
+		protected:
+			uint16_t RepeatLeft;
+		};
 	}
 };
+template<typename...SubSteps>
+using Sequential = _Sequential<SubSteps...>::WithIndex<std::make_integer_sequence<uint8_t, sizeof...(SubSteps)>>;
 //表示一个常数时间段。Unit必须是std::chrono::duration的一个实例。
 template<typename T>
 struct _TypeID;

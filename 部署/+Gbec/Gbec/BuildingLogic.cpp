@@ -96,7 +96,8 @@ inline static void InfoWrite(std::ostringstream &InfoStream, uint16_t InfoValue)
 {
 	InfoStream.write(reinterpret_cast<const char *>(&InfoValue), sizeof(InfoValue));
 }
-inline static void InfoWrite(std::ostringstream &InfoStream, void const *InfoValue)
+using InfoKey = UID const *;
+inline static void InfoWrite(std::ostringstream &InfoStream, InfoKey InfoValue)
 {
 	InfoStream.write(reinterpret_cast<const char *>(&InfoValue), sizeof(InfoValue));
 }
@@ -139,11 +140,11 @@ struct Step
 		_Abort();
 	}
 	// 返回是否需要等待回调。回调函数只能在Start时提供，不能在构造时提供，因为存在复杂的虚继承关系，只能默认构造。
-	virtual bool Start(std::move_only_function<void(Step *) const> const &FinishCallback)
+	virtual bool Start(void (*)(Step *))
 	{
 		return false;
 	}
-	virtual void WriteInfo(std::map<void const *, std::string> &InfoMap) const = 0;
+	virtual void WriteInfo(std::map<InfoKey, std::string> &InfoMap) const = 0;
 
 protected:
 	std::set<PinListener *> ActiveInterrupts;
@@ -169,6 +170,7 @@ protected:
 		ActiveTimers.insert(Timer);
 		return Timer;
 	}
+	// 此操作不负责停止计时器，仅使其可以被再分配
 	void UnregisterTimer(Timers_one_for_all::TimerClass *Timer)
 	{
 		Quick_digital_IO_interrupt::InterruptGuard const _;
@@ -195,37 +197,38 @@ struct Sequential : virtual SubSteps...
 	{
 		Sequential *TypedMe = reinterpret_cast<Sequential *>(Me);
 		while (++TypedMe->CurrentStart < std::end(TypedMe->SubStarts))
-			if ((*TypedMe->CurrentStart)(TypedMe))
+			if ((*TypedMe->CurrentStart)(TypedMe, NextBlock))
 				return;
 		FinishCallback(TypedMe);
 	}
-	bool Start(std::move_only_function<void(Step *) const> const &FC) override
+	bool Start(void (*FC)(Step *)) override
 	{
 		for (CurrentStart = std::begin(SubStarts); CurrentStart < std::end(SubStarts); ++CurrentStart)
-			if ((*CurrentStart)(this, [](Step *Me)
-								{ reinterpret_cast<Sequential *>(Me)->NextBlock(); }))
+			if ((*CurrentStart)(this, NextBlock))
 			{
-				FinishCallback = &FC;
+				FinishCallback = FC;
 				return true;
 			}
 		return false;
 	}
+	// 标准保证不同模板实例的该对象有不同的地址
 	static constexpr UID ID = UID::Step_Sequential;
-	void WriteInfo(std::ostringstream &InfoStream) const override
+	void WriteInfo(std::map<InfoKey, std::string> &InfoMap) const override
 	{
-		if (InfoWritten != &InfoStream)
+		if (!InfoMap.contains(&ID))
 		{
-			InfoWrite(InfoStream, UID::Type_Array, sizeof...(SubSteps), UID::Type_UID, SubSteps::ID...);
-			InfoMap[ID] = InfoStream.str();
+			std::ostringstream InfoStream;
+			InfoWrite(InfoStream, UID::Type_Struct, 2, UID::Field_ID, UID::Type_UID, ID, UID::Field_SubSteps, UID::Type_Array, sizeof...(SubSteps), UID::Type_Pointer, &SubSteps::ID...);
+			InfoMap[&ID] = InfoStream.str();
 			int _[] = {(SubSteps::WriteInfo(InfoMap), 0)...};
 		}
 	}
 
 protected:
-	static constexpr bool (*SubStarts[])(Sequential *, std::move_only_function<void(Step *) const> const &) = {[](Sequential *Me, std::move_only_function<void(Step *) const> const &FinishCallback)
-																											   { return Me->SubSteps::Start(FinishCallback); }...};
-	bool (*const *CurrentStart)(Sequential *, std::move_only_function<void(Step *) const> const &);
-	std::move_only_function<void(Step *) const> const *FinishCallback;
+	static constexpr bool (*SubStarts[])(Sequential *, void (*)(Step *)) = {[](Sequential *Me, void (*FinishCallback)(Step *))
+																			{ return Me->SubSteps::Start(FinishCallback); }...};
+	bool (*const *CurrentStart)(Sequential *, void (*)(Step *));
+	void (*FinishCallback)(Step *);
 };
 static constexpr
 #ifdef ARDUINO_ARCH_AVR
@@ -239,28 +242,32 @@ static constexpr
 template <typename... SubSteps>
 struct RandomSequential : virtual SubSteps...
 {
-	void NextBlock()
+	static void NextBlock(Step *Me)
 	{
-		while (++CurrentStart < std::end(SubStarts))
-			if ((*CurrentStart)(this))
+		RandomSequential *TypedMe = reinterpret_cast<RandomSequential *>(Me);
+		while (++TypedMe->CurrentStart < std::end(TypedMe->SubStarts))
+			if ((*TypedMe->CurrentStart)(TypedMe, NextBlock))
 				return;
-		FinishCallback(this);
+		FinishCallback(TypedMe);
 	}
-	bool Start() override
+	bool Start(void (*FC)(Step *)) override
 	{
 		for (CurrentStart = std::begin(SubStarts); CurrentStart < std::end(SubStarts); ++CurrentStart)
-			if ((*CurrentStart)(this))
+			if ((*CurrentStart)(this, NextBlock))
+			{
+				FinishCallback = FC;
 				return true;
+			}
 		return false;
 	}
 	static constexpr UID ID = UID::Step_RandomSequential;
-	void WriteInfo(std::map<UID, std::string> &InfoMap) const override
+	void WriteInfo(std::map<InfoKey, std::string> &InfoMap) const override
 	{
-		if (!InfoMap.contains(ID))
+		if (!InfoMap.contains(&ID))
 		{
 			std::ostringstream InfoStream;
-			InfoWrite(InfoStream, UID::Type_Array, sizeof...(SubSteps), UID::Type_UID, SubSteps::ID...);
-			InfoMap[ID] = InfoStream.str();
+			InfoWrite(InfoStream, UID::Type_Struct, 2, UID::Field_ID, UID::Type_UID, ID, UID::Field_SubSteps, UID::Type_Array, sizeof...(SubSteps), UID::Type_Pointer, &SubSteps::ID...);
+			InfoMap[&ID] = InfoStream.str();
 			int _[] = {(SubSteps::WriteInfo(InfoMap), 0)...};
 		}
 	}
@@ -268,9 +275,7 @@ struct RandomSequential : virtual SubSteps...
 	{
 		std::shuffle(std::begin(SubStarts), std::end(SubStarts), Urng);
 	}
-	RandomSequential(std::move_only_function<void(Step *) const> &&FinishCallback) : SubSteps([](Step *Me)
-																							  { reinterpret_cast<Sequential *>(Me)->NextBlock(); })...,
-																					 FinishCallback(std::move(FinishCallback))
+	RandomSequential()
 	{
 		Randomize();
 	}
@@ -278,28 +283,32 @@ struct RandomSequential : virtual SubSteps...
 	template <uint16_t... Repeats>
 	struct WithRepeats : virtual SubSteps...
 	{
-		void NextBlock()
+		static void NextBlock(Step *Me)
 		{
-			while (++CurrentStart < std::end(SubStarts))
-				if ((*CurrentStart)(this))
+			WithRepeats *TypedMe = reinterpret_cast<WithRepeats *>(Me);
+			while (++TypedMe->CurrentStart < std::end(TypedMe->SubStarts))
+				if ((*TypedMe->CurrentStart)(TypedMe, NextBlock))
 					return;
-			FinishCallback(this);
+			FinishCallback(TypedMe);
 		}
-		bool Start() override
+		bool Start(void (*FC)(Step *)) override
 		{
 			for (CurrentStart = std::begin(SubStarts); CurrentStart < std::end(SubStarts); ++CurrentStart)
-				if ((*CurrentStart)(this))
+				if ((*CurrentStart)(this, NextBlock))
+				{
+					FinishCallback = FC;
 					return true;
+				}
 			return false;
 		}
 		static constexpr UID ID = UID::Step_RandomSequential;
-		void WriteInfo(std::map<UID, std::string> &InfoMap) const override
+		void WriteInfo(std::map<InfoKey, std::string> &InfoMap) const override
 		{
-			if (!InfoMap.contains(ID))
+			if (!InfoMap.contains(&ID))
 			{
 				std::ostringstream InfoStream;
-				InfoWrite(InfoStream, UID::Type_Table, sizeof...(SubSteps), 2, UID::Column_SubSteps, UID::Type_UID, SubSteps::ID..., UID::Column_Repeats, UID::Type_UInt16, Repeats...);
-				InfoMap[ID] = InfoStream.str();
+				InfoWrite(InfoStream, UID::Type_Struct, 2, UID::Field_ID, UID::Type_UID, ID, UID::Field_SubSteps, UID::Type_Table, sizeof...(SubSteps), 2, UID::Column_SubSteps, UID::Type_Pointer, &SubSteps::ID..., UID::Column_Repeats, UID::Type_UInt16, Repeats...);
+				InfoMap[&ID] = InfoStream.str();
 				int _[] = {(SubSteps::WriteInfo(InfoMap), 0)...};
 			}
 		}
@@ -307,12 +316,10 @@ struct RandomSequential : virtual SubSteps...
 		{
 			std::shuffle(std::begin(SubStarts), std::end(SubStarts), Urng);
 		}
-		WithRepeats(std::move_only_function<void(Step *) const> &&FinishCallback) : SubSteps([](Step *Me)
-																							 { reinterpret_cast<Sequential *>(Me)->NextBlock(); })...,
-																					FinishCallback(std::move(FinishCallback))
+		WithRepeats()
 		{
-			auto _[] = {CurrentStart = std::fill_n(CurrentStart, Repeats, [](WithRepeats *Me)
-												   { return Me->SubSteps::Start(); })...};
+			auto _[] = {CurrentStart = std::fill_n(CurrentStart, Repeats, [](WithRepeats *Me, void (*FinishCallback)(Step *))
+												   { return Me->SubSteps::Start(FinishCallback); })...};
 			Randomize();
 		}
 
@@ -327,15 +334,16 @@ struct RandomSequential : virtual SubSteps...
 		{
 			static constexpr uint16_t value = Only;
 		};
-		bool (*SubStarts[Sum<Repeats>::value])(WithRepeats *);
-		bool (**CurrentStart)(WithRepeats *) = std::begin(SubStarts);
-		std::move_only_function<void(Step *) const> const FinishCallback;
-}
+		bool (*SubStarts[Sum<Repeats>::value])(WithRepeats *, void (*)(Step *));
+		bool (**CurrentStart)(WithRepeats *, void (*)(Step *)) = std::begin(SubStarts);
+		void (*FinishCallback)(Step *);
+	};
 
-protected : bool (*SubStarts[])(RandomSequential *) = {[](RandomSequential *self)
-													   { return self->SubSteps::Start(); }...};
-	bool (*const *CurrentStart)(RandomSequential *);
-	std::move_only_function<void(Step *) const> const FinishCallback;
+protected:
+	bool (*SubStarts[])(RandomSequential *, void (*)(Step *)) = {[](RandomSequential *self, void (*FC)(Step *))
+																 { return self->SubSteps::Start(FC); }...};
+	bool (*const *CurrentStart)(RandomSequential *, void (*)(Step *)) = std::begin(SubStarts);
+	void (*FinishCallback)(Step *);
 };
 
 // 表示一个常数时间段。Unit必须是std::chrono::duration的一个实例。
@@ -352,20 +360,20 @@ struct _TypeID<std::chrono::milliseconds>
 	static constexpr UID value = UID::Type_Milliseconds;
 };
 template <typename Unit, uint16_t Value>
-struct Duration
+struct ConstantDuration
 {
 	template <typename GetUnit>
 	static constexpr GetUnit Get()
 	{
 		return std::chrono::duration_cast<GetUnit>(Unit{Value});
 	}
-	static void WriteInfo(std::map<UID, std::string> &, std::ostringstream &InfoStream)
+	static void WriteInfo(std::map<InfoKey, std::string> &, std::ostringstream &InfoStream)
 	{
 		InfoWrite(InfoStream, _TypeID<Unit>::value, Value);
 	}
 };
-// 表示一个随机时间段。Unit必须是std::chrono::duration的一个实例。该步骤维护一个随机变量，只有使用Randomize步骤才能改变这个变量，否则一直保持相同的值。必须指定一个独特的ID，以区分不同的随机变量。
-template <typename Unit, uint16_t Min, uint16_t Max, UID ID>
+// 表示一个随机时间段。Unit必须是std::chrono::duration的一个实例。该步骤维护一个随机变量，只有使用Randomize步骤才能改变这个变量，否则一直保持相同的值。如果有多个随机范围相同的随机变量需要独立控制随机性，可以指定不同的ID，否则视为同一个随机变量。
+template <typename Unit, uint16_t Min, uint16_t Max, UID ID = UID::Duration_Random>
 struct RandomDuration
 {
 	Unit Current;
@@ -383,72 +391,129 @@ struct RandomDuration
 	{
 		Randomize();
 	}
-	static void WriteInfo(std::map<UID, std::string> &InfoMap, std::ostringstream &InfoStream)
+	static void WriteInfo(std::map<InfoKey, std::string> &InfoMap, std::ostringstream &InfoStream)
 	{
-		if (!InfoMap.contains(ID))
+		static constexpr UID OdrID = ID;
+		if (!InfoMap.contains(&OdrID))
 		{
 			std::ostringstream MyStream;
 			InfoWrite(MyStream, UID::Type_Array, 2, _TypeID<Unit>::value, Min, Max);
-			InfoMap[ID] = MyStream.str();
+			InfoMap[&OdrID] = MyStream.str();
 		}
-		InfoWrite(InfoStream, UID::Type_UID, ID);
+		InfoWrite(InfoStream, UID::Type_Pointer, &OdrID);
 	}
 };
+struct InfiniteDuration;
 // 令具有随机性的步骤或时间执行随机化
 template <typename RandomStep>
 struct Randomize : virtual RandomStep
 {
-	bool Start() override
+	bool Start(void (*)(Step *)) override
 	{
 		if (TrialsDone.empty())
 			RandomStep::Randomize();
 		return false;
 	}
-	Randomize(std::move_only_function<void(Step *) const> &&FinishCallback)
-		: RandomStep(std::move(FinishCallback))
-	{
-	}
-};
-template <typename RD>
-struct Randomize : virtual RD
-{
-	void Start() override
-	{
-		RD::Randomize();
-	}
 	static constexpr UID ID = UID::Step_Randomize;
-	void WriteInfo(std::map<UID, std::string> &InfoMap) const override
+	void WriteInfo(std::map<InfoKey, std::string> &InfoMap) const override
 	{
-		if (!InfoMap.contains(ID))
+		if (!InfoMap.contains(&ID))
 		{
 			std::ostringstream InfoStream;
-			RD::WriteInfo(InfoMap, InfoStream);
-			InfoMap[ID] = InfoStream.str();
+			InfoWrite(InfoStream, UID::Type_Struct, 2, UID::Field_ID, UID::Type_UID, ID, UID::Field_RandomStep, UID::Type_Pointer, &RandomStep::ID);
+			InfoMap[&ID] = InfoStream.str();
+			RandomStep::WriteInfo(InfoMap);
 		}
 	}
 };
-template <typename After, typename Do>
-struct DoAfter : virtual After, virtual Do
+template <typename Unit, uint16_t Min, uint16_t Max, UID ID>
+struct Randomize<RandomDuration<Unit, Min, Max, ID>> : virtual RandomDuration<Unit, Min, Max, ID>, virtual Step
 {
-	void Start() override
+	bool Start(void (*)(Step *)) override
 	{
-		Timers_one_for_all::TimerClass *Timer = Timers_one_for_all::AllocateTimer();
-		Timer->DoAfter(After::Get(), [this, Timer]()
-					   {
-			Step::UnregisterTimer(Timer);
-			Do::Start(); });
+		if (TrialsDone.empty())
+			RandomDuration<Unit, Min, Max, ID>::Randomize();
+		return false;
 	}
-	static constexpr UID ID = UID::Step_DoWhenAborted;
-	void WriteInfo(std::map<UID, std::string> &InfoMap) const override
+	static constexpr UID ID = UID::Step_Randomize;
+	void WriteInfo(std::map<InfoKey, std::string> &InfoMap) const override
 	{
-		if (!InfoMap.contains(ID))
+		if (!InfoMap.contains(&ID))
 		{
 			std::ostringstream InfoStream;
-			InfoWrite(InfoStream, UID::Type_Struct, 2, UID::Field_After);
-			After::WriteInfo(InfoMap, InfoStream);
-			InfoWrite(InfoStream, UID::Field_Do, Do::ID);
-			InfoMap[ID] = InfoStream.str();
-			Do::WriteInfo(InfoMap);
+			InfoWrite(InfoStream, UID::Type_Struct, 2, UID::Field_ID, UID::Type_UID, ID, UID::Field_RandomDuration);
+			RandomDuration<Unit, Min, Max, ID>::WriteInfo(InfoMap, InfoStream);
+			InfoMap[&ID] = InfoStream.str();
+		}
+	}
+};
+template <typename Duration>
+struct Delay : virtual Step, virtual Duration
+{
+	void (*FinishCallback)(Step *);
+	void Abort()
+	{
+		Timer->Stop();
+		_Abort();
+	}
+	bool Start(void (*FC)(Step *)) override
+	{
+		if (TrialsDone.empty())
+		{
+			FinishCallback = FC;
+			Timer = AllocateTimer();
+			Timer->DoAfter(Duration::Get<Tick>(), [this]()
+						   { _Abort(); });
+			return true;
+		}
+		return false;
+	}
+	static constexpr UID ID = UID::Step_Delay;
+	void WriteInfo(std::map<InfoKey, std::string> &InfoMap) const override
+	{
+		if (!InfoMap.contains(&ID))
+		{
+			std::ostringstream InfoStream;
+			InfoWrite(InfoStream, UID::Type_Struct, 2, UID::Field_ID, UID::Type_UID, ID, UID::Field_Duration);
+			Duration::WriteInfo(InfoMap, InfoStream);
+			InfoMap[&ID] = InfoStream.str();
+		}
+	}
+
+protected:
+	Timers_one_for_all::TimerClass *Timer;
+	void _Abort()
+	{
+		UnregisterTimer(Timer);
+		FinishCallback(this);
+	}
+};
+// 无限等待，永不返回，但可以Abort
+template <>
+struct Delay<InfiniteDuration> : virtual Step
+{
+	void (*FinishCallback)(Step *);
+	bool Start(void (*FC)(Step *)) override
+	{
+		if (TrialsDone.empty())
+		{
+			FinishCallback = FC;
+			return true;
+		}
+		return false;
+	}
+	void Abort()
+	{
+		FinishCallback(this);
+	}
+	static constexpr UID ID = UID::Step_Delay;
+	void WriteInfo(std::map<InfoKey, std::string> &InfoMap) const override
+	{
+		if (!InfoMap.contains(&ID))
+		{
+			std::ostringstream InfoStream;
+			InfoWrite(InfoStream, UID::Type_Struct, 2, UID::Field_ID, UID::Type_UID, ID, UID::Field_Duration, UID::Type_UID, UID::Duration_Infinite);
+			InfoMap[&ID] = InfoStream.str();
 		}
 	}
 };

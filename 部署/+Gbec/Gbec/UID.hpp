@@ -37,6 +37,11 @@ enum class UID : uint8_t {
 	
 	Field_After,
 	Field_Do,
+	Field_ID,
+	Field_SubSteps,
+	Field_RandomStep,
+	Field_RandomDuration,
+	Field_Duration,
 
 	Column_SubSteps,
 	Column_Repeats,
@@ -53,6 +58,7 @@ enum class UID : uint8_t {
 	Type_Milliseconds,
 	Type_Infinite,
 	Type_Table,
+	Type_Pointer,
 
 	State_Ready,
 	State_Running,
@@ -94,4 +100,7 @@ enum class UID : uint8_t {
 	BackgroundID_Default,
 
 	Public_BlueLed,
+
+	Duration_Random,
+	Duration_Infinite,
 };

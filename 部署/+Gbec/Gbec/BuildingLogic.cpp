@@ -7,12 +7,15 @@
 #include <sstream>
 #include <chrono>
 #include <map>
-struct PinListener {
+#include <random>
+struct PinListener
+{
 	uint8_t const Pin;
 	std::move_only_function<void() const> const Callback;
-	//中断不安全
-	void Pause()const {
-		std::set<std::move_only_function<void() const> const*>* CallbackSet = &Listening[Pin];
+	// 中断不安全
+	void Pause() const
+	{
+		std::set<std::move_only_function<void() const> const *> *CallbackSet = &Listening[Pin];
 		CallbackSet->erase(&Callback);
 		if (CallbackSet->empty())
 			Quick_digital_IO_interrupt::DetachInterrupt(Pin);
@@ -21,50 +24,58 @@ struct PinListener {
 		if (CallbackSet->empty())
 			Resting.erase(Pin);
 	}
-	//中断不安全
-	void Continue()const {
-		std::set<std::move_only_function<void() const> const*>& CallbackSet = Listening[Pin];
+	// 中断不安全
+	void Continue() const
+	{
+		std::set<std::move_only_function<void() const> const *> &CallbackSet = Listening[Pin];
 		if (CallbackSet.empty())
-			Quick_digital_IO_interrupt::AttachInterrupt<RISING>(Pin, PinInterrupt{ Pin });
+			Quick_digital_IO_interrupt::AttachInterrupt<RISING>(Pin, PinInterrupt{Pin});
 		CallbackSet.insert(&Callback);
 	}
-	//中断不安全
-	PinListener(uint8_t Pin, std::move_only_function<void() const>&& Callback)
-		: Pin(Pin), Callback(std::move(Callback)) {
+	// 中断不安全
+	PinListener(uint8_t Pin, std::move_only_function<void() const> &&Callback)
+		: Pin(Pin), Callback(std::move(Callback))
+	{
 		Continue();
 	}
-	//中断不安全
-	~PinListener() {
+	// 中断不安全
+	~PinListener()
+	{
 		Pause();
 	}
-	//中断安全
-	static void ClearPending() {
-		static std::queue<std::move_only_function<void() const> const*>LocalSwap;
+	// 中断安全
+	static void ClearPending()
+	{
+		static std::queue<std::move_only_function<void() const> const *> LocalSwap;
 		{
 			Quick_digital_IO_interrupt::InterruptGuard const _;
 			std::swap(LocalSwap, PendingCallbacks);
-			for (auto& [Pin, Callbacks] : Resting) {
-				std::set<std::move_only_function<void() const> const*>& ListeningSet = Listening[Pin];
+			for (auto &[Pin, Callbacks] : Resting)
+			{
+				std::set<std::move_only_function<void() const> const *> &ListeningSet = Listening[Pin];
 				ListeningSet.merge(Callbacks);
 				if (ListeningSet.size())
-					Quick_digital_IO_interrupt::AttachInterrupt<RISING>(Pin, PinInterrupt{ Pin });
+					Quick_digital_IO_interrupt::AttachInterrupt<RISING>(Pin, PinInterrupt{Pin});
 				Callbacks.clear();
 			}
 		}
-		while (LocalSwap.size()) {
+		while (LocalSwap.size())
+		{
 			LocalSwap.front()->operator()();
 			LocalSwap.pop();
 		}
 	}
 
 protected:
-	static std::queue<std::move_only_function<void() const> const*> PendingCallbacks;
-	static std::unordered_map<uint8_t, std::set<std::move_only_function<void() const> const*>> Listening;
-	static std::unordered_map<uint8_t, std::set<std::move_only_function<void() const> const*>> Resting;
-	struct PinInterrupt {
+	static std::queue<std::move_only_function<void() const> const *> PendingCallbacks;
+	static std::unordered_map<uint8_t, std::set<std::move_only_function<void() const> const *>> Listening;
+	static std::unordered_map<uint8_t, std::set<std::move_only_function<void() const> const *>> Resting;
+	struct PinInterrupt
+	{
 		uint8_t const Pin;
-		void operator()() const {
-			std::set<std::move_only_function<void() const> const*>& Listenings = Listening[Pin];
+		void operator()() const
+		{
+			std::set<std::move_only_function<void() const> const *> &Listenings = Listening[Pin];
 			for (auto H : Listenings)
 				PendingCallbacks.push(H);
 			Resting[Pin].merge(Listenings);
@@ -73,223 +84,314 @@ protected:
 		}
 	};
 };
-std::queue<std::move_only_function<void() const> const*> PinListener::PendingCallbacks;
-std::unordered_map<uint8_t, std::set<std::move_only_function<void() const> const*>> PinListener::Listening;
-std::unordered_map<uint8_t, std::set<std::move_only_function<void() const> const*>> PinListener::Resting;
+std::queue<std::move_only_function<void() const> const *> PinListener::PendingCallbacks;
+std::unordered_map<uint8_t, std::set<std::move_only_function<void() const> const *>> PinListener::Listening;
+std::unordered_map<uint8_t, std::set<std::move_only_function<void() const> const *>> PinListener::Resting;
 
-inline static void InfoWrite(std::ostringstream& InfoStream, UID Info) {
-	InfoStream.put(static_cast<char>(Info));
+inline static void InfoWrite(std::ostringstream &InfoStream, UID InfoMap)
+{
+	InfoStream.put(static_cast<char>(InfoMap));
 }
-inline static void InfoWrite(std::ostringstream& InfoStream, uint16_t Info) {
-	InfoStream.write(reinterpret_cast<const char*>(&Info), sizeof(Info));
+inline static void InfoWrite(std::ostringstream &InfoStream, uint16_t InfoMap)
+{
+	InfoStream.write(reinterpret_cast<const char *>(&InfoMap), sizeof(InfoMap));
 }
-template<typename...T>
-inline static void InfoWrite(std::ostringstream& InfoStream, T...Info) {
-	int _[] = { (InfoWrite(InfoStream,Info),0)... };
+template <typename... T>
+inline static void InfoWrite(std::ostringstream &InfoStream, T... InfoMap)
+{
+	int _[] = {(InfoWrite(InfoStream, InfoMap), 0)...};
 }
 
-//中断安全
-struct Step {
-	void Pause()const {
+// 中断安全
+struct Step
+{
+	void Pause() const
+	{
 		Quick_digital_IO_interrupt::InterruptGuard const _;
-		for (PinListener const* H : ActiveInterrupts)
+		for (PinListener const *H : ActiveInterrupts)
 			H->Pause();
-		for (Timers_one_for_all::TimerClass* T : ActiveTimers)
+		for (Timers_one_for_all::TimerClass *T : ActiveTimers)
 			T->Pause();
 	}
-	void Continue()const {
+	void Continue() const
+	{
 		Quick_digital_IO_interrupt::InterruptGuard const _;
-		for (PinListener const* H : ActiveInterrupts)
+		for (PinListener const *H : ActiveInterrupts)
 			H->Continue();
-		for (Timers_one_for_all::TimerClass* T : ActiveTimers)
+		for (Timers_one_for_all::TimerClass *T : ActiveTimers)
 			T->Continue();
 	}
-	void Abort() {
+	void Abort()
+	{
 		Quick_digital_IO_interrupt::InterruptGuard const _;
 		_Abort();
 		ActiveInterrupts.clear();
 		ActiveTimers.clear();
+		TrialsDone.clear();
 	}
-	virtual ~Step() {
+	virtual ~Step()
+	{
 		Quick_digital_IO_interrupt::InterruptGuard const _;
 		_Abort();
 	}
-	virtual void Start() = 0;
-	virtual void Repeat(uint16_t Times)
+	// 返回是否需要等待回调
+	virtual bool Start()
 	{
-		Start();
+		return false;
 	}
-	virtual void Restore(std::unordered_map<UID, uint16_t>& TrialsDone) {
-		if (TrialsDone.empty())
-			Start();
-	}
-	virtual void WriteInfo(std::map<UID, std::string>& Info)const = 0;
+	virtual void WriteInfo(std::map<UID, std::string> &InfoMap) const = 0;
+
 protected:
-	std::set<PinListener*> ActiveInterrupts;
-	std::set<Timers_one_for_all::TimerClass*> ActiveTimers;
-	PinListener* RegisterInterrupt(uint8_t Pin, std::move_only_function<void() const>&& Callback) {
+	std::set<PinListener *> ActiveInterrupts;
+	std::set<Timers_one_for_all::TimerClass *> ActiveTimers;
+	std::unordered_map<UID, uint16_t> TrialsDone;
+	PinListener *RegisterInterrupt(uint8_t Pin, std::move_only_function<void() const> &&Callback)
+	{
 		Quick_digital_IO_interrupt::InterruptGuard const _;
-		PinListener* Listener = new PinListener(Pin, std::move(Callback));
+		PinListener *Listener = new PinListener(Pin, std::move(Callback));
 		ActiveInterrupts.insert(Listener);
 		return Listener;
 	}
-	void UnregisterInterrupt(PinListener* Handle) {
+	void UnregisterInterrupt(PinListener *Handle)
+	{
 		Quick_digital_IO_interrupt::InterruptGuard const _;
 		delete Handle;
 		ActiveInterrupts.erase(Handle);
 	}
-	Timers_one_for_all::TimerClass* AllocateTimer() {
+	Timers_one_for_all::TimerClass *AllocateTimer()
+	{
 		Quick_digital_IO_interrupt::InterruptGuard const _;
-		Timers_one_for_all::TimerClass* Timer = Timers_one_for_all::AllocateTimer();
+		Timers_one_for_all::TimerClass *Timer = Timers_one_for_all::AllocateTimer();
 		ActiveTimers.insert(Timer);
 		return Timer;
 	}
-	void UnregisterTimer(Timers_one_for_all::TimerClass* Timer) {
+	void UnregisterTimer(Timers_one_for_all::TimerClass *Timer)
+	{
 		Quick_digital_IO_interrupt::InterruptGuard const _;
 		ActiveTimers.erase(Timer);
 		Timer->Allocatable = true;
 	}
-	//中断不安全
-	void _Abort() {
-		for (PinListener* H : ActiveInterrupts)
+	// 中断不安全
+	void _Abort()
+	{
+		for (PinListener *H : ActiveInterrupts)
 			delete H;
-		for (Timers_one_for_all::TimerClass* T : ActiveTimers) {
+		for (Timers_one_for_all::TimerClass *T : ActiveTimers)
+		{
 			T->Stop();
 			T->Allocatable = true; // 使其可以被重新分配
 		}
 	}
-	template<typename...T>
-	static void _WriteInfo(UID ID, std::map<UID, std::string>& InfoMap, T...InfoValues) {
-		if (!InfoMap.contains(ID)) {
+	template <typename... T>
+	static void _WriteInfo(UID ID, std::map<UID, std::string> &InfoMap, T... InfoValues)
+	{
+		if (!InfoMap.contains(ID))
+		{
 			std::ostringstream InfoStream;
 			InfoWrite(InfoStream, InfoValues...);
 			InfoMap[ID] = InfoStream.str();
 		}
 	}
 };
-
-template<typename, typename>
-struct _Prepend;
-template<typename...>
-struct _UntilDelayed {
-	using type = _UntilDelayed<>;
-};
-template<typename Current, typename...Rest>
-struct _UntilDelayed<Current, Rest...>
-{
-	using type = std::conditional_t<Current::Instantaneous, typename _Prepend<Current, typename _UntilDelayed<Rest...>::type>::type, _UntilDelayed<Current>>;
-};
-template<typename Head, typename...Tail>
-struct _Prepend<Head, _UntilDelayed<Tail...>>
-{
-	using type = _UntilDelayed<Head, Tail...>;
-};
-// 依次开始所有子步骤
+// 顺序执行所有子步骤
 template <typename... SubSteps>
-struct _Sequential
+struct Sequential : virtual SubSteps...
 {
-	template<typename T>
-	struct WithIndex;
-	template<uint8_t...Index>
-	class WithIndex<std::integer_sequence<uint8_t, Index...>> :virtual SubSteps... {
-		template<uint8_t Index, typename Current, typename...Rest>
-		struct FromIndex :FromIndex<Index - 1, Rest...> {}
-		template<typename...Rest>
-		struct FromIndex<0, Rest...> { using type = typename _UntilDelayed<Rest...>::type; };
-		template<uint8_t Index>
-		using StepRange = typename FromIndex<Index, SubSteps...>::type;
-
-		std::move_only_function<void(Step*)const> FinishCallback;
-		using BoolArray = bool[];
-		template<typename...BlockSteps>
-		void SequentialBlock(_UntilDelayed<BlockSteps...>)
-		{
-			if (BoolArray{ (BlockSteps::Start(),BlockSteps::Instantaneous)... } [sizeof...(BlockSteps) - 1] )
-				FinishCallback(this);
-		}
-	public:
-		static constexpr bool Instantaneous = std::conjunction<std::bool_constant<SubSteps::Instantaneous>...>::value;
-		void Start()override
-		{
-			SequentialBlock(StepRange<0>{});
-		}
-		void Restore(std::unordered_map<UID, uint16_t>& TrialsDone)override {
-			int _[] = { (SubSteps::Restore(TrialsDone), 0)... };
-		}
-		static constexpr UID ID = UID::Step_Sequential;
-		void WriteInfo(std::map<UID, std::string>& Info)const override {
-			if (!InfoMap.contains(ID)) {
-				std::ostringstream InfoStream;
-				InfoWrite(InfoStream, UID::Type_Array, sizeof...(SubSteps), UID::Type_UID, SubSteps::ID...);
-				InfoMap[ID] = InfoStream.str();
-				int _[] = { (SubSteps::WriteInfo(Info), 0)... };
-			}
-		}
-		WithIndex(std::move_only_function<void(Step*)const>&& FinishCallback) :SubSteps(Instantaneous ? [](Step*) {} : Index < sizeof...(SubSteps) ? [](Step* Me) { reinterpret_cast<WithIndex*>(Me)->SequentialBlock(StepRange<Index + 1>{}); } : std::move(FinishCallback))..., FinishCallback(std::move(FinishCallback)){}
-		struct WithRepeat :virtual WithIndex
-		{
-			void Repeat(uint16_t Times)override {
-				if _GLIBCXX17_CONSTEXPR(Instantaneous)
-					for (uint16_t i = 0; i < Times; ++i)
-						Start();
-				else
-				{
-					RepeatLeft = Times;
-					Start();
-				}
-			}
-			WithRepeat(std::move_only_function<void(Step*)const>&& FinishCallback) :WithIndex(Instantaneous ? [](Step*) {} : [FinishCallback = std::move(FinishCallback), this]() {
-				if (RepeatLeft)
-					Start();
-				else
-					FinishCallback(this);
-				}) {
-			}
-		protected:
-			uint16_t RepeatLeft;
-		};
+	void NextBlock()
+	{
+		while (++CurrentStart < std::end(SubStarts))
+			if ((*CurrentStart)(this))
+				return;
+		FinishCallback(this);
 	}
+	bool Start() override
+	{
+		for (CurrentStart = std::begin(SubStarts); CurrentStart < std::end(SubStarts); ++CurrentStart)
+			if ((*CurrentStart)(this))
+				return true;
+		return false;
+	}
+	static constexpr UID ID = UID::Step_Sequential;
+	void WriteInfo(std::map<UID, std::string> &InfoMap) const override
+	{
+		if (!InfoMap.contains(ID))
+		{
+			std::ostringstream InfoStream;
+			InfoWrite(InfoStream, UID::Type_Array, sizeof...(SubSteps), UID::Type_UID, SubSteps::ID...);
+			InfoMap[ID] = InfoStream.str();
+			int _[] = {(SubSteps::WriteInfo(InfoMap), 0)...};
+		}
+	}
+	Sequential(std::move_only_function<void(Step *) const> &&FinishCallback) : SubSteps([](Step *Me)
+																						{ reinterpret_cast<Sequential *>(Me)->NextBlock(); })...,
+																			   FinishCallback(std::move(FinishCallback)) {}
+
+protected:
+	static constexpr bool (*SubStarts[])(Sequential *) = {[](Sequential *self)
+														  { return self->SubSteps::Start(); }...};
+	bool (*const *CurrentStart)(Sequential *);
+	std::move_only_function<void(Step *) const> const FinishCallback;
 };
-template<typename...SubSteps>
-using Sequential = _Sequential<SubSteps...>::WithIndex<std::make_integer_sequence<uint8_t, sizeof...(SubSteps)>>;
-//表示一个常数时间段。Unit必须是std::chrono::duration的一个实例。
-template<typename T>
+static constexpr
+#ifdef ARDUINO_ARCH_AVR
+	std::ArduinoUrng
+#endif
+#ifdef ARDUINO_ARCH_SAM
+		std::TrueUrng
+#endif
+			Urng;
+// 随机执行所有子步骤。多次执行顺序不会改变，必须先执行Randomize步骤才能重新随机化
+template <typename... SubSteps>
+struct RandomSequential : virtual SubSteps...
+{
+	void NextBlock()
+	{
+		while (++CurrentStart < std::end(SubStarts))
+			if ((*CurrentStart)(this))
+				return;
+		FinishCallback(this);
+	}
+	bool Start() override
+	{
+		for (CurrentStart = std::begin(SubStarts); CurrentStart < std::end(SubStarts); ++CurrentStart)
+			if ((*CurrentStart)(this))
+				return true;
+		return false;
+	}
+	static constexpr UID ID = UID::Step_RandomSequential;
+	void WriteInfo(std::map<UID, std::string> &InfoMap) const override
+	{
+		if (!InfoMap.contains(ID))
+		{
+			std::ostringstream InfoStream;
+			InfoWrite(InfoStream, UID::Type_Array, sizeof...(SubSteps), UID::Type_UID, SubSteps::ID...);
+			InfoMap[ID] = InfoStream.str();
+			int _[] = {(SubSteps::WriteInfo(InfoMap), 0)...};
+		}
+	}
+	void Randomize()
+	{
+		std::shuffle(std::begin(SubStarts), std::end(SubStarts), Urng);
+	}
+	RandomSequential(std::move_only_function<void(Step *) const> &&FinishCallback) : SubSteps([](Step *Me)
+																							  { reinterpret_cast<Sequential *>(Me)->NextBlock(); })...,
+																					 FinishCallback(std::move(FinishCallback))
+	{
+		Randomize();
+	}
+	// 必须为每个子步骤指定一个重复次数
+	template <uint16_t... Repeats>
+	struct WithRepeats : virtual SubSteps...
+	{
+		void NextBlock()
+		{
+			while (++CurrentStart < std::end(SubStarts))
+				if ((*CurrentStart)(this))
+					return;
+			FinishCallback(this);
+		}
+		bool Start() override
+		{
+			for (CurrentStart = std::begin(SubStarts); CurrentStart < std::end(SubStarts); ++CurrentStart)
+				if ((*CurrentStart)(this))
+					return true;
+			return false;
+		}
+		static constexpr UID ID = UID::Step_RandomSequential;
+		void WriteInfo(std::map<UID, std::string> &InfoMap) const override
+		{
+			if (!InfoMap.contains(ID))
+			{
+				std::ostringstream InfoStream;
+				InfoWrite(InfoStream, UID::Type_Table, sizeof...(SubSteps), 2, UID::Column_SubSteps, UID::Type_UID, SubSteps::ID..., UID::Column_Repeats, UID::Type_UInt16, Repeats...);
+				InfoMap[ID] = InfoStream.str();
+				int _[] = {(SubSteps::WriteInfo(InfoMap), 0)...};
+			}
+		}
+		void Randomize()
+		{
+			std::shuffle(std::begin(SubStarts), std::end(SubStarts), Urng);
+		}
+		WithRepeats(std::move_only_function<void(Step *) const> &&FinishCallback) : SubSteps([](Step *Me)
+																							 { reinterpret_cast<Sequential *>(Me)->NextBlock(); })...,
+																					FinishCallback(std::move(FinishCallback))
+		{
+			auto _[] = {CurrentStart = std::fill_n(CurrentStart, Repeats, [](WithRepeats *Me)
+												   { return Me->SubSteps::Start(); })...};
+			Randomize();
+		}
+
+	protected:
+		template <uint16_t First, uint16_t... Rest>
+		struct Sum
+		{
+			static constexpr uint16_t value = First + Sum<Rest...>::value;
+		};
+		template <uint16_t Only>
+		struct Sum<Only>
+		{
+			static constexpr uint16_t value = Only;
+		};
+		bool (*SubStarts[Sum<Repeats>::value])(WithRepeats *);
+		bool (**CurrentStart)(WithRepeats *) = std::begin(SubStarts);
+		std::move_only_function<void(Step *) const> const FinishCallback;
+}
+
+protected : bool (*SubStarts[])(RandomSequential *) = {[](RandomSequential *self)
+													   { return self->SubSteps::Start(); }...};
+	bool (*const *CurrentStart)(RandomSequential *);
+	std::move_only_function<void(Step *) const> const FinishCallback;
+};
+
+// 表示一个常数时间段。Unit必须是std::chrono::duration的一个实例。
+template <typename T>
 struct _TypeID;
-template<>
-struct _TypeID<std::chrono::seconds> {
+template <>
+struct _TypeID<std::chrono::seconds>
+{
 	static constexpr UID value = UID::Type_Seconds;
 };
-template<>
-struct _TypeID<std::chrono::milliseconds> {
+template <>
+struct _TypeID<std::chrono::milliseconds>
+{
 	static constexpr UID value = UID::Type_Milliseconds;
 };
-template<typename Unit, uint16_t Value>
-struct Duration {
-	template<typename GetUnit>
-	static constexpr GetUnit Get() {
-		return std::chrono::duration_cast<GetUnit>(Unit{ Value });
+template <typename Unit, uint16_t Value>
+struct Duration
+{
+	template <typename GetUnit>
+	static constexpr GetUnit Get()
+	{
+		return std::chrono::duration_cast<GetUnit>(Unit{Value});
 	}
-	static void WriteInfo(std::map<UID, std::string>&, std::ostringstream& InfoStream) {
+	static void WriteInfo(std::map<UID, std::string> &, std::ostringstream &InfoStream)
+	{
 		InfoWrite(InfoStream, _TypeID<Unit>::value, Value);
 	}
 };
-//表示一个随机时间段。Unit必须是std::chrono::duration的一个实例。该步骤维护一个随机变量，只有使用Randomize步骤才能改变这个变量，否则一直保持相同的值。必须指定一个独特的ID，以区分不同的随机变量。
-template<typename Unit, uint16_t Min, uint16_t Max, UID ID>
-struct RandomDuration {
+// 表示一个随机时间段。Unit必须是std::chrono::duration的一个实例。该步骤维护一个随机变量，只有使用Randomize步骤才能改变这个变量，否则一直保持相同的值。必须指定一个独特的ID，以区分不同的随机变量。
+template <typename Unit, uint16_t Min, uint16_t Max, UID ID>
+struct RandomDuration
+{
 	Unit Current;
-	void Randomize() {
+	void Randomize()
+	{
 		constexpr double DoubleMin = Min;
-		Current = Unit{ pow(static_cast<double>(Max) / DoubleMin, static_cast<double>(random(__LONG_MAX__)) / (__LONG_MAX__ - 1)) * DoubleMin };
+		Current = Unit{pow(static_cast<double>(Max) / DoubleMin, static_cast<double>(random(__LONG_MAX__)) / (__LONG_MAX__ - 1)) * DoubleMin};
 	}
-	template<typename GetUnit>
-	GetUnit Get() const {
+	template <typename GetUnit>
+	GetUnit Get() const
+	{
 		return std::chrono::duration_cast<GetUnit>(Current);
 	}
-	RandomDuration() {
+	RandomDuration()
+	{
 		Randomize();
 	}
-	static void WriteInfo(std::map<UID, std::string>& InfoMap, std::ostringstream& InfoStream) {
-		if (!InfoMap.contains(ID)) {
+	static void WriteInfo(std::map<UID, std::string> &InfoMap, std::ostringstream &InfoStream)
+	{
+		if (!InfoMap.contains(ID))
+		{
 			std::ostringstream MyStream;
 			InfoWrite(MyStream, UID::Type_Array, 2, _TypeID<Unit>::value, Min, Max);
 			InfoMap[ID] = MyStream.str();
@@ -297,38 +399,47 @@ struct RandomDuration {
 		InfoWrite(InfoStream, UID::Type_UID, ID);
 	}
 };
-template<typename RD>
-struct Randomize :virtual RD {
-	void Start()override {
+// 令具有随机性的步骤执行随机化
+template <typename RD>
+struct Randomize : virtual RD
+{
+	void Start() override
+	{
 		RD::Randomize();
 	}
 	static constexpr UID ID = UID::Step_Randomize;
-	void WriteInfo(std::map<UID, std::string>& Info)const override {
-		if (!Info.contains(ID)) {
+	void WriteInfo(std::map<UID, std::string> &InfoMap) const override
+	{
+		if (!InfoMap.contains(ID))
+		{
 			std::ostringstream InfoStream;
-			RD::WriteInfo(Info, InfoStream);
+			RD::WriteInfo(InfoMap, InfoStream);
 			InfoMap[ID] = InfoStream.str();
 		}
 	}
 };
-template< typename After, typename Do>
-struct DoAfter : virtual After, virtual Do {
-	void Start()override {
-		Timers_one_for_all::TimerClass* Timer = Timers_one_for_all::AllocateTimer();
-		Timer->DoAfter(After::Get(), [this, Timer]() {
+template <typename After, typename Do>
+struct DoAfter : virtual After, virtual Do
+{
+	void Start() override
+	{
+		Timers_one_for_all::TimerClass *Timer = Timers_one_for_all::AllocateTimer();
+		Timer->DoAfter(After::Get(), [this, Timer]()
+					   {
 			Step::UnregisterTimer(Timer);
-			Do::Start();
-			});
+			Do::Start(); });
 	}
 	static constexpr UID ID = UID::Step_DoWhenAborted;
-	void WriteInfo(std::map<UID, std::string>& Info)const override {
-		if (!Info.contains(ID)) {
+	void WriteInfo(std::map<UID, std::string> &InfoMap) const override
+	{
+		if (!InfoMap.contains(ID))
+		{
 			std::ostringstream InfoStream;
 			InfoWrite(InfoStream, UID::Type_Struct, 2, UID::Field_After);
-			After::WriteInfo(Info, InfoStream);
+			After::WriteInfo(InfoMap, InfoStream);
 			InfoWrite(InfoStream, UID::Field_Do, Do::ID);
-			Info[ID] = InfoStream.str();
-			Do::WriteInfo(Info);
+			InfoMap[ID] = InfoStream.str();
+			Do::WriteInfo(InfoMap);
 		}
 	}
 };

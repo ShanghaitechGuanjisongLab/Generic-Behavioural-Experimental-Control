@@ -69,7 +69,8 @@
 		"ratio": "cpp",
 		"string_view": "cpp",
 		"mutex": "cpp",
-		"iomanip": "cpp"
+		"iomanip": "cpp",
+		"stack": "cpp"
 	},
-	"C_Cpp.formatting": "vcFormat"
+	"C_Cpp.formatting": "clangFormat"
 }

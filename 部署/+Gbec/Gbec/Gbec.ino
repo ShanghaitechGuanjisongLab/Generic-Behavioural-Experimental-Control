@@ -3,6 +3,9 @@
 #include <map>
 #include <vector>
 #include <memory>
+std::queue<std::move_only_function<void() const> const *> PinListener::PendingCallbacks;
+std::unordered_map<uint8_t, std::set<std::move_only_function<void() const> const *>> PinListener::Listening;
+std::unordered_map<uint8_t, std::set<std::move_only_function<void() const> const *>> PinListener::Resting;
 
 //SAM编译器bug，此定义必须放前面否则找不到
 #pragma pack(push, 1)

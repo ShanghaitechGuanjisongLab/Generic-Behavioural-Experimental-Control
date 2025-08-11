@@ -42,9 +42,20 @@ enum class UID : uint8_t {
 	Field_RandomStep,
 	Field_RandomDuration,
 	Field_Duration,
+	Field_AbortStep,
+	Field_StartModule,
+	Field_Modules,
+	Field_Range,
+	Field_Target,
+	Field_Pin,
+	Field_Monitor,
+	Field_Content,
+	Field_Message,
+	Field_HighOrLow,
 
 	Column_SubSteps,
 	Column_Repeats,
+	Column_Module,
 
 	Type_Bool,
 	Type_UInt8,
@@ -59,6 +70,7 @@ enum class UID : uint8_t {
 	Type_Infinite,
 	Type_Table,
 	Type_Pointer,
+	Type_Map,
 
 	State_Ready,
 	State_Running,
@@ -94,6 +106,7 @@ enum class UID : uint8_t {
 	Step_Sequential,
 	Step_Randomize,
 	Step_RandomSequential,
+	Step_Abort,
 
 	Trial_Invalid,
 
@@ -103,4 +116,14 @@ enum class UID : uint8_t {
 
 	Duration_Random,
 	Duration_Infinite,
+
+	Module_Sequential,
+	Module_RandomSequential,
+	Module_Delay,
+	Module_Abort,
+	Module_Restart,
+	Module_Randomize,
+	Module_MonitorPin,
+	Module_SerialMessage,
+	Module_DigitalWrite,
 };

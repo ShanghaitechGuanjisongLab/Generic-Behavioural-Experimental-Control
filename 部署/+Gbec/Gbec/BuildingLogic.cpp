@@ -126,7 +126,7 @@ struct Step
 		for (Timers_one_for_all::TimerClass *T : ActiveTimers)
 			T->Continue();
 	}
-	void Abort()
+	void GlobalAbort()
 	{
 		Quick_digital_IO_interrupt::InterruptGuard const _;
 		_Abort();
@@ -188,6 +188,10 @@ protected:
 			T->Allocatable = true; // 使其可以被重新分配
 		}
 	}
+	//提前终止当前执行中的步骤，直接跳到下一步
+	virtual void Skip() {}
+	//重新开始当前执行中的步骤，不改变下一步
+	virtual void Restart() {}
 };
 // 顺序执行所有子步骤
 template <typename... SubSteps>
@@ -211,6 +215,10 @@ struct Sequential : virtual SubSteps...
 			}
 		return false;
 	}
+	void Restart()
+	{
+		Start(FinishCallback);
+	}
 	// 标准保证不同模板实例的该对象有不同的地址
 	static constexpr UID ID = UID::Step_Sequential;
 	void WriteInfo(std::map<InfoKey, std::string> &InfoMap) const override
@@ -228,7 +236,7 @@ protected:
 	static constexpr bool (*SubStarts[])(Sequential *, void (*)(Step *)) = {[](Sequential *Me, void (*FinishCallback)(Step *))
 																			{ return Me->SubSteps::Start(FinishCallback); }...};
 	bool (*const *CurrentStart)(Sequential *, void (*)(Step *));
-	void (*FinishCallback)(Step *);
+	void (*FinishCallback)(Step *) = [](Step) {}
 };
 static constexpr
 #ifdef ARDUINO_ARCH_AVR
@@ -307,7 +315,7 @@ struct RandomSequential : virtual SubSteps...
 			if (!InfoMap.contains(&ID))
 			{
 				std::ostringstream InfoStream;
-				InfoWrite(InfoStream, UID::Type_Struct, 2, UID::Field_ID, UID::Type_UID, ID, UID::Field_SubSteps, UID::Type_Table, sizeof...(SubSteps), 2, UID::Column_SubSteps, UID::Type_Pointer, &SubSteps::ID..., UID::Column_Repeats, UID::Type_UInt16, Repeats...);
+				InfoWrite(InfoStream, UID::Type_Struct, 2, UID::Field_ID, UID::Type_UID, ID, UID::Field_SubSteps, UID::Type_Table, sizeof...(SubSteps), 2, UID::Column_Module, UID::Type_Pointer, &SubModules::ID..., UID::Column_Repeats, UID::Type_UInt16, Repeats...);
 				InfoMap[&ID] = InfoStream.str();
 				int _[] = {(SubSteps::WriteInfo(InfoMap), 0)...};
 			}
@@ -321,6 +329,10 @@ struct RandomSequential : virtual SubSteps...
 			auto _[] = {CurrentStart = std::fill_n(CurrentStart, Repeats, [](WithRepeats *Me, void (*FinishCallback)(Step *))
 												   { return Me->SubSteps::Start(FinishCallback); })...};
 			Randomize();
+		}
+		void Restart()
+		{
+			Start(FinishCallback);
 		}
 
 	protected:
@@ -336,17 +348,20 @@ struct RandomSequential : virtual SubSteps...
 		};
 		bool (*SubStarts[Sum<Repeats>::value])(WithRepeats *, void (*)(Step *));
 		bool (**CurrentStart)(WithRepeats *, void (*)(Step *)) = std::begin(SubStarts);
-		void (*FinishCallback)(Step *);
+		void (*FinishCallback)(Step *) = [](Step *) {};
 	};
+	void Restart()
+	{
+		Start(FinishCallback);
+	}
 
 protected:
 	bool (*SubStarts[])(RandomSequential *, void (*)(Step *)) = {[](RandomSequential *self, void (*FC)(Step *))
 																 { return self->SubSteps::Start(FC); }...};
 	bool (*const *CurrentStart)(RandomSequential *, void (*)(Step *)) = std::begin(SubStarts);
-	void (*FinishCallback)(Step *);
+	void (*FinishCallback)(Step *) = [](Step *) {};
 };
 
-// 表示一个常数时间段。Unit必须是std::chrono::duration的一个实例。
 template <typename T>
 struct _TypeID;
 template <>
@@ -373,7 +388,7 @@ struct ConstantDuration
 	}
 };
 // 表示一个随机时间段。Unit必须是std::chrono::duration的一个实例。该步骤维护一个随机变量，只有使用Randomize步骤才能改变这个变量，否则一直保持相同的值。如果有多个随机范围相同的随机变量需要独立控制随机性，可以指定不同的ID，否则视为同一个随机变量。
-template <typename Unit, uint16_t Min, uint16_t Max, UID ID = UID::Duration_Random>
+template <typename Unit, uint16_t Min, uint16_t Max, UID CustomID = UID::Duration_Random>
 struct RandomDuration
 {
 	Unit Current;
@@ -393,14 +408,14 @@ struct RandomDuration
 	}
 	static void WriteInfo(std::map<InfoKey, std::string> &InfoMap, std::ostringstream &InfoStream)
 	{
-		static constexpr UID OdrID = ID;
-		if (!InfoMap.contains(&OdrID))
+		static constexpr UID ID = CustomID;
+		if (!InfoMap.contains(&ID))
 		{
 			std::ostringstream MyStream;
 			InfoWrite(MyStream, UID::Type_Array, 2, _TypeID<Unit>::value, Min, Max);
-			InfoMap[&OdrID] = MyStream.str();
+			InfoMap[&ID] = MyStream.str();
 		}
-		InfoWrite(InfoStream, UID::Type_Pointer, &OdrID);
+		InfoWrite(InfoStream, UID::Type_Pointer, &ID);
 	}
 };
 struct InfiniteDuration;
@@ -447,7 +462,7 @@ struct Randomize<RandomDuration<Unit, Min, Max, ID>> : virtual RandomDuration<Un
 		}
 	}
 };
-template <typename Duration>
+template <typename Duration, UID CustomID = UID::Step_Delay>
 struct Delay : virtual Step, virtual Duration
 {
 	void (*FinishCallback)(Step *);
@@ -468,7 +483,7 @@ struct Delay : virtual Step, virtual Duration
 		}
 		return false;
 	}
-	static constexpr UID ID = UID::Step_Delay;
+	static constexpr UID ID = CustomID;
 	void WriteInfo(std::map<InfoKey, std::string> &InfoMap) const override
 	{
 		if (!InfoMap.contains(&ID))
@@ -489,8 +504,8 @@ protected:
 	}
 };
 // 无限等待，永不返回，但可以Abort
-template <>
-struct Delay<InfiniteDuration> : virtual Step
+template <UID CustomID>
+struct Delay<InfiniteDuration, CustomID> : virtual Step
 {
 	void (*FinishCallback)(Step *);
 	bool Start(void (*FC)(Step *)) override
@@ -506,7 +521,7 @@ struct Delay<InfiniteDuration> : virtual Step
 	{
 		FinishCallback(this);
 	}
-	static constexpr UID ID = UID::Step_Delay;
+	static constexpr UID ID = CustomID;
 	void WriteInfo(std::map<InfoKey, std::string> &InfoMap) const override
 	{
 		if (!InfoMap.contains(&ID))
@@ -514,6 +529,27 @@ struct Delay<InfiniteDuration> : virtual Step
 			std::ostringstream InfoStream;
 			InfoWrite(InfoStream, UID::Type_Struct, 2, UID::Field_ID, UID::Type_UID, ID, UID::Field_Duration, UID::Type_UID, UID::Duration_Infinite);
 			InfoMap[&ID] = InfoStream.str();
+		}
+	}
+};
+template <typename AbortStep>
+struct Abort : virtual AbortStep
+{
+	bool Start(void (*FC)(Step *)) override
+	{
+		if (TrialsDone.empty())
+			AbortStep::Abort();
+		return false;
+	}
+	static constexpr UID ID = UID::Step_Abort;
+	void WriteInfo(std::map<InfoKey, std::string> &InfoMap) const override
+	{
+		if (!InfoMap.contains(&ID))
+		{
+			std::ostringstream InfoStream;
+			InfoWrite(InfoStream, UID::Type_Struct, 2, UID::Field_ID, UID::Type_UID, ID,UID::Field_Pin,UID::Type_UInt8, UID::Field_AbortStep, UID::Type_Pointer, &AbortStep::ID);
+			InfoMap[&ID] = InfoStream.str();
+			AbortStep::WriteInfo(InfoMap);
 		}
 	}
 };

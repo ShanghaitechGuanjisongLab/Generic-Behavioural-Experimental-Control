@@ -1,7 +1,6 @@
 #pragma once
 #include <Cpp_Standard_Library.h>
 #include <memory>
-#include <span>
 #include <unordered_map>
 #include <Arduino.h>
 namespace Async_stream_IO

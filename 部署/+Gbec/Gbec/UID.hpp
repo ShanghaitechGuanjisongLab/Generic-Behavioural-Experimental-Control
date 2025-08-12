@@ -5,7 +5,7 @@ enum class UID : uint8_t {
 
 	PortA_PointerSize,
 	PortA_CreateProcess,
-	PortA_StartProcess,
+	PortA_StartModule,
 	PortA_RestoreProcess,
 	PortA_RepeatProcess,
 	PortA_PauseProcess,
@@ -34,6 +34,7 @@ enum class UID : uint8_t {
 	Exception_ProcessFinished,
 	Exception_BrokenRestoreArguments,
 	Exception_MethodNotImplemented,
+	Exception_InvalidModule,
 	
 	Field_After,
 	Field_Do,
@@ -95,31 +96,7 @@ enum class UID : uint8_t {
 
 	Test_BlueLed,
 
-	Step_DigitalWrite,
-	Step_Delay,
-	Step_StartMonitor,
-	Step_StopMonitor,
-	Step_Trial,
-	Step_RepeatIfPin,
-	Step_SwitchIfPin,
-	Step_AppendIfPin,
-	Step_SerialWrite,
-	Step_Async,
-	Step_Sequential,
-	Step_Random,
-	Step_CustomFunction,
-	Step_DoWhenAborted,
-	Step_StartBackgroundRepeat,
-	Step_Sequential,
-	Step_Randomize,
-	Step_RandomSequential,
-	Step_Abort,
-
 	Trial_Invalid,
-
-	BackgroundID_Default,
-
-	Public_BlueLed,
 
 	Duration_Random,
 	Duration_Infinite,

@@ -396,7 +396,7 @@ namespace Async_stream_IO
 				此函数返回自动分配的本地端口，用户可以用ReleasePort释放此端口，将放弃等待远程函数的返回结果。Callback被调用前，会自动释放该本地端口。
 				*/
 		template <typename TCallback, typename... TArgument>
-		typename TypeIfValid<uint8_t, std::_FunctionSignature_t<TCallback>>::type AsyncInvoke(uint8_t RemotePort, TCallback &&Callback, TArgument... Arguments)
+		auto AsyncInvoke(uint8_t RemotePort, TCallback &&Callback, TArgument... Arguments)->decltype(static_cast<uint8_t>((Callback(),1)))
 		{
 			uint8_t const LocalPort = Listen(CallbackListener<TCallback>(std::forward<TCallback>(Callback), *this, LocalPort));
 			SendSession const Session{sizeof(uint8_t) + _TypesSize<TArgument...>::value, RemotePort, BaseStream};

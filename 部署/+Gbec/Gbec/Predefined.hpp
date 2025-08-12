@@ -179,9 +179,9 @@ struct Process {
 	std::string GetInfo() const {
 		std::ostringstream InfoStream;
 		InfoWrite(InfoStream, UID::Type_Struct, 2, UID::Field_StartModule, UID::Type_Pointer, StartPointer, UID::Field_Modules, UID::Type_Map, Modules.size(), UID::Type_Pointer);
-		for (auto const& [IDPtr, ModulePtr] : Modules) {
-			InfoWrite(InfoStream, IDPtr);
-			ModulePtr->WriteInfo(InfoStream);
+		for (auto const& Iterator : Modules) {
+			InfoWrite(InfoStream, Iterator.first);
+			Iterator.second->WriteInfo(InfoStream);
 		}
 		return InfoStream.str();
 	}
@@ -195,12 +195,12 @@ protected:
 	UID const* StartPointer;
 	Module* StartModule;
 	uint16_t TimesLeft;
-	std::move_only_function<void() const> const FinishCallback = [this]() {
+	std::move_only_function<void() const> const FinishCallback =[](){}; /*[this]() {
 		while (--TimesLeft)
 			if (StartModule->Start(FinishCallback))
 				return;
-		SerialStream.AsyncInvoke(UID::PortC_ProcessFinished, this);
-		};
+		SerialStream.AsyncInvoke(static_cast<uint8_t>(UID::PortC_ProcessFinished), this);
+		};*/
 	// 中断不安全
 	void _Abort() {
 		for (PinListener* H : ActiveInterrupts)

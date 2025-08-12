@@ -52,6 +52,13 @@ enum class UID : uint8_t {
 	Field_Content,
 	Field_Message,
 	Field_HighOrLow,
+	Field_Cleaner,
+	Field_Period,
+	Field_Times,
+	Field_PeriodA,
+	Field_PeriodB,
+	Field_ContentA,
+	Field_ContentB,
 
 	Column_SubSteps,
 	Column_Repeats,
@@ -126,4 +133,8 @@ enum class UID : uint8_t {
 	Module_MonitorPin,
 	Module_SerialMessage,
 	Module_DigitalWrite,
+	Module_CleanWhenAbort,
+	Module_Async,
+	Module_RepeatEvery,
+	Module_DoubleRepeat,
 };

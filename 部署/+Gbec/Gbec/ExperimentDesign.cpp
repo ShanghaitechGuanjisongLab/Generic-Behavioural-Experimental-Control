@@ -6,7 +6,7 @@
 #if BOX == 1
 Pin pBlueLed = 2;
 #endif
-std::unordered_map<UID, void (*)(Process &, std::move_only_function<void() const> const &)> SessionMap =
+std::unordered_map<UID, bool (*)(Process *,uint16_t)> SessionMap =
 	{
 		{UID::Test_BlueLed, Session<Sequential<DigitalWrite<pBlueLed, HIGH>>,Delay<ConstantDuration<std::chrono::milliseconds,150>>,DigitalWrite<pBlueLed, LOW>>>}
 };

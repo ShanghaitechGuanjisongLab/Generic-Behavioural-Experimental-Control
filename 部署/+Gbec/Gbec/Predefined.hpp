@@ -9,6 +9,7 @@
 #include <functional>
 #include <queue>
 #include <set>
+#include <iterator>
 struct PinListener {
 	uint8_t const Pin;
 	std::move_only_function<void() const> const Callback;
@@ -32,7 +33,7 @@ struct PinListener {
 	}
 	// 中断不安全
 	PinListener(uint8_t Pin, std::move_only_function<void() const>&& Callback)
-		: Pin(Pin), Callback(std::move(Callback)) {
+	  : Pin(Pin), Callback(std::move(Callback)) {
 		Continue();
 	}
 	// 中断不安全
@@ -79,7 +80,7 @@ struct Process;
 struct Module {
 	Process& Container;
 	Module(Process& Container)
-		: Container(Container) {
+	  : Container(Container) {
 	}
 	// 返回是否需要等待回调。回调函数只能在Start时提供，不能在构造时提供，因为存在复杂的虚继承关系，只能默认构造。
 	virtual bool Start(std::move_only_function<void() const> const& FinishCallback) {}
@@ -195,12 +196,14 @@ protected:
 	UID const* StartPointer;
 	Module* StartModule;
 	uint16_t TimesLeft;
-	std::move_only_function<void() const> const FinishCallback =[](){}; /*[this]() {
-		while (--TimesLeft)
-			if (StartModule->Start(FinishCallback))
-				return;
-		SerialStream.AsyncInvoke(static_cast<uint8_t>(UID::PortC_ProcessFinished), this);
-		};*/
+	std::move_only_function<void() const> const FinishCallback{
+		[this]() {
+		  while (--TimesLeft)
+			  if (StartModule->Start(FinishCallback)) return;
+		  SerialStream.AsyncInvoke(static_cast<uint8_t>(UID::PortC_ProcessFinished), this);
+		}
+	};
+
 	// 中断不安全
 	void _Abort() {
 		for (PinListener* H : ActiveInterrupts)
@@ -217,7 +220,7 @@ protected:
 template<typename Content, uint16_t Times>
 struct Repeat : Module {
 	Repeat(Process& Container)
-		: Module(Container) {
+	  : Module(Container) {
 	}
 	void Abort() override {
 		ContentPtr->Abort();
@@ -247,27 +250,27 @@ protected:
 			if (ContentPtr->Start(NextBlock))
 				return;
 		(*FinishCallback)();
-		};
+	};
 };
 template<typename... SubModules>
 struct Sequential : Module {
 	static constexpr UID ID = UID::Module_Sequential;
 	Sequential(Process& Container)
-		: Module(Container) {
+	  : Module(Container) {
 	}
 	void Abort() override {
-		if (CurrentModule < std::end(SubPointers))
+		if (CurrentModule < std::cend(SubPointers))
 			(*CurrentModule)->Abort();
 	}
 	void Restart() override {
 		Abort();
-		for (CurrentModule = std::begin(SubPointers); CurrentModule < std::end(SubPointers); ++CurrentModule)
+		for (CurrentModule = std::cbegin(SubPointers); CurrentModule < std::cend(SubPointers); ++CurrentModule)
 			if ((*CurrentModule)->Start(NextBlock))
 				return;
 	}
 	bool Start(std::move_only_function<void() const> const& FC) override {
 		Abort();
-		for (CurrentModule = std::begin(SubPointers); CurrentModule < std::end(SubPointers); ++CurrentModule)
+		for (CurrentModule = std::cbegin(SubPointers); CurrentModule < std::cend(SubPointers); ++CurrentModule)
 			if ((*CurrentModule)->Start(NextBlock)) {
 				FinishCallback = &FC;
 				return true;
@@ -279,17 +282,17 @@ struct Sequential : Module {
 	}
 
 protected:
-	Module* const SubPointers[] = { Container.LoadModule<SubModules>()... };
-	Module* const* CurrentModule = std::end(SubPointers);
+	Module* const SubPointers[sizeof...(SubModules)] = { Container.LoadModule<SubModules>()... };
+	Module* const* CurrentModule = std::cend(SubPointers);
 	std::move_only_function<void() const> const* FinishCallback = &_EmptyCallback;
 
 	// 必须预设NextBlock，这样即使没有Start直接Restart也能执行完整个模块
 	std::move_only_function<void() const> const NextBlock = [this]() {
-		while (++CurrentModule < std::end(SubPointers))
+		while (++CurrentModule < std::cend(SubPointers))
 			if ((*CurrentModule)->Start(NextBlock))
 				return;
 		(*FinishCallback)();
-		};
+	};
 };
 
 struct IRandom {
@@ -299,20 +302,20 @@ template<typename... SubModules>
 struct RandomSequential : Module, IRandom {
 	static constexpr
 #ifdef ARDUINO_ARCH_AVR
-		std::ArduinoUrng
+	  std::ArduinoUrng
 #endif
 #ifdef ARDUINO_ARCH_SAM
-		std::TrueUrng
+	    std::TrueUrng
 #endif
-		Urng;
-	template<uint16_t Repeats>
+	      Urng{};
+	template<uint16_t...Repeats>
 	struct WithRepeat : Module, IRandom {
 		static constexpr UID ID = UID::Module_RandomSequential;
 		void Randomize() override {
 			std::shuffle(std::begin(SubPointers), std::end(SubPointers), Urng);
 		}
 		WithRepeat(Process& Container)
-			: Module(Container) {
+		  : Module(Container) {
 			auto _[] = { CurrentModule = std::fill_n(CurrentModule, Repeats, Container.LoadModule<SubModules>())... };
 			Randomize();
 		}
@@ -356,29 +359,29 @@ struct RandomSequential : Module, IRandom {
 				if ((*CurrentModule)->Start(NextBlock))
 					return;
 			(*FinishCallback)();
-			};
+		};
 	};
 	static constexpr UID ID = UID::Module_RandomSequential;
 	void Randomize() override {
 		std::shuffle(std::begin(SubPointers), std::end(SubPointers), Urng);
 	}
 	RandomSequential(Process& Container)
-		: Module(Container) {
+	  : Module(Container) {
 		Randomize();
 	}
 	void Abort() override {
-		if (CurrentModule < std::end(SubPointers))
+		if (CurrentModule < std::cend(SubPointers))
 			(*CurrentModule)->Abort();
 	}
 	void Restart() override {
 		Abort();
-		for (CurrentModule = std::begin(SubPointers); CurrentModule < std::end(SubPointers); ++CurrentModule)
+		for (CurrentModule = std::cbegin(SubPointers); CurrentModule < std::cend(SubPointers); ++CurrentModule)
 			if ((*CurrentModule)->Start(NextBlock))
 				return;
 	}
 	bool Start(std::move_only_function<void() const> const& FC) override {
 		Abort();
-		for (CurrentModule = std::begin(SubPointers); CurrentModule < std::end(SubPointers); ++CurrentModule)
+		for (CurrentModule = std::cbegin(SubPointers); CurrentModule < std::cend(SubPointers); ++CurrentModule)
 			if ((*CurrentModule)->Start(NextBlock)) {
 				FinishCallback = &FC;
 				return true;
@@ -390,15 +393,15 @@ struct RandomSequential : Module, IRandom {
 	}
 
 protected:
-	Module* SubPointers[] = { Container.LoadModule<SubModules>()... };
-	Module* const* CurrentModule = std::end(SubPointers);
+	Module* SubPointers[sizeof...(SubModules)] = { Container.LoadModule<SubModules>()... }; //SAM编译器不能自动推断数组长度，导致cend不可用
+	Module* const* CurrentModule = std::cend(SubPointers);
 	std::move_only_function<void() const> const* FinishCallback = &_EmptyCallback;
 	std::move_only_function<void() const> const NextBlock = [this]() {
-		while (++CurrentModule < std::end(SubPointers))
+		while (++CurrentModule < std::cend(SubPointers))
 			if ((*CurrentModule)->Start(NextBlock))
 				return;
 		(*FinishCallback)();
-		};
+	};
 };
 template<typename T>
 struct _TypeID;
@@ -422,18 +425,18 @@ struct RandomDuration : Module, IRandom {
 		Current = Unit{ pow(static_cast<double>(Max) / DoubleMin, static_cast<double>(random(__LONG_MAX__)) / (__LONG_MAX__ - 1)) * DoubleMin };
 	}
 	RandomDuration(Process& Container)
-		: Module(Container) {
+	  : Module(Container) {
 		Randomize();
 	}
 	static constexpr UID ID = CustomID;
 	void WriteInfo(std::ostringstream& InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, 2, UID::Field_ID, UID::Type_UID, ID, UID::Field_Range, UID::Type_Array, 2, _TypeID<Unit>, Min, Max);
+		InfoWrite(InfoStream, UID::Type_Struct, 2, UID::Field_ID, UID::Type_UID, ID, UID::Field_Range, UID::Type_Array, 2, _TypeID<Unit>::value, Min, Max);
 	}
 };
 struct InfiniteDuration;
 struct _TimedModule : Module {
 	_TimedModule(Process& Container)
-		: Module(Container) {
+	  : Module(Container) {
 	}
 	void Abort() override {
 		if (Timer) {
@@ -458,7 +461,7 @@ protected:
 };
 struct _Delay : _TimedModule {
 	_Delay(Process& Container)
-		: _TimedModule(Container) {
+	  : _TimedModule(Container) {
 	}
 	void Restart() override {
 		if (!Timer)
@@ -472,7 +475,7 @@ struct _Delay : _TimedModule {
 		FinishCallback = [this, &FC]() {
 			UnregisterTimer();
 			FC();
-			};
+		};
 		Restart();
 		return true;
 	}
@@ -485,7 +488,7 @@ protected:
 template<typename RandomDuration>
 struct Delay : _Delay {
 	Delay(Process& Container)
-		: _Delay(Container) {
+	  : _Delay(Container) {
 	}
 	void Restart() override {
 		_TimedModule::Restart();
@@ -501,7 +504,7 @@ protected:
 template<typename Unit, uint16_t Value>
 struct Delay<ConstantDuration<Unit, Value>> : _Delay {
 	Delay(Process& Container)
-		: _Delay(Container) {
+	  : _Delay(Container) {
 	}
 	void Restart() override {
 		_TimedModule::Restart();
@@ -514,7 +517,7 @@ struct Delay<ConstantDuration<Unit, Value>> : _Delay {
 template<>
 struct Delay<InfiniteDuration> : Module {
 	Delay(Process& Container)
-		: Module(Container) {
+	  : Module(Container) {
 	}
 	bool Start(std::move_only_function<void() const> const& FC) override {
 		if (Container.TrialsDone.size())
@@ -533,7 +536,7 @@ struct Delay<InfiniteDuration> : Module {
 template<typename Content>
 struct _RepeatEvery : _TimedModule {
 	_RepeatEvery(Process& Container)
-		: _TimedModule(Container) {
+	  : _TimedModule(Container) {
 	}
 	void Abort() override {
 		ContentPtr->Abort();
@@ -563,7 +566,7 @@ struct RepeatEvery : _RepeatEvery<Content> {
 	template<uint16_t Times>
 	struct UntilTimes : RepeatEvery {
 		UntilTimes(Process& Container)
-			: RepeatEvery(Container) {
+		  : RepeatEvery(Container) {
 		}
 		void Restart() override {
 			_RepeatEvery<Content>::Restart();
@@ -575,7 +578,7 @@ struct RepeatEvery : _RepeatEvery<Content> {
 			FinishCallback = [this, &FC]() {
 				UnregisterTimer();
 				FC();
-				};
+			};
 			Restart();
 			return true;
 		}
@@ -589,7 +592,7 @@ struct RepeatEvery : _RepeatEvery<Content> {
 	template<typename Duration>
 	struct UntilDuration : RepeatEvery {
 		UntilDuration(Process& Container)
-			: RepeatEvery(Container) {
+		  : RepeatEvery(Container) {
 		}
 		void Restart() override {
 			_RepeatEvery<Content>::Restart();
@@ -601,7 +604,7 @@ struct RepeatEvery : _RepeatEvery<Content> {
 			FinishCallback = [this, &FC]() {
 				UnregisterTimer();
 				FC();
-				};
+			};
 			Restart();
 			return true;
 		}
@@ -616,7 +619,7 @@ struct RepeatEvery : _RepeatEvery<Content> {
 	template<typename Unit, uint16_t Value>
 	struct UntilDuration<ConstantDuration<Unit, Value>> : RepeatEvery {
 		UntilDuration(Process& Container)
-			: RepeatEvery(Container) {
+		  : RepeatEvery(Container) {
 		}
 		void Restart() override {
 			_RepeatEvery<Content>::Restart();
@@ -628,7 +631,7 @@ struct RepeatEvery : _RepeatEvery<Content> {
 			FinishCallback = [this, &FC]() {
 				UnregisterTimer();
 				FC();
-				};
+			};
 			Restart();
 			return true;
 		}
@@ -642,11 +645,11 @@ struct RepeatEvery : _RepeatEvery<Content> {
 	template<>
 	struct UntilDuration<InfiniteDuration> : RepeatEvery {
 		UntilDuration(Process& Container)
-			: RepeatEvery(Container) {
+		  : RepeatEvery(Container) {
 		}
 	};
 	RepeatEvery(Process& Container)
-		: _RepeatEvery<Content>(Container) {}
+	  : _RepeatEvery<Content>(Container) {}
 	void Restart() override {
 		_RepeatEvery<Content>::Restart();
 		Timer->RepeatEvery(PeriodPtr->Current, RepeatCallback);
@@ -661,7 +664,7 @@ protected:
 template<typename PeriodUnit, uint16_t PeriodValue, typename Content>
 struct RepeatEvery<ConstantDuration<PeriodUnit, PeriodValue>, Content> : _RepeatEvery<Content> {
 	RepeatEvery(Process& Container)
-		: _RepeatEvery<Content>(Container) {}
+	  : _RepeatEvery<Content>(Container) {}
 	void Restart() override {
 		_RepeatEvery<Content>::Restart();
 		Timer->RepeatEvery(PeriodUnit{ PeriodValue }, RepeatCallback);
@@ -672,7 +675,7 @@ struct RepeatEvery<ConstantDuration<PeriodUnit, PeriodValue>, Content> : _Repeat
 	template<uint16_t Times>
 	struct UntilTimes : RepeatEvery {
 		UntilTimes(Process& Container)
-			: RepeatEvery(Container) {
+		  : RepeatEvery(Container) {
 		}
 		void Restart() override {
 			_RepeatEvery<Content>::Restart();
@@ -684,7 +687,7 @@ struct RepeatEvery<ConstantDuration<PeriodUnit, PeriodValue>, Content> : _Repeat
 			FinishCallback = [this, &FC]() {
 				UnregisterTimer();
 				FC();
-				};
+			};
 			Restart();
 			return true;
 		}
@@ -698,7 +701,7 @@ struct RepeatEvery<ConstantDuration<PeriodUnit, PeriodValue>, Content> : _Repeat
 	template<typename Duration>
 	struct UntilDuration : RepeatEvery {
 		UntilDuration(Process& Container)
-			: RepeatEvery(Container) {
+		  : RepeatEvery(Container) {
 		}
 		void Restart() override {
 			_RepeatEvery<Content>::Restart();
@@ -710,7 +713,7 @@ struct RepeatEvery<ConstantDuration<PeriodUnit, PeriodValue>, Content> : _Repeat
 			FinishCallback = [this, &FC]() {
 				UnregisterTimer();
 				FC();
-				};
+			};
 			Restart();
 			return true;
 		}
@@ -725,7 +728,7 @@ struct RepeatEvery<ConstantDuration<PeriodUnit, PeriodValue>, Content> : _Repeat
 	template<typename DurationUnit, uint16_t DurationValue>
 	struct UntilDuration<ConstantDuration<DurationUnit, DurationValue>> : RepeatEvery {
 		UntilDuration(Process& Container)
-			: RepeatEvery(Container) {
+		  : RepeatEvery(Container) {
 		}
 		void Restart() override {
 			_RepeatEvery<Content>::Restart();
@@ -737,7 +740,7 @@ struct RepeatEvery<ConstantDuration<PeriodUnit, PeriodValue>, Content> : _Repeat
 			FinishCallback = [this, &FC]() {
 				UnregisterTimer();
 				FC();
-				};
+			};
 			Restart();
 			return true;
 		}
@@ -751,7 +754,7 @@ struct RepeatEvery<ConstantDuration<PeriodUnit, PeriodValue>, Content> : _Repeat
 	template<>
 	struct UntilDuration<InfiniteDuration> : RepeatEvery {
 		UntilDuration(Process& Container)
-			: RepeatEvery(Container) {
+		  : RepeatEvery(Container) {
 		}
 	};
 };
@@ -762,7 +765,7 @@ struct RepeatEvery<ConstantDuration<PeriodUnit, PeriodValue>, Content> : _Repeat
 template<typename ContentA, typename ContentB>
 struct _DoubleRepeat : _TimedModule {
 	_DoubleRepeat(Process& Container)
-		: _TimedModule(Container) {
+	  : _TimedModule(Container) {
 	}
 	void Abort() override {
 		ContentAPtr->Abort();
@@ -773,8 +776,7 @@ struct _DoubleRepeat : _TimedModule {
 		if (Timer) {
 			ContentAPtr->Abort();
 			ContentBPtr->Abort();
-		}
-		else
+		} else
 			Timer = Container.AllocateTimer();
 	}
 	bool Start(std::move_only_function<void() const> const& FC) override {
@@ -797,7 +799,7 @@ struct DoubleRepeat : _DoubleRepeat<ContentA, ContentB> {
 	template<uint16_t Times>
 	struct UntilTimes : DoubleRepeat {
 		UntilTimes(Process& Container)
-			: DoubleRepeat(Container) {
+		  : DoubleRepeat(Container) {
 		}
 		void Restart() override {
 			_DoubleRepeat<ContentA, ContentB>::Restart();
@@ -809,7 +811,7 @@ struct DoubleRepeat : _DoubleRepeat<ContentA, ContentB> {
 			FinishCallback = [this, &FC]() {
 				UnregisterTimer();
 				FC();
-				};
+			};
 			Restart();
 			return true;
 		}
@@ -823,7 +825,7 @@ struct DoubleRepeat : _DoubleRepeat<ContentA, ContentB> {
 	template<typename Duration>
 	struct UntilDuration : DoubleRepeat {
 		UntilDuration(Process& Container)
-			: DoubleRepeat(Container) {
+		  : DoubleRepeat(Container) {
 		}
 		void Restart() override {
 			_DoubleRepeat<ContentA, ContentB>::Restart();
@@ -835,7 +837,7 @@ struct DoubleRepeat : _DoubleRepeat<ContentA, ContentB> {
 			FinishCallback = [this, &FC]() {
 				UnregisterTimer();
 				FC();
-				};
+			};
 			Restart();
 			return true;
 		}
@@ -850,7 +852,7 @@ struct DoubleRepeat : _DoubleRepeat<ContentA, ContentB> {
 	template<typename Unit, uint16_t Value>
 	struct UntilDuration<ConstantDuration<Unit, Value>> : DoubleRepeat {
 		UntilDuration(Process& Container)
-			: DoubleRepeat(Container) {
+		  : DoubleRepeat(Container) {
 		}
 		void Restart() override {
 			_DoubleRepeat<Content>::Restart();
@@ -862,7 +864,7 @@ struct DoubleRepeat : _DoubleRepeat<ContentA, ContentB> {
 			FinishCallback = [this, &FC]() {
 				UnregisterTimer();
 				FC();
-				};
+			};
 			Restart();
 			return true;
 		}
@@ -876,11 +878,11 @@ struct DoubleRepeat : _DoubleRepeat<ContentA, ContentB> {
 	template<>
 	struct UntilDuration<InfiniteDuration> : DoubleRepeat {
 		UntilDuration(Process& Container)
-			: DoubleRepeat(Container) {
+		  : DoubleRepeat(Container) {
 		}
 	};
 	DoubleRepeat(Process& Container)
-		: _DoubleRepeat<ContentA, ContentB>(Container) {}
+	  : _DoubleRepeat<ContentA, ContentB>(Container) {}
 	void Restart() override {
 		_DoubleRepeat<ContentA, ContentB>::Restart();
 		Timer->DoubleRepeat(PeriodAPtr->Current, RepeatCallbackA, PeriodBPtr->Current, RepeatCallbackB);
@@ -896,7 +898,7 @@ protected:
 template<typename PeriodUnitA, uint16_t PeriodValueA, typename ContentA, typename PeriodUnitB, uint16_t PeriodValueB, typename ContentB>
 struct DoubleRepeat<ConstantDuration<PeriodUnitA, PeriodValueA>, ContentA, ConstantDuration<PeriodUnitB, PeriodValueB>, ContentB> : _DoubleRepeat<ContentA, ContentB> {
 	DoubleRepeat(Process& Container)
-		: _DoubleRepeat<ContentA, ContentB>(Container) {}
+	  : _DoubleRepeat<ContentA, ContentB>(Container) {}
 	void Restart() override {
 		_DoubleRepeat<ContentA, ContentB>::Restart();
 		Timer->DoubleRepeat(PeriodUnitA{ PeriodValueA }, RepeatCallbackA, PeriodUnitB{ PeriodValueB }, RepeatCallbackB);
@@ -907,7 +909,7 @@ struct DoubleRepeat<ConstantDuration<PeriodUnitA, PeriodValueA>, ContentA, Const
 	template<uint16_t Times>
 	struct UntilTimes : DoubleRepeat {
 		UntilTimes(Process& Container)
-			: DoubleRepeat(Container) {
+		  : DoubleRepeat(Container) {
 		}
 		void Restart() override {
 			_DoubleRepeat<ContentA, ContentB>::Restart();
@@ -919,7 +921,7 @@ struct DoubleRepeat<ConstantDuration<PeriodUnitA, PeriodValueA>, ContentA, Const
 			FinishCallback = [this, &FC]() {
 				UnregisterTimer();
 				FC();
-				};
+			};
 			Restart();
 			return true;
 		}
@@ -933,7 +935,7 @@ struct DoubleRepeat<ConstantDuration<PeriodUnitA, PeriodValueA>, ContentA, Const
 	template<typename Duration>
 	struct UntilDuration : DoubleRepeat {
 		UntilDuration(Process& Container)
-			: DoubleRepeat(Container) {
+		  : DoubleRepeat(Container) {
 		}
 		void Restart() override {
 			_DoubleRepeat<ContentA, ContentB>::Restart();
@@ -945,7 +947,7 @@ struct DoubleRepeat<ConstantDuration<PeriodUnitA, PeriodValueA>, ContentA, Const
 			FinishCallback = [this, &FC]() {
 				UnregisterTimer();
 				FC();
-				};
+			};
 			Restart();
 			return true;
 		}
@@ -960,7 +962,7 @@ struct DoubleRepeat<ConstantDuration<PeriodUnitA, PeriodValueA>, ContentA, Const
 	template<typename DurationUnit, uint16_t DurationValue>
 	struct UntilDuration<ConstantDuration<DurationUnit, DurationValue>> : DoubleRepeat {
 		UntilDuration(Process& Container)
-			: DoubleRepeat(Container) {
+		  : DoubleRepeat(Container) {
 		}
 		void Restart() override {
 			_DoubleRepeat<ContentA, ContentB>::Restart();
@@ -972,7 +974,7 @@ struct DoubleRepeat<ConstantDuration<PeriodUnitA, PeriodValueA>, ContentA, Const
 			FinishCallback = [this, &FC]() {
 				UnregisterTimer();
 				FC();
-				};
+			};
 			Restart();
 			return true;
 		}
@@ -986,13 +988,13 @@ struct DoubleRepeat<ConstantDuration<PeriodUnitA, PeriodValueA>, ContentA, Const
 	template<>
 	struct UntilDuration<InfiniteDuration> : DoubleRepeat {
 		UntilDuration(Process& Container)
-			: DoubleRepeat(Container) {
+		  : DoubleRepeat(Container) {
 		}
 	};
 };
 struct _InstantaneousModule : Module {
 	_InstantaneousModule(Process& Container)
-		: Module(Container) {
+	  : Module(Container) {
 	}
 	bool Start(std::move_only_function<void() const> const& FC) override {
 		if (Container.TrialsDone.empty())
@@ -1003,7 +1005,7 @@ struct _InstantaneousModule : Module {
 template<typename Target>
 struct ModuleAbort : _InstantaneousModule {
 	ModuleAbort(Process& Container)
-		: _InstantaneousModule(Container) {
+	  : _InstantaneousModule(Container) {
 	}
 	void Restart() override {
 		TargetPtr->Abort();
@@ -1019,7 +1021,7 @@ protected:
 template<typename Target>
 struct ModuleRestart : _InstantaneousModule {
 	ModuleRestart(Process& Container)
-		: _InstantaneousModule(Container) {
+	  : _InstantaneousModule(Container) {
 	}
 	void Restart() override {
 		TargetPtr->Restart();
@@ -1035,7 +1037,7 @@ protected:
 template<typename Target>
 struct ModuleRandomize : _InstantaneousModule {
 	ModuleRandomize(Process& Container)
-		: _InstantaneousModule(Container) {
+	  : _InstantaneousModule(Container) {
 	}
 	void Restart() override {
 		TargetPtr->Randomize();
@@ -1051,7 +1053,7 @@ protected:
 template<uint8_t Pin, bool HighOrLow>
 struct DigitalWrite : _InstantaneousModule {
 	DigitalWrite(Process& Container)
-		: _InstantaneousModule(Container) {
+	  : _InstantaneousModule(Container) {
 		Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
 	}
 	void Restart() override {
@@ -1066,7 +1068,7 @@ struct DigitalWrite : _InstantaneousModule {
 template<uint8_t Pin, typename Monitor>
 struct MonitorPin : _InstantaneousModule {
 	MonitorPin(Process& Container)
-		: _InstantaneousModule(Container) {
+	  : _InstantaneousModule(Container) {
 		Quick_digital_IO_interrupt::PinMode<Pin, INPUT>();
 	}
 	PinListener* Listener = nullptr;
@@ -1080,7 +1082,7 @@ struct MonitorPin : _InstantaneousModule {
 		Abort();
 		Listener = Container.RegisterInterrupt(Pin, [MonitorPtr]() {
 			MonitorPtr->Start(_EmptyCallback);
-			});
+		});
 	}
 	static constexpr UID ID = UID::Module_MonitorPin;
 	void WriteInfo(std::ostringstream& InfoStream) const override {
@@ -1093,7 +1095,7 @@ protected:
 template<UID Message>
 struct SerialMessage : _InstantaneousModule {
 	SerialMessage(Process& Container)
-		: _InstantaneousModule(Container) {
+	  : _InstantaneousModule(Container) {
 	}
 	void Restart() override {
 		SerialStream.AsyncInvoke(UID::PortC_Signal, &Container, Message);
@@ -1107,7 +1109,7 @@ struct SerialMessage : _InstantaneousModule {
 template<typename Content>
 struct Async : _InstantaneousModule {
 	Async(Process& Container)
-		: _InstantaneousModule(Container) {
+	  : _InstantaneousModule(Container) {
 	}
 	void Abort() override {
 		ContentPtr->Abort();
@@ -1128,7 +1130,7 @@ protected:
 template<UID TrialID, typename Content>
 struct Trial : Module {
 	Trial(Process& Container)
-		: Module(Container) {
+	  : Module(Container) {
 	}
 	void Abort() override {
 		ContentPtr->Abort();
@@ -1145,8 +1147,7 @@ struct Trial : Module {
 				if (!--It->second)
 					Container.TrialsDone.erase(It);
 				return false;
-			}
-			else
+			} else
 				Container.TrialsDone.erase(It);
 		_Restart();
 		if (ContentPtr->Start(FC)) {
@@ -1171,7 +1172,7 @@ protected:
 template<typename Target, typename Cleaner>
 struct CleanWhenAbort : Module {
 	CleanWhenAbort(Process& Container)
-		: Module(Container) {
+	  : Module(Container) {
 	}
 	void Abort() override {
 		_Abort();
@@ -1204,10 +1205,10 @@ protected:
 	std::move_only_function<void() const> const TargetCallback = [this]() {
 		Container.ExtraCleaners.erase(&StartCleaner);
 		(*FinishCallback)();
-		};
+	};
 	std::move_only_function<void() const> const StartCleaner = [CleanerPtr = Container.LoadModule<Cleaner>()]() {
 		CleanerPtr->Start(_EmptyCallback);
-		};
+	};
 	void _Abort() {
 		TargetPtr->Abort();
 		StartCleaner();

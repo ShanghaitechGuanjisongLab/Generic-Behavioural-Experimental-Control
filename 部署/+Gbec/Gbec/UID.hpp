@@ -113,4 +113,5 @@ enum class UID : uint8_t {
 	Module_Async,
 	Module_RepeatEvery,
 	Module_DoubleRepeat,
+	Module_Repeat,
 };

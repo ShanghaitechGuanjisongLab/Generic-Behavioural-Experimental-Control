@@ -9,10 +9,11 @@ struct GbecHeader {
 std::queue<std::move_only_function<void() const> const*> PinListener::PendingCallbacks;
 std::unordered_map<uint8_t, std::set<std::move_only_function<void() const> const*>> PinListener::Listening;
 std::unordered_map<uint8_t, std::set<std::move_only_function<void() const> const*>> PinListener::Resting;
-std::move_only_function<void() const> const Module::_EmptyCallback = []() {};
+std::move_only_function<void() const> const Module::_EmptyCallback{ []() {} };
 Async_stream_IO::AsyncStream SerialStream{ Serial };
 extern std::unordered_map<UID, bool (*)(Process*, uint16_t)> SessionMap;
 static std::set<Process*> ExistingProcesses;
+UID const Delay<InfiniteDuration>::ID = UID::Module_Delay;
 
 template<typename T>
 inline void BindFunctionToPort(T&& Function, UID Port) {
@@ -94,8 +95,8 @@ void setup() {
 			TrialsDone[TrialID] = SerialStream.Read<uint16_t>();
 		}
 		SerialStream.Send(UID::Exception_Success, Header.RemotePort);
-		if (Iterator->second(P, Times))
-			SerialStream.AsyncInvoke(static_cast<uint8_t>(UID::PortC_ProcessFinished), P);
+		if (Iterator->second(Header.P, 1))
+			SerialStream.AsyncInvoke(static_cast<uint8_t>(UID::PortC_ProcessFinished), Header.P);
 	},
 	             UID::PortA_RestoreModule);
 	BindFunctionToPort([](Process* P) {

@@ -50,7 +50,7 @@ void setup() {
 	BindFunctionToPort(std::ArduinoUrng::seed,
 	                   UID::PortA_RandomSeed);
 #endif
-	BindFunctionToPort([](uint8_t MessagePort) {
+	BindFunctionToPort([]() {
 		Process* P = new Process;
 		ExistingProcesses.insert(P);
 		return P;

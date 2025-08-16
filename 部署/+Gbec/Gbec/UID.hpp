@@ -74,6 +74,7 @@ enum class UID : uint8_t {
 	Type_Empty,
 	Type_Seconds,
 	Type_Milliseconds,
+	Type_Microseconds,
 	Type_Infinite,
 	Type_Table,
 	Type_Pointer,
@@ -92,8 +93,20 @@ enum class UID : uint8_t {
 	Signal_TrialStart,
 	Signal_ProcessFinished,
 	Signal_ProcessStarted,
+	Signal_CapacitorSignal,
 
 	Test_BlueLed,
+	Test_WaterPump,
+	Test_CapacitorReset,
+	Test_CapacitorMonitor,
+	Test_CD1,
+	Test_ActiveBuzzer,
+	Test_AirPump,
+	Test_HostAction,
+	Test_SquareWave,
+	Test_RandomFlash,
+	Test_LowTone,
+	Test_HighTone,
 
 	Trial_Invalid,
 
@@ -114,4 +127,11 @@ enum class UID : uint8_t {
 	Module_RepeatEvery,
 	Module_DoubleRepeat,
 	Module_Repeat,
+	Module_DigitalToggle,
+
+	Host_ShowImage,
+
+	Trial_AudioWater,
+
+	Session_AudioWater,
 };

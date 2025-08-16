@@ -1,5 +1,8 @@
 classdef IAsyncStream<handle
 	%异步流标准接口，允许开发者自行实现。可能的端口号为0~254，255保留为无效端口号不会被分配，也不应使用。
+	properties(Constant)
+		MagicByte=0x5A
+	end
 	methods(Abstract)
 		%分配一个空闲端口号。该端口号将保持被占用状态，不再参与自动分配，直到调用ReleasePort
 		P=AllocatePort(obj)
@@ -39,7 +42,7 @@ classdef IAsyncStream<handle
 		% %手动指定要绑定的端口。
 		% ```
 		%# 输入参数
-		% Function function_handle((:,1)uint8)，当远程调用时，将调用Function(Argument)。如果有返回值，只能有一个返回值，且必须能够typecast为(:,1)uint8。。如果Function
+		% Function function_handle((:,1)uint8)，当远程调用时，将调用Function((:,1)uint8)。如果有返回值，只能有一个返回值，且必须能够typecast为(:,1)uint8。。如果Function
 		%  抛出异常，远程将收到Function_runtime_error，但不会得知异常的细节。如果需要，请自行设计返回值结构以反馈异常细节。
 		% Port(1,1)，要绑定的端口。如果端口已被占用，将覆盖。
 		%# 返回值
@@ -60,7 +63,7 @@ classdef IAsyncStream<handle
 		% %手动指定要监听的端口。如果FromPort已被监听，将覆盖。如果需要停止监听，可以在Callback中或其它任何位置调用ReleasePort，也可以在那之后安全重用本端口。
 		%
 		% NumBytes=obj.Listen(Port);
-		% %同步监听一个本地端口。调用后将无限等待指定端口，直到其收到消息才会返回此消息的字节数。那之后，用户必须在接下来的代码中立即从基础流读出那个数目的字节。
+		% %同步监听一个本地端口。调用后将无限等待指定端口，直到其收到消息才会返回此消息的字节数。那之后，用户必须在接下来的代码中立即从基础流读出那个数目的字节（使用Read方法）。
 		% %此监听是同步的，优先于所有异步监听和调用。可以使用此方法监听已被异步监听或调用的端口而不覆盖之前的监听和调用，也可以在此方法等待期间发生的中断中对同一个端口添加异
 		% % 步监听和调用。在这些情境下，那个异步监听或调用不会比此同步监听更早收到消息。用户在此方法返回并读完返回的字节数之前不应再次调用此方法、SyncInvoke或结束本次代码执
 		% % 行会话，否则行为未定义。
@@ -73,6 +76,7 @@ classdef IAsyncStream<handle
 		%# 返回值
 		% Port(1,1)，自动分配的空闲端口号。
 		% NumBytes(1,1)，同步监听收到的消息字节数。
+		%See also Async_stream_IO.IAsyncStream.Read
 		Port=Listen(obj,varargin)
 
 		%检查指定端口Port是否被占用
@@ -101,5 +105,15 @@ classdef IAsyncStream<handle
 		%# 返回值
 		% Return(:,1)uint8，远程函数的返回值。如果远程函数没有返回值，将返回空数组。
 		Return=SyncInvoke(obj,RemotePort,varargin)
+
+		%从基础流直接读出数据类型
+		% 此方法仅用于配合Listen方法实现同步读入消息，其它情形不应使用此方法，以免破坏数据报文。累计读入字节数不能超过Listen返回的字节数。
+		%# 输入参数
+		% Type(1,1)string，要读取的数据类型，注意不同类型数据有不同的字节数
+		% Number(1,1)，要读取的数据数量
+		%# 返回值
+		% Data(Number,1)Type，读取到的数据。
+		%See also Async_stream_IO.IAsyncStream.Listen
+		Data=Read(obj,Type,Number)
 	end
 end

@@ -69,9 +69,7 @@ enum class UID : uint8_t {
 	Type_UInt16,
 	Type_UID,
 	Type_Array,
-	Type_Cell,
 	Type_Struct,
-	Type_Empty,
 	Type_Seconds,
 	Type_Milliseconds,
 	Type_Microseconds,
@@ -90,10 +88,10 @@ enum class UID : uint8_t {
 	State_Restore,
 	State_Idle,
 
-	Signal_TrialStart,
-	Signal_ProcessFinished,
-	Signal_ProcessStarted,
-	Signal_CapacitorSignal,
+	Event_TrialStart,
+	Event_Capacitor,
+	Event_ProcessPaused,
+	Event_ProcessContinued,
 
 	Test_BlueLed,
 	Test_WaterPump,
@@ -134,4 +132,5 @@ enum class UID : uint8_t {
 	Trial_AudioWater,
 
 	Session_AudioWater,
+
 };

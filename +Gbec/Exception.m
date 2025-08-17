@@ -33,5 +33,9 @@ classdef Exception<MATLAB.Lang.IEnumerableException
 		Serialport_disconnected
 		Server_initialize_timeout
 		Server_runtime_exception
+		Server_connection_interrupted
+		Process_not_idle
+		Process_not_running
+		Process_not_paused
 	end
 end

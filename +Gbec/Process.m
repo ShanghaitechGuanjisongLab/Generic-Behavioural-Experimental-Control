@@ -2,7 +2,9 @@ classdef Process<handle
 	properties(SetAccess=immutable)
 		%该Process从属的Server
 		Server
-		%该Process的指针
+	end
+	properties(SetAccess=protected)
+		%该Process的指针，在故障恢复时可能修改
 		Pointer
 	end
 	methods(Access=protected,Static)
@@ -33,29 +35,30 @@ classdef Process<handle
 			%# 输入参数
 			% Server(1,1)Gbec.Server，目标Server
 			% Pointer(1,1)，进程指针，类型取决于Server.PointerSize
+			Server.FeedDogIfActive();
 			obj.Server=Server;
 			if nargin>1
 				obj.Pointer=cast(Pointer,Server.PointerType);
-				%这个分支不喂狗，因为通常是Server.RefreshAllProcess在循环调用
 			else
-				obj.Server.FeedDogIfActive();
 				obj.Pointer=Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_CreateProcess);
 			end
-			Server.AllProcesses(obj.Pointer)={obj};
+			Server.AllProcesses(obj.Pointer)=matlab.lang.WeakReference(obj);
 		end
-		function ProcessFinished(~)
-			%此方法由Server调用，派生类负责处理
+		function ProcessFinished_(~)
+			%此方法由Server调用，派生类负责处理，用户不应使用
 		end
-		function Signal(~,~)
-			%此方法由Server调用，派生类负责处理
+		function Signal_(~,~)
+			%此方法由Server调用，派生类负责处理，用户不应使用
 		end
-		function TrialStart(~,~)
-			%此方法由Server调用，派生类负责处理
+		function TrialStart_(~,~)
+			%此方法由Server调用，派生类负责处理，用户不应使用
 		end
 		function delete(obj)
-			obj.Server.FeedDogIfActive();
-			Gbec.Process.WarnResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_DeleteProcess,obj.Pointer));
-			obj.Server.AllProcesses.remove(obj.Pointer);
+			if obj.Server.isvalid
+				obj.Server.FeedDogIfActive();
+				obj.Server.AllProcesses.remove(obj.Pointer);
+				Gbec.Process.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_DeleteProcess,obj.Pointer));
+			end
 		end
 	end
 end

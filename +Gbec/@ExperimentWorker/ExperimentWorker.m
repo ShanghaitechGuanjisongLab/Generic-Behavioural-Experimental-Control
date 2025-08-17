@@ -4,8 +4,6 @@ classdef ExperimentWorker<handle
 	%此类不支持直接构造。使用静态方法New获取此类的实例。
 	properties
 		%实验记录保存路径。
-		% 如果那个路径已经有数据库文件，将尝试合并，然后为多天的行为做学习曲线图。
-		SavePath(1,1)string
 		%实验结束后是否保存记录
 		SaveFile(1,1)logical=true
 		%喵提醒码
@@ -13,7 +11,7 @@ classdef ExperimentWorker<handle
 		%喵提醒重试次数
 		HttpRetryTimes(1,1)uint8=3
 		%当前运行会话
-		SessionUID(1,1)Gbec.UID
+		SessionUID
 		%日期时间
 		DateTime
 		%鼠名
@@ -31,17 +29,27 @@ classdef ExperimentWorker<handle
 		%主机动作，必须继承Gbec.IHostAction，用于执行Arduino无法执行的主机任务，例如在屏幕上显示图像。
 		%See also Gbec.IHostAction
 		HostAction
-		%将要合并的旧数据路径
-		MergeData=missing
+		%会话后展示事件记录的参数
+		%必须安装统一实验分析作图才能使用此属性。会话后，将调用UniExp.TrialwiseEventPlot，将本会话的事件记录表作为第一个参数，此属性值元胞展开作为后续参数。此外，也可
+		% 以调用任何自定义的函数句柄，将自定义的函数句柄放在第一个元胞中即可。此句柄必须接受包含以下列的表作为第一个输入：
+		% - Time(:,1)duration，从会话开始经历的时间
+		% - Event(:,1)categorical，事件
+		% TepArguments的后续元胞将作为随后的参数展开输入给提供的函数句柄。
+		%See also UniExp.TrialwiseEventPlot
+		TepArguments
+		%在输出日志中要前缀的名称
+		LogName
 	end
 	properties(Access=protected)
-		Serial Async_stream_IO.AsyncSerialStream
+		Serial internal.Serialport
 		State=Gbec.UID.State_SessionInvalid
 		%没有对象无法初始化
 		WatchDog timer
 		SignalHandler
 		TIC
 		TimeOffset
+		oSavePath
+		OverwriteExisting=true
 	end
 	properties(GetAccess=protected,SetAccess=immutable)
 		EventRecorder MATLAB.DataTypes.EventLogger
@@ -50,27 +58,21 @@ classdef ExperimentWorker<handle
 	end
 	properties(Dependent)
 		%设置多少秒无操作后自动关闭串口，默认3分钟
-		ShutdownSerialAfter
+		ReleaseSerialAfter
+		%数据保存路径
+		% 如果那个路径已经有数据库文件，将尝试合并，然后为多天的行为做学习曲线图。文件存在性和可写性将会在设置该属性时立即检查，如果失败则此属性值不变。
+		SavePath(1,1)string
 	end
 	methods(Access=protected)
 		function AbortAndSave(obj)
 			%此方法将负责启用看门狗
 			obj.EventRecorder.LogEvent(Gbec.UID.State_SessionAborted);
-			disp('会话已放弃');
+			obj.LogPrint('会话已放弃');
 			if ~isempty(obj.VideoInput)
 				stop(obj.VideoInput);
 			end
-			if obj.SaveFile
-				if questdlg('是否保存现有数据？','实验已放弃','确定','取消','确定')~="取消"
-					obj.SaveInformation;
-				else
-					if isequaln(obj.MergeData,missing)
-						delete(obj.SavePath);
-					else
-						[Directory,Filename]=fileparts(obj.SavePath);
-						movefile(fullfile(Directory,Filename+".将合并.mat"),obj.SavePath,'f');
-					end
-				end
+			if obj.SaveFile&&questdlg('是否保存现有数据？','实验已放弃','确定','取消','确定')~="取消"
+				obj.SaveInformation;
 			else
 				warning("数据未保存");
 			end
@@ -98,7 +100,7 @@ classdef ExperimentWorker<handle
 					case Gbec.UID.Signal_ApiFound
 						break
 					case Gbec.UID.Signal_ApiInvalid
-						Gbec.Exceptions.Arduino_received_unsupported_API_code.Throw;
+						Gbec.Exception.Arduino_received_unsupported_API_code.Throw;
 					otherwise
 						obj.HandleSignal(Signal);
 				end
@@ -128,7 +130,7 @@ classdef ExperimentWorker<handle
 				obj.SignalHandler=@obj.RunningHandler;
 				obj.Serial.configureCallback("byte",1,@obj.SerialCallback);
 			else
-				Gbec.Exceptions.Unexpected_response_from_Arduino.Throw;
+				Gbec.Exception.Unexpected_response_from_Arduino.Throw;
 			end
 		end
 		function SerialCallback(obj,~,~)
@@ -136,7 +138,7 @@ classdef ExperimentWorker<handle
 				obj.SignalHandler(obj.Serial.read(1,'uint8'));
 			end
 		end
-		function TestHandler(~,Signal)
+		function TestHandler(obj,Signal)
 			persistent SignalRecord
 			if isempty(SignalRecord)
 				SignalRecord=dictionary;
@@ -146,13 +148,13 @@ classdef ExperimentWorker<handle
 			else
 				SR=1;
 			end
-			fprintf('%s：%u\n',Gbec.LogTranslate(Signal),SR);
+			obj.LogPrint('%s：%u\n',Gbec.LogTranslate(Signal),SR);
 			SignalRecord(Signal)=SR;
 		end
 		function HandleSignal(obj,Signal)
 			if isempty(obj.SignalHandler)
-				% Gbec.Exceptions.Unexpected_response_from_Arduino.Throw;
-				disp(Gbec.UID(Signal));
+				% Gbec.Exception.Unexpected_response_from_Arduino.Throw;
+				obj.LogPrint(Gbec.UID(Signal));
 			else
 				obj.SignalHandler(Signal);
 			end
@@ -172,10 +174,19 @@ classdef ExperimentWorker<handle
 				obj.WatchDog.start;
 			end
 		end
+		function ShutdownSerial(obj)
+			obj.Serial.configureCallback('off');
+			obj.Serial.flush('input');
+			obj.SignalHandler=function_handle.empty;
+		end
 		function ReleaseSerial(obj,~,~)
+			%必须先发消息，因为LogPrint依赖Serial
+			obj.LogPrint('释放串口');
 			%此函数不能作为文件内私有函数，因为被文件外函数调用
 			delete(obj.Serial);
-			disp('串口已释放');
+		end
+		function LogPrint(obj,Formatter,varargin)
+			fprintf("\n%s："+Formatter,obj.LogName,varargin{:});
 		end
 	end
 	methods(Static)
@@ -207,7 +218,7 @@ classdef ExperimentWorker<handle
 				obj
 				TestUID=Gbec.UID.Test_Last
 			end
-			import Gbec.UID
+			import('Gbec.UID')%整个文件必须使用函数式语法import，否则Gbec未安装时无法doc出有效页面
 			obj.FeedDog;
 			obj.ApiCall(UID.API_TestStop);
 			obj.Serial.write(TestUID,'uint8');
@@ -216,18 +227,17 @@ classdef ExperimentWorker<handle
 				Signal=obj.WaitForSignal;
 				switch Signal
 					case UID.Signal_TestStopped
-						disp('测试结束');
-						obj.Serial.configureCallback('off');
-						obj.SignalHandler=function_handle.empty;
+						obj.LogPrint('测试结束');
+						obj.ShutdownSerial;
 						obj.WatchDog.start;
 						break;
 					case UID.State_SessionRunning
-						disp('测试结束');
+						obj.LogPrint('测试结束');
 						break;
 					case UID.Signal_NoLastTest
-						Gbec.Exceptions.Last_test_not_running_or_unstoppable.Throw;
+						Gbec.Exception.Last_test_not_running_or_unstoppable.Throw;
 					case UID.Signal_NoSuchTest
-						Gbec.Exceptions.Test_not_found_on_Arduino.Throw;
+						Gbec.Exception.Test_not_found_on_Arduino.Throw;
 					otherwise
 						obj.HandleSignal(Signal)
 				end
@@ -235,29 +245,28 @@ classdef ExperimentWorker<handle
 		end
 		function PauseSession(obj)
 			%暂停会话
-			import Gbec.UID
-			import Gbec.Exceptions
+			import('Gbec.UID')
+			import('Gbec.Exception')
 			obj.FeedDog;
 			if obj.State==UID.State_SessionRestored||obj.State==UID.State_SessionPaused
-				Exceptions.Cannot_pause_a_paused_session.Throw;
+				Exception.Cannot_pause_a_paused_session.Throw;
 			end
 			obj.ApiCall(UID.API_Pause);
 			while true
 				Signal=obj.WaitForSignal;
 				switch Signal
 					case UID.State_SessionInvalid
-						Exceptions.No_sessions_are_running.Throw;
+						Exception.No_sessions_are_running.Throw;
 					case UID.State_SessionPaused
 						obj.EventRecorder.LogEvent(UID.State_SessionPaused);
-						disp('会话暂停');
-						obj.Serial.configureCallback('off');
-						obj.SignalHandler=function_handle.empty;
+						obj.LogPrint('会话暂停');
+						obj.ShutdownSerial;
 						obj.State=UID.State_SessionPaused;
 						break;
 					case UID.State_SessionAborted
-						Exceptions.Cannot_pause_an_aborted_session.Throw;
+						Exception.Cannot_pause_an_aborted_session.Throw;
 					case UID.State_SessionFinished
-						Exceptions.Cannot_pause_a_finished_session.Throw;
+						Exception.Cannot_pause_a_finished_session.Throw;
 					otherwise
 						obj.HandleSignal(Signal);
 				end
@@ -265,36 +274,35 @@ classdef ExperimentWorker<handle
 		end
 		function AbortSession(obj)
 			%放弃会话
-			import Gbec.UID
-			import Gbec.Exceptions
+			import('Gbec.UID')
+			import('Gbec.Exception')
 			obj.FeedDog;
 			switch obj.State
 				case UID.State_SessionRestored
 					obj.AbortAndSave;
 				case UID.State_SessionAborted
-					Exceptions.Cannot_abort_an_aborted_session.Throw;
+					Exception.Cannot_abort_an_aborted_session.Throw;
 				otherwise
 					try
 						obj.ApiCall(UID.API_Abort);
 					catch ME
 						if ME.identifier=="MATLAB:class:InvalidHandle"
 							obj.State=UID.State_SessionInvalid;
-							Gbec.Exceptions.Serialport_disconnected.Throw('串口已断开，请重新初始化');
+							Gbec.Exception.Serialport_disconnected.Throw(obj.LogName+'：串口已断开，请重新初始化');
 						end
 					end
 					while true
 						Signal=obj.WaitForSignal;
 						switch Signal
 							case UID.State_SessionInvalid
-								Exceptions.No_sessions_are_running.Throw;
+								Exception.No_sessions_are_running.Throw;
 							case UID.State_SessionAborted
-								obj.Serial.configureCallback('off');
-								obj.SignalHandler=function_handle.empty;
+								obj.ShutdownSerial;
 								obj.AbortAndSave;%这个函数调用包含了启用看门狗
 								break;
 							case UID.State_SessionFinished
 								obj.State=UID.State_SessionFinished;
-								Exceptions.Cannot_abort_a_finished_session.Throw;
+								Exception.Cannot_abort_a_finished_session.Throw;
 								%异常信号应该直接忽略
 						end
 					end
@@ -304,11 +312,11 @@ classdef ExperimentWorker<handle
 			delete(obj.WatchDog);
 			delete(obj.Serial);
 		end
-		function SFT=get.ShutdownSerialAfter(obj)
+		function SFT=get.ReleaseSerialAfter(obj)
 			obj.FeedDog;
 			SFT=obj.WatchDog.StartDelay;
 		end
-		function set.ShutdownSerialAfter(obj,SSA)
+		function set.ReleaseSerialAfter(obj,SSA)
 			WatchDogRunning=obj.WatchDog.Running=="on";
 			obj.WatchDog.stop;
 			obj.WatchDog.StartDelay=SSA;
@@ -334,7 +342,7 @@ classdef ExperimentWorker<handle
 				obj Gbec.ExperimentWorker
 				SessionUID=Gbec.UID.Session_Current
 			end
-			import Gbec.UID
+			import('Gbec.UID')
 			obj.FeedDog;
 			obj.ApiCall(UID.API_GetInfo);
 			obj.Serial.write(SessionUID,'uint8');
@@ -342,7 +350,7 @@ classdef ExperimentWorker<handle
 				Signal=obj.WaitForSignal;
 				switch Signal
 					case UID.State_SessionInvalid
-						Gbec.Exceptions.Must_run_session_before_getting_information.Throw;
+						Gbec.Exception.Must_run_session_before_getting_information.Throw;
 					case UID.Signal_InfoStart
 						Information=CollectStruct(obj.Serial);
 						if ~isempty(obj.HostAction)
@@ -350,7 +358,7 @@ classdef ExperimentWorker<handle
 						end
 						break;
 					case UID.State_SessionRunning
-						Gbec.Exceptions.Cannot_get_information_while_session_running.Throw;
+						Gbec.Exception.Cannot_get_information_while_session_running.Throw;
 					otherwise
 						obj.HandleSignal(Signal);
 				end
@@ -360,7 +368,55 @@ classdef ExperimentWorker<handle
 			%观察会话当前的运行状态
 			obj.FeedDog;
 			EW.ApiCall(Gbec.UID.API_Peek);
-			disp(Gbec.UID(EW.WaitForSignal));
+			obj.LogPrint(Gbec.UID(EW.WaitForSignal));
+		end
+		function SP=get.SavePath(obj)
+			SP=obj.oSavePath;
+		end
+		function set.SavePath(obj,SP)
+			FileExists=isfile(SP);
+			%判断是否应该覆盖保存数据。文件不存在，或虽然存在但用户确认覆盖的情况应该覆盖；文件存在但可以执行UniExp合并时不覆盖；文件存在但无法合并，用户也拒绝覆盖则
+			% 报错，拒绝此次SavePath修改。
+			if FileExists
+				if isempty(which('UniExp.Version'))
+					if questdlg('未找到统一实验分析作图工具箱，无法合并已存在的文件','是否覆盖？','是','否','否')=="是"
+						obj.OverwriteExisting=true;
+					else
+						obj.FeedDog;
+						Gbec.Exception.Failure_to_merge_existing_dataset.Throw;
+					end
+				else
+					obj.LogPrint("目标文件已存在，将尝试合并");
+					try
+						UniExp.DataSet(SP);
+						obj.OverwriteExisting=false;
+					catch ME
+						if questdlg('合并失败，是否要覆盖文件？',ME.identifier,'是','否','否')=="是"
+							obj.OverwriteExisting=true;
+						else
+							obj.FeedDog;
+							Gbec.Exception.Failure_to_merge_existing_dataset.Throw;
+						end
+					end
+				end
+			else
+				obj.OverwriteExisting=true;
+			end
+			Fid=fopen(SP,'a');
+			if Fid==-1
+				mkdir(fileparts(SP));
+				Fid=fopen(SP,'a');
+			end
+			if Fid==-1
+				obj.FeedDog;
+				Gbec.Exception.No_right_to_write_SavePath.Throw;
+			end
+			fclose(Fid);
+			if ~FileExists
+				delete(SP);%如不删除，下次修改SavePath时会出错
+			end
+			obj.oSavePath=SP;
+			obj.FeedDog;
 		end
 	end
 end

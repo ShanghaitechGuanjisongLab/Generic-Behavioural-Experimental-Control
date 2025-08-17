@@ -1,5 +1,5 @@
 classdef Test<Gbec.Process
-	%测试类进程，扩展一些便于手动测试设备的实用方法
+	%轻量级测试类进程，扩展一些便于手动测试设备的实用方法
 
 	properties
 		%可调用对象，收到Host类UID消息时调用

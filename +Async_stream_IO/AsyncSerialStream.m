@@ -70,7 +70,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			%仅限内部使用。不会添加到监听器，也不需要释放
 			persistent Port;
 			if isempty(Port)
-				Port=0;
+				Port=0x0;
 			end
 			while obj.Listeners.isKey(Port)
 				Port=mod(Port+1,255);

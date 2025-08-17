@@ -9,7 +9,7 @@ classdef Formal<Gbec.Process
 
 		%主机动作，必须继承Gbec.IHostAction，用于执行Arduino无法执行的主机任务，例如在屏幕上显示图像。
 		%See also Gbec.IHostAction
-		HostAction(1,1)dictionary
+		HostActions(1,1)dictionary
 
 		%在输出日志中要前缀的名称
 		LogName
@@ -88,7 +88,7 @@ classdef Formal<Gbec.Process
 			for T=1:NumDistinctTrials
 				AsyncStream<=TrialsDone.Event(T)<=uint16(TrialsDone.GroupCount(T));
 			end
-			NumBytes=obj.Listen(LocalPort);
+			NumBytes=AsyncStream.Listen(LocalPort);
 			if NumBytes==1
 				Gbec.Process.ThrowResult(AsyncStream.Read);
 			else
@@ -175,9 +175,8 @@ classdef Formal<Gbec.Process
 			%此方法由Server调用，派生类负责处理，用户不应使用
 			S=Gbec.UID(S);
 			obj.EventRecorder.LogEvent(S);
-			if obj.HostAction.isKey(S)
-				HA=obj.HostAction(S);
-				HA();
+			if obj.HostActions.isKey(S)
+				obj.HostActions{S}.Run();
 			else
 				FprintfInCommandWindow(' %s',Gbec.LogTranslate(S));
 			end
@@ -198,7 +197,7 @@ classdef Formal<Gbec.Process
 				Gbec.Exception.Process_not_running.Throw;
 			end
 			Gbec.Process.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_PauseProcess,obj.Pointer));
-			obj.State=Gbec.UID.State_Paused
+			obj.State=Gbec.UID.State_Paused;
 			obj.EventRecorder.LogEvent(Gbec.UID.Event_ProcessPaused);
 			obj.LogPrint('会话暂停');
 			obj.CountdownExempt.delete;
@@ -212,6 +211,25 @@ classdef Formal<Gbec.Process
 			obj.EventRecorder.LogEvent(Gbec.UID.Event_ProcessContinued);
 			obj.LogPrint('会话继续');
 			obj.CountdownExempt=Gbec.CountdownExempt_(obj.Server);
+		end
+		function AbortSession(obj)
+			%放弃会话
+			if obj.State==Gbec.UID.State_Idle
+				Gbec.Exception.Process_not_running.Throw;
+			end
+			Gbec.Process.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_AbortProcess,obj.Pointer));
+			obj.EventRecorder.LogEvent(Gbec.UID.Event_ProcessAborted);
+			for V=obj.HostActions.values('cell').'
+				V{1}.Abort();
+			end
+			obj.LogPrint('会话已放弃');
+			if obj.SaveFile&&questdlg('是否保存现有数据？','实验已放弃','确定','取消','确定')~="取消"
+				obj.SaveInformation;
+			else
+				warning("数据未保存");
+			end
+			obj.State=Gbec.UID.State_Idle;
+			obj.CountdownExempt.delete;
 		end
 	end
 end

@@ -191,7 +191,7 @@ struct Process {
 	// 获取当前或上一个执行模块及其关联模块的所有信息
 	std::string GetInfo() const {
 		std::ostringstream InfoStream;
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(2), UID::Field_StartModule, UID::Type_Pointer, StartPointer, UID::Field_Modules, UID::Type_Map, static_cast<uint8_t>(Modules.size()), UID::Type_Pointer);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_StartModule, UID::Type_Pointer, StartPointer, UID::Field_Modules, UID::Type_Map, static_cast<uint8_t>(Modules.size()), UID::Type_Pointer,UID::Type_Struct);
 		for (auto const &Iterator : Modules) {
 			InfoWrite(InfoStream, Iterator.first);
 			Iterator.second->WriteInfo(InfoStream);
@@ -267,7 +267,7 @@ struct RandomDuration : Module, IRandom {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Range, UID::Type_Array, static_cast<uint8_t>(2), _TypeID<Unit>::value, Min, Max);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Range, UID::Type_Array, static_cast<uint8_t>(2), _TypeID<Unit>::value, Min, Max);
 	}
 };
 template<typename Unit, uint16_t Min, uint16_t Max, UID CustomID>
@@ -308,7 +308,7 @@ struct Repeat : Module {
 		}
 		static UID const ID;
 		void WriteInfo(std::ostringstream &InfoStream) const override {
-			InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Times, UID::Type_UInt16, Times);
+			InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Times, UID::Type_UInt16, Times);
 		}
 		static constexpr uint16_t NumTrials = Content::NumTrials * Times;
 
@@ -338,7 +338,7 @@ struct Repeat : Module {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Content, UID::Type_Pointer, &Content::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Content, UID::Type_Pointer, &Content::ID);
 	}
 	static constexpr uint16_t NumTrials = -1;
 
@@ -396,7 +396,7 @@ struct Sequential : Module {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Modules, UID::Type_Array, static_cast<uint8_t>(sizeof...(SubModules)), UID::Type_Pointer, &SubModules::ID...);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Modules, UID::Type_Array, static_cast<uint8_t>(sizeof...(SubModules)), UID::Type_Pointer, &SubModules::ID...);
 	}
 	static constexpr uint16_t NumTrials = _Sum<SubModules::NumTrials...>::value;
 
@@ -456,7 +456,7 @@ struct RandomSequential : Module, IRandom {
 			return false;
 		}
 		void WriteInfo(std::ostringstream &InfoStream) const override {
-			InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Modules, UID::Type_Table, static_cast<uint8_t>(sizeof...(SubModules)), static_cast<uint8_t>(2), UID::Column_Module, UID::Type_Pointer, &SubModules::ID..., UID::Column_Repeats, UID::Type_UInt16, Repeats...);
+			InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Modules, UID::Type_Table, static_cast<uint8_t>(sizeof...(SubModules)), static_cast<uint8_t>(2), UID::Column_Module, UID::Type_Pointer, &SubModules::ID..., UID::Column_Repeats, UID::Type_UInt16, Repeats...);
 		}
 		static constexpr uint16_t NumTrials = _Sum<SubModules::NumTrials * Repeats...>::value;
 
@@ -502,7 +502,7 @@ struct RandomSequential : Module, IRandom {
 		return false;
 	}
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Modules, UID::Type_Array, static_cast<uint8_t>(sizeof...(SubModules)), UID::Type_Pointer, &SubModules::ID...);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Modules, UID::Type_Array, static_cast<uint8_t>(sizeof...(SubModules)), UID::Type_Pointer, &SubModules::ID...);
 	}
 	static constexpr uint16_t NumTrials = _Sum<SubModules::NumTrials...>::value;
 
@@ -584,7 +584,7 @@ struct Delay : _Delay {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Duration, UID::Type_Pointer, &RandomDuration::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Duration, UID::Type_Pointer, &RandomDuration::ID);
 	}
 
 protected:
@@ -603,7 +603,7 @@ struct Delay<ConstantDuration<Unit, Value>> : _Delay {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Duration, _TypeID<Unit>::value, Value);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Duration, _TypeID<Unit>::value, Value);
 	}
 };
 template<typename Unit, uint16_t Value>
@@ -621,7 +621,7 @@ struct Delay<InfiniteDuration> : Module {
 	// 全特化的ID定义不能放在头文件中，转而放在Gbec.ino中，否则违反ODR
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Duration, UID::Type_UID, UID::Duration_Infinite);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Duration, UID::Type_UID, UID::Duration_Infinite);
 	}
 };
 template<typename Content>
@@ -680,7 +680,7 @@ struct RepeatEvery : _RepeatEvery<Content> {
 		}
 		static UID const ID;
 		void WriteInfo(std::ostringstream &InfoStream) const override {
-			InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, _RepeatEvery<Content>::ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Period, UID::Type_Pointer, &Period::ID, UID::Field_Times, UID::Type_UInt16, Times);
+			InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, _RepeatEvery<Content>::ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Period, UID::Type_Pointer, &Period::ID, UID::Field_Times, UID::Type_UInt16, Times);
 		}
 		static constexpr uint16_t NumTrials = Content::NumTrials * Times;
 
@@ -697,7 +697,7 @@ struct RepeatEvery : _RepeatEvery<Content> {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, _RepeatEvery<Content>::ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Duration, UID::Type_Pointer, &Period::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, _RepeatEvery<Content>::ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Duration, UID::Type_Pointer, &Period::ID);
 	}
 
 protected:
@@ -729,7 +729,7 @@ struct _RepeatEvery_Random_UntilDuration : RepeatEvery<Period, Content> {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, _RepeatEvery<Content>::ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Period, UID::Type_Pointer, &Period::ID, UID::Field_Duration, UID::Type_Pointer, &Duration::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, _RepeatEvery<Content>::ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Period, UID::Type_Pointer, &Period::ID, UID::Field_Duration, UID::Type_Pointer, &Duration::ID);
 	}
 
 protected:
@@ -759,7 +759,7 @@ struct _RepeatEvery_Random_UntilDuration<Period, Content, ConstantDuration<Unit,
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, _RepeatEvery<Content>::ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Period, UID::Type_Pointer, &Period::ID, UID::Field_Duration, _TypeID<Unit>::value, Value);
+		InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, _RepeatEvery<Content>::ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Period, UID::Type_Pointer, &Period::ID, UID::Field_Duration, _TypeID<Unit>::value, Value);
 	}
 
 protected:
@@ -794,7 +794,7 @@ struct _RepeatEvery_Constant_UntilDuration : RepeatEvery<ConstantDuration<Unit, 
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Period, _TypeID<Unit>::value, Period, UID::Field_Duration, UID::Type_Pointer, &Duration::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Period, _TypeID<Unit>::value, Period, UID::Field_Duration, UID::Type_Pointer, &Duration::ID);
 	}
 
 protected:
@@ -813,7 +813,7 @@ struct RepeatEvery<ConstantDuration<Unit, Period>, Content> : _RepeatEvery<Conte
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Duration, _TypeID<Unit>::value, Period);
+		InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Duration, _TypeID<Unit>::value, Period);
 	}
 	template<uint16_t Times>
 	struct UntilTimes : RepeatEvery<ConstantDuration<Unit, Period>, Content> {
@@ -836,7 +836,7 @@ struct RepeatEvery<ConstantDuration<Unit, Period>, Content> : _RepeatEvery<Conte
 		}
 		static UID const ID;
 		void WriteInfo(std::ostringstream &InfoStream) const override {
-			InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, _RepeatEvery<Content>::ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Period, _TypeID<Unit>::value, Period, UID::Field_Times, UID::Type_UInt16, Times);
+			InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, _RepeatEvery<Content>::ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Period, _TypeID<Unit>::value, Period, UID::Field_Times, UID::Type_UInt16, Times);
 		}
 		static constexpr uint16_t NumTrials = Content::NumTrials * Times;
 
@@ -872,7 +872,7 @@ struct _RepeatEvery_Constant_UntilDuration<Unit, Period, Content, ConstantDurati
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Period, _TypeID<Unit>::value, Period, UID::Field_Duration, _TypeID<Unit>::value, Duration);
+		InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, ID, UID::Field_Content, UID::Type_Pointer, &Content::ID, UID::Field_Period, _TypeID<Unit>::value, Period, UID::Field_Duration, _TypeID<Unit>::value, Duration);
 	}
 	static constexpr uint16_t NumTrials = Duration / Period * Content::NumTrials;
 
@@ -948,7 +948,7 @@ struct DoubleRepeat : _DoubleRepeat<ContentA, ContentB> {
 		}
 		static UID const ID;
 		void WriteInfo(std::ostringstream &InfoStream) const override {
-			InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, _DoubleRepeat<ContentA, ContentB>::ID, UID::Field_ContentA, UID::Type_Pointer, &ContentA::ID, UID::Field_PeriodA, UID::Type_Pointer, &PeriodA::ID, UID::Field_ContentB, UID::Type_Pointer, &ContentB::ID, UID::Field_PeriodB, UID::Type_Pointer, &PeriodB::ID, UID::Field_Times, UID::Type_UInt16, Times);
+			InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, _DoubleRepeat<ContentA, ContentB>::ID, UID::Field_ContentA, UID::Type_Pointer, &ContentA::ID, UID::Field_PeriodA, UID::Type_Pointer, &PeriodA::ID, UID::Field_ContentB, UID::Type_Pointer, &ContentB::ID, UID::Field_PeriodB, UID::Type_Pointer, &PeriodB::ID, UID::Field_Times, UID::Type_UInt16, Times);
 		}
 		static constexpr uint16_t NumTrials = (Times + 1) / 2 * ContentA::NumTrials + Times / 2 * ContentB::NumTrials;
 
@@ -965,7 +965,7 @@ struct DoubleRepeat : _DoubleRepeat<ContentA, ContentB> {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(5), UID::Field_ID, UID::Type_UID, _DoubleRepeat<ContentA, ContentB>::ID, UID::Field_ContentA, UID::Type_Pointer, &ContentA::ID, UID::Field_PeriodA, UID::Type_Pointer, &PeriodA::ID, UID::Field_ContentB, UID::Type_Pointer, &ContentB::ID, UID::Field_PeriodB, UID::Type_Pointer, &PeriodB::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(5), UID::Field_ID, UID::Type_UID, _DoubleRepeat<ContentA, ContentB>::ID, UID::Field_ContentA, UID::Type_Pointer, &ContentA::ID, UID::Field_PeriodA, UID::Type_Pointer, &PeriodA::ID, UID::Field_ContentB, UID::Type_Pointer, &ContentB::ID, UID::Field_PeriodB, UID::Type_Pointer, &PeriodB::ID);
 	}
 
 protected:
@@ -998,7 +998,7 @@ struct _DoubleRepeat_Random_UntilDuration : DoubleRepeat<PeriodA, ContentA, Peri
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, _DoubleRepeat<ContentA, ContentB>::ID, UID::Field_ContentA, UID::Type_Pointer, &ContentA::ID, UID::Field_PeriodA, UID::Type_Pointer, &PeriodA::ID, UID::Field_ContentB, UID::Type_Pointer, &ContentB::ID, UID::Field_PeriodB, UID::Type_Pointer, &PeriodB::ID, UID::Field_Duration, UID::Type_Pointer, &Duration::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, _DoubleRepeat<ContentA, ContentB>::ID, UID::Field_ContentA, UID::Type_Pointer, &ContentA::ID, UID::Field_PeriodA, UID::Type_Pointer, &PeriodA::ID, UID::Field_ContentB, UID::Type_Pointer, &ContentB::ID, UID::Field_PeriodB, UID::Type_Pointer, &PeriodB::ID, UID::Field_Duration, UID::Type_Pointer, &Duration::ID);
 	}
 
 protected:
@@ -1028,7 +1028,7 @@ struct _DoubleRepeat_Random_UntilDuration<PeriodA, ContentA, PeriodB, ContentB, 
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, _DoubleRepeat<ContentA, ContentB>::ID, UID::Field_ContentA, UID::Type_Pointer, &ContentA::ID, UID::Field_PeriodA, UID::Type_Pointer, &PeriodA::ID, UID::Field_ContentB, UID::Type_Pointer, &ContentB::ID, UID::Field_PeriodB, UID::Type_Pointer, &PeriodB::ID, UID::Field_Duration, _TypeID<Unit>::value, Duration);
+		InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, _DoubleRepeat<ContentA, ContentB>::ID, UID::Field_ContentA, UID::Type_Pointer, &ContentA::ID, UID::Field_PeriodA, UID::Type_Pointer, &PeriodA::ID, UID::Field_ContentB, UID::Type_Pointer, &ContentB::ID, UID::Field_PeriodB, UID::Type_Pointer, &PeriodB::ID, UID::Field_Duration, _TypeID<Unit>::value, Duration);
 	}
 
 protected:
@@ -1063,7 +1063,7 @@ struct _DoubleRepeat_Constant_UntilDuration : DoubleRepeat<ConstantDuration<Unit
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, _DoubleRepeat<ContentA, ContentB>::ID, UID::Field_ContentA, UID::Type_Pointer, &ContentA::ID, UID::Field_PeriodA, _TypeID<Unit>::value, PeriodA, UID::Field_ContentB, UID::Type_Pointer, &ContentB::ID, UID::Field_PeriodB, _TypeID<Unit>::value, PeriodB, UID::Field_Duration, UID::Type_Pointer, &Duration::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, _DoubleRepeat<ContentA, ContentB>::ID, UID::Field_ContentA, UID::Type_Pointer, &ContentA::ID, UID::Field_PeriodA, _TypeID<Unit>::value, PeriodA, UID::Field_ContentB, UID::Type_Pointer, &ContentB::ID, UID::Field_PeriodB, _TypeID<Unit>::value, PeriodB, UID::Field_Duration, UID::Type_Pointer, &Duration::ID);
 	}
 
 protected:
@@ -1082,7 +1082,7 @@ struct DoubleRepeat<ConstantDuration<Unit, PeriodA>, ContentA, ConstantDuration<
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(5), UID::Field_ID, UID::Type_UID, ID, UID::Field_ContentA, UID::Type_Pointer, &ContentA::ID, UID::Field_PeriodA, _TypeID<Unit>::value, PeriodA, UID::Field_ContentB, UID::Type_Pointer, &ContentB::ID, UID::Field_PeriodB, _TypeID<Unit>::value, PeriodB);
+		InfoWrite(InfoStream, static_cast<uint8_t>(5), UID::Field_ID, UID::Type_UID, ID, UID::Field_ContentA, UID::Type_Pointer, &ContentA::ID, UID::Field_PeriodA, _TypeID<Unit>::value, PeriodA, UID::Field_ContentB, UID::Type_Pointer, &ContentB::ID, UID::Field_PeriodB, _TypeID<Unit>::value, PeriodB);
 	}
 	template<uint16_t Times>
 	struct UntilTimes : DoubleRepeat<ConstantDuration<Unit, PeriodA>, ContentA, ConstantDuration<Unit, PeriodB>, ContentB> {
@@ -1105,7 +1105,7 @@ struct DoubleRepeat<ConstantDuration<Unit, PeriodA>, ContentA, ConstantDuration<
 		}
 		static UID const ID;
 		void WriteInfo(std::ostringstream &InfoStream) const override {
-			InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, ID, UID::Field_ContentA, UID::Type_Pointer, &ContentA::ID, UID::Field_PeriodA, _TypeID<Unit>::value, PeriodA, UID::Field_ContentB, UID::Type_Pointer, &ContentB::ID, UID::Field_PeriodB, _TypeID<Unit>::value, PeriodB, UID::Field_Times, UID::Type_UInt16, Times);
+			InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, ID, UID::Field_ContentA, UID::Type_Pointer, &ContentA::ID, UID::Field_PeriodA, _TypeID<Unit>::value, PeriodA, UID::Field_ContentB, UID::Type_Pointer, &ContentB::ID, UID::Field_PeriodB, _TypeID<Unit>::value, PeriodB, UID::Field_Times, UID::Type_UInt16, Times);
 		}
 		static constexpr uint16_t NumTrials = (Times + 1) / 2 * ContentA::NumTrials + Times / 2 * ContentB::NumTrials;
 
@@ -1145,7 +1145,7 @@ public:
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, _DoubleRepeat<ContentA, ContentB>::ID, UID::Field_ContentA, UID::Type_Pointer, &ContentA::ID, UID::Field_PeriodA, _TypeID<Unit>::value, PeriodA, UID::Field_ContentB, UID::Type_Pointer, &ContentB::ID, UID::Field_PeriodB, _TypeID<Unit>::value, PeriodB, UID::Field_Duration, _TypeID<Unit>::value, Duration);
+		InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, _DoubleRepeat<ContentA, ContentB>::ID, UID::Field_ContentA, UID::Type_Pointer, &ContentA::ID, UID::Field_PeriodA, _TypeID<Unit>::value, PeriodA, UID::Field_ContentB, UID::Type_Pointer, &ContentB::ID, UID::Field_PeriodB, _TypeID<Unit>::value, PeriodB, UID::Field_Duration, _TypeID<Unit>::value, Duration);
 	}
 	static constexpr uint16_t NumTrials = ContentA::NumTrials * (NumFullCycles + (Duration % FullPeriod > PeriodA)) + ContentB::NumTrials * NumFullCycles;
 };
@@ -1177,7 +1177,7 @@ struct ModuleAbort : _InstantaneousModule {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Target, UID::Type_Pointer, &Target::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Target, UID::Type_Pointer, &Target::ID);
 	}
 
 protected:
@@ -1195,7 +1195,7 @@ struct ModuleRestart : _InstantaneousModule {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Target, UID::Type_Pointer, &Target::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Target, UID::Type_Pointer, &Target::ID);
 	}
 
 protected:
@@ -1213,7 +1213,7 @@ struct ModuleRandomize : _InstantaneousModule {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Target, UID::Type_Pointer, &Target::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Target, UID::Type_Pointer, &Target::ID);
 	}
 
 protected:
@@ -1232,7 +1232,7 @@ struct DigitalWrite : _InstantaneousModule {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ID, UID::Field_Pin, UID::Type_UInt8, Pin, UID::Field_HighOrLow, UID::Type_Bool, HighOrLow);
+		InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ID, UID::Field_Pin, UID::Type_UInt8, Pin, UID::Field_HighOrLow, UID::Type_Bool, HighOrLow);
 	}
 };
 template<uint8_t Pin, bool HighOrLow>
@@ -1248,7 +1248,7 @@ struct DigitalToggle : _InstantaneousModule {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Pin, UID::Type_UInt8, Pin);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Pin, UID::Type_UInt8, Pin);
 	}
 };
 template<uint8_t Pin>
@@ -1275,7 +1275,7 @@ struct MonitorPin : _InstantaneousModule {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ID, UID::Field_Pin, UID::Type_UInt8, Pin, UID::Field_Monitor, UID::Type_Pointer, &Monitor::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ID, UID::Field_Pin, UID::Type_UInt8, Pin, UID::Field_Monitor, UID::Type_Pointer, &Monitor::ID);
 	}
 
 protected:
@@ -1293,7 +1293,7 @@ struct SerialMessage : _InstantaneousModule {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Message, UID::Type_UID, Message);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Message, UID::Type_UID, Message);
 	}
 };
 template<UID Message>
@@ -1313,7 +1313,7 @@ struct Async : _InstantaneousModule {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Content, UID::Type_Pointer, &Content::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ID, UID::Field_Content, UID::Type_Pointer, &Content::ID);
 	}
 	static constexpr uint16_t NumTrials = Content::NumTrials;
 
@@ -1353,7 +1353,7 @@ struct Trial : Module {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, TrialID, UID::Field_Content, UID::Type_Pointer, &Content::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, TrialID, UID::Field_Content, UID::Type_Pointer, &Content::ID);
 	}
 	static_assert(Content::NumTrials == 0, "Trial不允许嵌套");
 	static constexpr uint16_t NumTrials = 1;
@@ -1396,7 +1396,7 @@ struct CleanWhenAbort : Module {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, UID::Type_Struct, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ID, UID::Field_Target, UID::Type_Pointer, &Target::ID, UID::Field_Cleaner, UID::Type_Pointer, &Cleaner::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ID, UID::Field_Target, UID::Type_Pointer, &Target::ID, UID::Field_Cleaner, UID::Type_Pointer, &Cleaner::ID);
 	}
 	~CleanWhenAbort() {
 		StartCleaner();

@@ -36,47 +36,8 @@ classdef GratingImage<Gbec.IHostAction
 		%(:,3)uint8矩阵，栅格色谱，作为插值锚点
 		ColorRange
 	end
-	methods(Access=protected)
+	methods
 		function obj = GratingImage(options)
-			arguments
-				options.AngleRange=[-pi/2,pi/2]
-				options.DurationRange=Inf
-				options.InitialPhase=0
-				options.PixelsPerCycle
-				options.CyclesPerWidth
-				options.CyclesPerHeight
-				options.ColorRange uint8=[0,0,0;255,255,255]
-			end
-			ScreenTable=MATLAB.Graphics.Window.Screens;
-			FirstSecondary=find(~ScreenTable.IsPrimary,1);
-			if isempty(FirstSecondary)
-				FirstSecondary=1;
-			end
-			obj.Window=MATLAB.Graphics.Window.Create(DeviceName=ScreenTable.DeviceName(FirstSecondary));
-			Rectangle=ScreenTable.Rectangle(FirstSecondary,:);
-			obj.Window.Fill([0xff,0,0,0]);
-			obj.Width=Rectangle(3)-Rectangle(1);
-			obj.Height=Rectangle(4)-Rectangle(2);
-			obj.Timer=timer(TimerFcn=@(~,~)obj.Window.RemoveVisual(obj.CurrentImage));
-			obj.AngleRange=options.AngleRange;
-			obj.DurationRange=options.DurationRange;
-			obj.InitialPhase=options.InitialPhase;
-			obj.ColorRange=options.ColorRange;
-			Fields=["PixelsPerCycle","CyclesPerWidth","CyclesPerHeight"];
-			Field=Fields(isfield(options,Fields));
-			if isscalar(Field)
-				obj.(Field)=options.(Field);
-			else
-				Gbec.Exceptions.Grating_properties_invalid.Throw(sprintf('必须指定 %s 之一',join(Fields,' ')));
-			end
-			obj.Logger=MATLAB.DataTypes.EventLogger;
-		end
-	end
-	methods(Static)
-		function obj=New(varargin)
-			%获取一个用MATLAB.Lang.Owner包装的GratingImage实例。
-			%Owner会将对对象的所有操作转发给其所包装的实例。始终通过Owner访问对象，不要使用裸的GratingImage句柄，
-			% 否则可能造成资源无法正确释放。
 			%# 语法
 			% ```
 			% obj=Gbec.GratingImage.New(Name=Value);
@@ -96,13 +57,40 @@ classdef GratingImage<Gbec.IHostAction
 			%  - PixelsPerCycle，每个周期的像素数
 			%  - CyclesPerWidth，图像宽度是周期的几倍
 			%  - CyclesPerHeight，图像高度是周期的几倍
-			%# 返回值
-			% obj(1,1)MATLAB.Lang.Owner<GratingImage>
-			%See also MATLAB.Lang.Owner
-			obj=MATLAB.Lang.Owner(Gbec.GratingImage(varargin{:}));
+			arguments
+				options.AngleRange=[-pi/2,pi/2]
+				options.DurationRange=Inf
+				options.InitialPhase=0
+				options.PixelsPerCycle
+				options.CyclesPerWidth
+				options.CyclesPerHeight
+				options.ColorRange uint8=[0,0,0;255,255,255]
+			end
+			ScreenTable=MATLAB.Graphics.Window.Screens;
+			FirstSecondary=find(~ScreenTable.IsPrimary,1);
+			if isempty(FirstSecondary)
+				FirstSecondary=1;
+			end
+			obj.Window=MATLAB.Graphics.Window.Create(DeviceName=ScreenTable.DeviceName(FirstSecondary));
+			Rectangle=ScreenTable.Rectangle(FirstSecondary,:);
+			obj.Window.Fill([0xff,0,0,0]);
+			obj.Width=Rectangle(3)-Rectangle(1);
+			obj.Height=Rectangle(4)-Rectangle(2);
+			WeakReference=matlab.lang.WeakReference(obj);
+			obj.Timer=timer(TimerFcn=@(~,~)WeakReference.Handle.Window.RemoveVisual(WeakReference.Handle.CurrentImage));
+			obj.AngleRange=options.AngleRange;
+			obj.DurationRange=options.DurationRange;
+			obj.InitialPhase=options.InitialPhase;
+			obj.ColorRange=options.ColorRange;
+			Fields=["PixelsPerCycle","CyclesPerWidth","CyclesPerHeight"];
+			Field=Fields(isfield(options,Fields));
+			if isscalar(Field)
+				obj.(Field)=options.(Field);
+			else
+				Gbec.Exceptions.Grating_properties_invalid.Throw(sprintf('必须指定 %s 之一',join(Fields,' ')));
+			end
+			obj.Logger=MATLAB.DataTypes.EventLogger;
 		end
-	end
-	methods
 		function PC=get.PixelsPerCycle(obj)
 			if obj.Reciprocal
 				PC=2*pi*obj.CircularFrequency;
@@ -149,7 +137,7 @@ classdef GratingImage<Gbec.IHostAction
 			end
 			Info=struct(CircularFrequency=CF,Angle=Angle,Duration=Duration,InitialPhase=IP,Image=Image);
 		end
-		function Run(obj,~,~)
+		function Run(obj)
 			%Arduino发来HostAction信号时，执行此方法
 			obj.Logger.LogEvent(obj.Test);
 		end
@@ -160,6 +148,15 @@ classdef GratingImage<Gbec.IHostAction
             if ~isempty(Events)
                 Information.Events=[timetable(Events.Time),struct2table(Events.Event,AsArray=true)];
             end
+		end
+		function Abort(obj)
+			%实验提前中断时调用，应停止任何正在执行的动作并执行清理
+			if obj.Timer.Running=="on"
+				obj.Timer.stop;
+			end
+			if ~isempty(obj.CurrentImage)
+				obj.Window.RemoveVisual(obj.CurrentImage);
+			end
 		end
 		function delete(obj)
 			delete(obj.Timer);

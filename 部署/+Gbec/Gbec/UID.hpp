@@ -92,6 +92,7 @@ enum class UID : uint8_t {
 	Event_Capacitor,
 	Event_ProcessPaused,
 	Event_ProcessContinued,
+	Event_ProcessAborted,
 
 	Test_BlueLed,
 	Test_WaterPump,
@@ -127,7 +128,8 @@ enum class UID : uint8_t {
 	Module_Repeat,
 	Module_DigitalToggle,
 
-	Host_ShowImage,
+	Host_GratingImage,
+	Host_StartRecord,
 
 	Trial_AudioWater,
 

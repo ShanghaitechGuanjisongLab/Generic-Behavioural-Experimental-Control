@@ -21,6 +21,12 @@ Pin PassiveBuzzer = 10;
 template <uint8_t PinIndex, uint16_t Milliseconds>
 using PinFlash = Sequential<DigitalWrite<PinIndex, HIGH>, Delay<ConstantDuration<std::chrono::milliseconds, Milliseconds>>, DigitalWrite<PinIndex, LOW>>;
 
+template <uint8_t PinIndex, uint16_t Milliseconds, UID Up>
+using PinFlashUp = Sequential<DigitalWrite<PinIndex, HIGH>, SerialMessage<Up>, Delay<ConstantDuration<std::chrono::milliseconds, Milliseconds>>, DigitalWrite<PinIndex, LOW>>;
+
+template <uint8_t PinIndex, uint16_t Milliseconds, UID Up, UID Down>
+using PinFlashUpDown = Sequential<DigitalWrite<PinIndex, HIGH>, SerialMessage<Up>, Delay<ConstantDuration<std::chrono::milliseconds, Milliseconds>>, DigitalWrite<PinIndex, LOW>, SerialMessage<Down>>;
+
 using Duration100To1000 = RandomDuration<std::chrono::milliseconds, 100, 1000>;
 
 using RandomFlash = Repeat<Sequential<DigitalToggle<Laser>, Delay<Duration100To1000>, ModuleRandomize<Duration100To1000>>>;
@@ -43,10 +49,10 @@ using Tone = typename RepeatEvery<ConstantDuration<std::chrono::microseconds, 10
 
 using CalmDown = Sequential<MonitorRestart, Delay5To10, ModuleAbort<MonitorRestart>, ModuleRandomize<Delay5To10>>;
 
-using AudioWater = Trial<UID::Trial_AudioWater, Sequential<CalmDown, PinFlash<ActiveBuzzer, 200>, DelayMilliseconds<800>, PinFlash<WaterPump, 250>, DelaySeconds<20>>>;
+using AudioWater = Trial<UID::Trial_AudioWater, Sequential<CalmDown, PinFlashUpDown<ActiveBuzzer, 200, UID::Event_AudioUp, UID::Event_AudioDown>, DelayMilliseconds<800>, PinFlashUp<WaterPump, 150, UID::Event_Water>, DelaySeconds<20>>>;
 
 // 列出所有公开模块，允许PC端调用
-std::unordered_map<UID, bool (*)(Process *, uint16_t, uint16_t &)> SessionMap = {
+std::unordered_map<UID, bool (*)(Process*, uint16_t, uint16_t&)> SessionMap = {
     {UID::Test_BlueLed, Session<PinFlash<BlueLed, 200>>},
     {UID::Test_WaterPump, Session<PinFlash<WaterPump, 150>>},
     {UID::Test_CapacitorReset, Session<Sequential<DigitalWrite<CapacitorVdd, LOW>, Delay<ConstantDuration<std::chrono::milliseconds, 100>>, DigitalWrite<CapacitorVdd, HIGH>>>},
@@ -54,7 +60,7 @@ std::unordered_map<UID, bool (*)(Process *, uint16_t, uint16_t &)> SessionMap = 
     {UID::Test_CD1, Session<PinFlash<CD1, 200>>},
     {UID::Test_ActiveBuzzer, Session<PinFlash<ActiveBuzzer, 200>>},
     {UID::Test_AirPump, Session<PinFlash<AirPump, 200>>},
-    {UID::Test_HostAction, Session<SerialMessage<UID::Host_ShowImage>>},
+    {UID::Test_HostAction, Session<SerialMessage<UID::Host_GratingImage>>},
     {UID::Test_SquareWave, Session<DoubleRepeat<ConstantDuration<std::chrono::seconds, 1>, DigitalWrite<Laser, HIGH>, ConstantDuration<std::chrono::seconds, 2>, DigitalWrite<Laser, LOW>>::template UntilTimes<3>>},
     {UID::Test_RandomFlash, Session<Sequential<Async<RandomFlash>, Delay<ConstantDuration<std::chrono::seconds, 10>>, ModuleAbort<RandomFlash>>>},
     {UID::Test_LowTone, Session<Tone<500, 1000>>},

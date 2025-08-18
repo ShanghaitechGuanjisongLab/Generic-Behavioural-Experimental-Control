@@ -93,6 +93,11 @@ enum class UID : uint8_t {
 	Event_ProcessPaused,
 	Event_ProcessContinued,
 	Event_ProcessAborted,
+	Event_AudioUp,
+	Event_AudioDown,
+	Event_LightUp,
+	Event_LightDown,
+	Event_Water,
 
 	Test_BlueLed,
 	Test_WaterPump,

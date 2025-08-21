@@ -1,6 +1,6 @@
 classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 	%端口号范围0~254，255是无效端口
-	properties(SetAccess=immutable,Transient)
+	properties(SetAccess=protected,Transient)
 		Serial
 	end
 	properties(SetAccess=immutable,GetAccess=protected)
@@ -72,8 +72,10 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			if isempty(Port)
 				Port=0x0;
 			end
-			while obj.Listeners.isKey(Port)
-				Port=mod(Port+1,255);
+			if obj.Listeners.numEntries
+				while obj.Listeners.isKey(Port)
+					Port=mod(Port+1,255);
+				end
 			end
 			P=Port;
 		end

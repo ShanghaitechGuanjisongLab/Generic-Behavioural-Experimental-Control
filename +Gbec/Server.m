@@ -1,7 +1,7 @@
 classdef Server<handle
 	properties(SetAccess=protected,Transient)
 		%此属性只能用Initialize方法修改
-		AsyncStream Async_stream_IO.IAsyncStream
+		AsyncStream
 	end
 	properties(SetAccess=?Gbec.Process)
 		%所有进程
@@ -78,7 +78,7 @@ classdef Server<handle
 			obj.SerialCountdown.stop;
 			if isa(varargin{1},'Async_stream_IO.IAsyncStream')
 				obj.AsyncStream=varargin{1};
-			elseif obj.AsyncStream.isvalid&&obj.AsyncStream.CheckArguments(varargin{:})
+			elseif~isempty(obj.AsyncStream)&&obj.AsyncStream.isvalid&&obj.AsyncStream.CheckArguments(varargin{:})
 				obj.SerialCountdown.start;
 				return;
 			else

@@ -119,7 +119,7 @@ template<typename... T>
 inline static void InfoWrite(std::ostringstream &InfoStream, T... InfoValues) {
 	int _[] = { (InfoWrite(InfoStream, InfoValues), 0)... };
 }
-extern Async_stream_IO::AsyncStream SerialStream;
+extern Async_stream_IO::AsyncStream* SerialStream;
 struct Process {
 	void Pause() const {
 		for (PinListener const *H : ActiveInterrupts)
@@ -213,7 +213,7 @@ protected:
 		  while (--TimesLeft)
 			  if (StartModule->Start(FinishCallback))
 				  return;
-		  SerialStream.AsyncInvoke(static_cast<uint8_t>(UID::PortC_ProcessFinished), this);
+		  SerialStream->AsyncInvoke(static_cast<uint8_t>(UID::PortC_ProcessFinished), this);
 		}
 	};
 
@@ -1289,7 +1289,7 @@ struct SerialMessage : _InstantaneousModule {
 	  : _InstantaneousModule(Container) {
 	}
 	void Restart() override {
-		SerialStream.AsyncInvoke(static_cast<uint8_t>(UID::PortC_Signal), &Container, Message);
+		SerialStream->AsyncInvoke(static_cast<uint8_t>(UID::PortC_Signal), &Container, Message);
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
@@ -1363,7 +1363,7 @@ protected:
 	std::move_only_function<void() const> const *FinishCallback = &_EmptyCallback;
 	void _Restart() {
 		Abort();
-		SerialStream.AsyncInvoke(static_cast<uint8_t>(UID::PortC_TrialStart), &Container, TrialID);
+		SerialStream->AsyncInvoke(static_cast<uint8_t>(UID::PortC_TrialStart), &Container, TrialID);
 	}
 };
 template<UID TrialID, typename Content>

@@ -1,22 +1,21 @@
-classdef TemporaryCallbackOff
-	%TEMPORARYCALLBACKOFF 此处显示有关此类的摘要
-	%   此处显示详细说明
-
+classdef TemporaryCallbackOff<handle
+	%构造此对象以临时关闭串口回调。此对象析构时恢复构造时的回调状态。
 	properties
-		Property1
+		Serial
+		Callback
 	end
-
 	methods
-		function obj = TemporaryCallbackOff(inputArg1,inputArg2)
-			%TEMPORARYCALLBACKOFF 构造此类的实例
-			%   此处显示详细说明
-			obj.Property1 = inputArg1 + inputArg2;
+		function obj = TemporaryCallbackOff(Serial)
+			obj.Serial=Serial;
+			if Serial.BytesAvailableFcnMode=="off"
+				obj.Callback={'off'};
+			else
+				obj.Callback={Serial.BytesAvailableFcnMode,Serial.BytesAvailableFcnCount,Serial.BytesAvailableFcn};
+				Serial.configureCallback('off');
+			end
 		end
-
-		function outputArg = method1(obj,inputArg)
-			%METHOD1 此处显示有关此方法的摘要
-			%   此处显示详细说明
-			outputArg = obj.Property1 + inputArg;
+		function delete(obj)
+			obj.Serial.configureCallback(obj.Callback{:});
 		end
 	end
 end

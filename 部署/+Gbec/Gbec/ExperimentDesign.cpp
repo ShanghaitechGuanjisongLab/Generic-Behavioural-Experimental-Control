@@ -44,8 +44,8 @@ template<uint8_t Seconds>
 using DelaySeconds = Delay<ConstantDuration<std::chrono::seconds, Seconds>>;
 
 // 注意RepeatEvery和UntilDuration的时间单位必须统一
-template<uint16_t FrequencyHz, uint16_t Microseconds>
-using Tone = typename RepeatEvery<ConstantDuration<std::chrono::microseconds, 1000000 / FrequencyHz>, DigitalToggle<PassiveBuzzer>>::template UntilDuration<ConstantDuration<std::chrono::microseconds, Microseconds>>;
+template<uint16_t FrequencyHz, uint16_t Milliseconds>
+using Tone = typename RepeatEvery<ConstantDuration<std::chrono::microseconds, 1000000 / FrequencyHz>, DigitalToggle<PassiveBuzzer>>::template UntilDuration<ConstantDuration<std::chrono::microseconds, Milliseconds * 1000>>;
 
 using CalmDown = Sequential<MonitorRestart, Delay5To10, ModuleAbort<MonitorRestart>, ModuleRandomize<Delay5To10>>;
 
@@ -56,7 +56,7 @@ std::unordered_map<UID, bool (*)(Process*, uint16_t, uint16_t&)> SessionMap = {
   { UID::Test_BlueLed, Session<PinFlash<BlueLed, 200>> },
   { UID::Test_WaterPump, Session<PinFlash<WaterPump, 150>> },
   { UID::Test_CapacitorReset, Session<Sequential<DigitalWrite<CapacitorVdd, LOW>, Delay<ConstantDuration<std::chrono::milliseconds, 100>>, DigitalWrite<CapacitorVdd, HIGH>>> },
-  { UID::Test_CapacitorMonitor, Session<Sequential<DigitalWrite<CapacitorVdd, HIGH>, MonitorPin<CapacitorOut, SerialMessage<UID::Event_Capacitor>>>> },
+  { UID::Test_CapacitorMonitor, Session<Sequential<DigitalWrite<CapacitorVdd, HIGH>, MonitorPin<CapacitorOut, SerialMessage<UID::Event_MonitorHit>>>> },
   { UID::Test_CD1, Session<PinFlash<CD1, 200>> },
   { UID::Test_ActiveBuzzer, Session<PinFlash<ActiveBuzzer, 200>> },
   { UID::Test_AirPump, Session<PinFlash<AirPump, 200>> },

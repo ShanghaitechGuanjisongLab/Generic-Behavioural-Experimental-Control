@@ -3,7 +3,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 	properties(SetAccess=protected,Transient)
 		Serial
 	end
-	properties(SetAccess=immutable,GetAccess=protected)
+	properties(Access=protected)
 		Listeners
 	end
 	properties
@@ -14,29 +14,6 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 		MaxRetryTimes(1,1)uint8=3
 	end
 	methods(Access=protected)
-		function Data=ReadBytes(obj,NumBytes)
-			Data=obj.Serial.read(NumBytes,'uint8');
-			NumRead=numel(Data);
-
-			%进入这个循环的概率很小，因此优先保证首次读取的性能
-			while NumRead<NumBytes
-				NewData=obj.Serial.read(NumBytes-NumRead,'uint8');
-				NumNew=numel(NewData);
-
-				%虽然每个回合扩张数组通常是不好的，但每个循环发生的概率指数递减，优先保证本次循环的性能为要
-				Data(NumRead+1:NumRead+NumNew)=NewData;
-
-				NumRead=NumRead+NumNew;
-			end
-		end
-		function Byte=ReadByte(obj)
-			Byte=obj.Serial.read(1,'uint8');
-
-			%进入循环的概率很小，优先保证首次读取性能
-			while isempty(Byte)
-				Byte=obj.Serial.read(1,'uint8');
-			end
-		end
 		function PortForward(obj,Port,MessageSize)
 			%将消息转发到指定端口的监听器
 			if obj.Listeners.isKey(Port)
@@ -50,8 +27,8 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			if~MessageSize
 				return;
 			end
-			Port=obj.ReadByte;
-			Arguments=obj.ReadBytes(MessageSize-1);
+			Port=obj.Read;
+			Arguments=obj.Read(MessageSize-1);
 			if Port==255
 				Function(Arguments);
 				return; %不需要返回值
@@ -85,29 +62,29 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 				case 0
 					Callback(Async_stream_IO.Exception.Corrupted_object_received);
 				case 1
-					Callback(Async_stream_IO.Exception(obj.ReadByte));
+					Callback(Async_stream_IO.Exception(obj.Read));
 				otherwise
-					Exception=Async_stream_IO.Exception(obj.ReadByte);
+					Exception=Async_stream_IO.Exception(obj.Read);
 					if Exception==Async_stream_IO.Exception.Success
 						%如果是成功的，读取返回值并调用回调函数
-						Callback(obj.ReadBytes(MessageSize-1));
+						Callback(obj.Read(MessageSize-1));
 					else
 						%否则抛出异常
-						obj.ReadBytes(MessageSize-1); %读取剩余字节以避免阻塞
+						obj.Read(MessageSize-1); %读取剩余字节以避免阻塞
 						Callback(Exception);
 					end
 			end
 		end
 		function AllocateListener(obj,Port,MessageSize)
-			obj.ReadBytes(MessageSize); %读取消息内容以避免阻塞
+			obj.Read(MessageSize); %读取消息内容以避免阻塞
 			Async_stream_IO.Exception.Message_received_on_allocated_port.Warn(sprintf('Port %u, MessageSize %u',Port,MessageSize));
 		end
 		function ExecuteTransactionsInQueue(obj,varargin)
 			while obj.Serial.NumBytesAvailable
-				if obj.ReadByte==Async_stream_IO.IAsyncStream.MagicByte
+				if obj.Read==Async_stream_IO.IAsyncStream.MagicByte
 					%读取端口号
-					GetPort=obj.ReadByte;
-					obj.PortForward(GetPort,obj.ReadByte);
+					GetPort=obj.Read;
+					obj.PortForward(GetPort,obj.Read);
 				end
 			end
 		end
@@ -122,7 +99,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 				end
 			end
 		end
-		function InterruptRetry(obj,~,ErrorData)
+		function InterruptRetry(obj,~)
 			Suffix="/"+string(obj.MaxRetryTimes)+"次";
 			SerialPort=obj.Serial.Port;
 			BaudRate=obj.Serial.BaudRate;
@@ -144,10 +121,11 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 				end
 			end
 			if ReconnectFail
-				obj.notify('ConnectionInterrupted',ErrorData);
+				obj.notify('ConnectionInterrupted');
+			else
+				disp("重新连接成功");
+				obj.notify('ConnectionReset');
 			end
-			disp("重新连接成功");
-			obj.notify('ConnectionReset');
 		end
 	end
 	methods
@@ -210,8 +188,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 				Callback=varargin{2};
 				varargin(1:2)=[];
 			else
-				Arguments=cellfun(@(x)typecast(x(:),'uint8'),varargin,UniformOutput=false);
-				obj.Send(vertcat(0xff,Arguments{:}),RemotePort);
+				obj.Send(ArgumentSerialize(0xff,varargin{:}),RemotePort);
 				return; %不需要监听返回值
 			end
 			WeakReference=matlab.lang.WeakReference(obj);
@@ -325,12 +302,13 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 				WeakReference=matlab.lang.WeakReference(obj);
 				obj.Serial.configureCallback('byte',1,@(~,~)WeakReference.Handle.ExecuteTransactionsInQueue);
 			else
+				TCO=Async_stream_IO.TemporaryCallbackOff(obj.Serial);
 				ListeningPort=varargin{1};
 				while true
-					if obj.ReadByte==Async_stream_IO.IAsyncStream.MagicByte
+					if obj.Read==Async_stream_IO.IAsyncStream.MagicByte
 						%读取端口号
-						GetPort=obj.ReadByte;
-						MessageSize=obj.ReadByte;
+						GetPort=obj.Read;
+						MessageSize=obj.Read;
 						if GetPort==ListeningPort
 							%如果端口号匹配，返回消息字节数
 							PB=MessageSize;
@@ -411,16 +389,21 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			% Return(:,1)uint8，远程函数的返回值。如果远程函数没有返回值，将返回空数组。
 			%See also Async_stream_IO.AsyncSerialStream.AsyncInvoke
 			LocalPort=obj.AllocatePort_;
-			Arguments=cellfun(@(x)typecast(x(:),'uint8'),varargin,UniformOutput=false);
-			obj.Send(vertcat(LocalPort,Arguments{:}),RemotePort);
+			TCO=Async_stream_IO.TemporaryCallbackOff(obj.Serial);
+			obj.Send(ArgumentSerialize(LocalPort,varargin{:}),RemotePort);
 			MessageSize=obj.Listen(LocalPort);
 			if MessageSize<1
 				Async_stream_IO.Exception.Corrupted_object_received.Throw(sprintf('RemotePort %u, LocalPort %u, MessageSize %u',RemotePort,LocalPort,MessageSize));
 			end
-			Exception=Async_stream_IO.Exception(obj.ReadByte);
-			Return=obj.ReadBytes(MessageSize-1);
+			Exception=Async_stream_IO.Exception(obj.Read);
 			if Exception~=Async_stream_IO.Exception.Success
 				Exception.Throw(sprintf('RemotePort %u, LocalPort %u, MessageSize %u',RemotePort,LocalPort,MessageSize));
+			end
+			MessageSize=MessageSize-1;
+			if MessageSize
+				Return=obj.Read(MessageSize);
+			elseif nargout
+				Async_stream_IO.Exception.Remote_function_have_no_return.Throw;
 			end
 		end
 		function Data=Read(obj,varargin)
@@ -448,7 +431,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			%See also Async_stream_IO.AsyncSerialStream.Listen
 			Number=1;
 			Type='uint8';
-			for V=numel(varargin)
+			for V=1:numel(varargin)
 				Arg=varargin{V};
 				if isnumeric(Arg)
 					Number=Arg;
@@ -456,19 +439,31 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 					Type=Arg;
 				end
 			end
+			Type64=Type=="uint64";
+			if Type64
+				Type='uint32';
+				Number=Number*2;
+			end
 			Data=obj.Serial.read(Number,Type);
-			NumRead=numel(Data);
-
-			%进入这个循环的概率很小，因此优先保证首次读取的性能
-			while NumRead<Number
-				NewData=obj.Serial.read(Number-NumRead,Type);
-				NumNew=numel(NewData);
-
-				%虽然每个回合扩张数组通常是不好的，但每个循环发生的概率指数递减，优先保证本次循环的性能为要
-				Data(NumRead+1:NumRead+NumNew)=NewData;
-
-				NumRead=NumRead+NumNew;
+			if numel(Data)<Number
+				Async_stream_IO.Exception.Serial_not_respond_in_time.Throw;
+			end
+			if Type64
+				Data=typecast(uint32(Data),'uint64');
+			else
+				Data=cast(Data,Type);
 			end
 		end
+		function delete(obj)
+			delete(obj.Serial);
+		end
 	end
+end
+function Bytes=ArgumentSerialize(varargin)
+for V=1:nargin
+	varargin{V}=typecast(varargin{V}(:),'uint8');
+	%typecast总有可能返回行向量（例如输入是标量），必须全部统一成列向量
+	varargin{V}=varargin{V}(:);
+end
+Bytes=vertcat(varargin{:});
 end

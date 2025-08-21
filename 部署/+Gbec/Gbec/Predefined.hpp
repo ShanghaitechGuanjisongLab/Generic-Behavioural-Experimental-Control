@@ -119,7 +119,7 @@ template<typename... T>
 inline static void InfoWrite(std::ostringstream &InfoStream, T... InfoValues) {
 	int _[] = { (InfoWrite(InfoStream, InfoValues), 0)... };
 }
-extern Async_stream_IO::AsyncStream* SerialStream;
+extern Async_stream_IO::AsyncStream *SerialStream;
 struct Process {
 	void Pause() const {
 		for (PinListener const *H : ActiveInterrupts)
@@ -191,7 +191,7 @@ struct Process {
 	// 获取当前或上一个执行模块及其关联模块的所有信息
 	std::string GetInfo() const {
 		std::ostringstream InfoStream;
-		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_StartModule, UID::Type_Pointer, StartPointer, UID::Field_Modules, UID::Type_Map, static_cast<uint8_t>(Modules.size()), UID::Type_Pointer,UID::Type_Struct);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_StartModule, UID::Type_Pointer, StartPointer, UID::Field_Modules, UID::Type_Map, static_cast<uint8_t>(Modules.size()), UID::Type_Pointer, UID::Type_Struct);
 		for (auto const &Iterator : Modules) {
 			InfoWrite(InfoStream, Iterator.first);
 			Iterator.second->WriteInfo(InfoStream);
@@ -383,6 +383,7 @@ struct Sequential : Module {
 	bool Start(std::move_only_function<void() const> const &FC) override {
 		Abort();
 		for (CurrentModule = std::cbegin(SubPointers); CurrentModule < std::cend(SubPointers); ++CurrentModule)
+		{
 			if ((*CurrentModule)->Start(NextBlock)) {
 				NextBlock = [this, &FC]() {
 					while (++CurrentModule < std::cend(SubPointers))
@@ -392,6 +393,7 @@ struct Sequential : Module {
 				};
 				return true;
 			}
+		}
 		return false;
 	}
 	static UID const ID;
@@ -579,7 +581,7 @@ struct Delay : _Delay {
 	  : _Delay(Container) {
 	}
 	void Restart() override {
-		_TimedModule::Restart();
+		_Delay::Restart();//不能用_TimedModule，调不到_Delay版本
 		_TimedModule::Timer->DoAfter(DurationPtr->Current, FinishCallback);
 	}
 	static UID const ID;
@@ -598,7 +600,7 @@ struct Delay<ConstantDuration<Unit, Value>> : _Delay {
 	  : _Delay(Container) {
 	}
 	void Restart() override {
-		_TimedModule::Restart();
+		_Delay::Restart();//不能用_TimedModule，调不到_Delay版本
 		_TimedModule::Timer->DoAfter(Unit{ Value }, FinishCallback);
 	}
 	static UID const ID;

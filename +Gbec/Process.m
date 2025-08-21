@@ -8,16 +8,22 @@ classdef Process<handle
 		Pointer
 	end
 	methods(Access=protected,Static)
-		function ThrowResult(Result)
-			Result=Gbec.UID(Result);
-			if Result~=Gbec.UID.Exception_Success
-				Result.Throw;
-			end
-		end
 		function WarnResult(Result)
 			Result=Gbec.UID(Result);
 			if Result~=Gbec.UID.Exception_Success
 				Result.Warn;
+			end
+		end
+	end
+	methods(Access=protected)
+		function ThrowResult(obj,Result)
+			Result=Gbec.UID(Result(1));
+			if Result==Gbec.UID.Exception_InvalidProcess
+				obj.Server.RefreshAllProcesses;
+				obj.delete;
+			end
+			if Result~=Gbec.UID.Exception_Success
+				Result.Throw;
 			end
 		end
 	end
@@ -40,7 +46,7 @@ classdef Process<handle
 			if nargin>1
 				obj.Pointer=cast(Pointer,Server.PointerType);
 			else
-				obj.Pointer=Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_CreateProcess);
+				obj.Pointer=typecast(Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_CreateProcess),Server.PointerType);
 			end
 			Server.AllProcesses(obj.Pointer)=matlab.lang.WeakReference(obj);
 		end
@@ -56,8 +62,39 @@ classdef Process<handle
 		function delete(obj)
 			if obj.Server.isvalid
 				obj.Server.FeedDogIfActive();
-				obj.Server.AllProcesses.remove(obj.Pointer);
-				Gbec.Process.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_DeleteProcess,obj.Pointer));
+				try
+					obj.Server.AllProcesses.remove(obj.Pointer);
+				catch ME
+					if ME.identifier~="MATLAB:dictionary:UnconfiguredRemovalNotSupported"
+						ME.rethrow;
+					end
+				end
+				try
+					obj.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_DeleteProcess,obj.Pointer));
+				catch ME
+					if all(ME.identifier~=["Async_stream_IO:Exception:Serial_not_respond_in_time","Gbec:UID:Exception_InvalidProcess","MATLAB:class:InvalidHandle"])
+						ME.rethrow;
+					end
+				end
+			end
+		end
+		function V=IsValid(obj)
+			%检查当前进程是否有效
+			V=obj.isvalid;
+			if~V
+				return;
+			end
+			V=obj.Server.isvalid;
+			if~V
+				return;
+			end
+			V=obj.Server.AllProcesses.numEntries;
+			if~V
+				return;
+			end
+			V=obj.Server.AllProcesses.isKey(V);
+			if~V
+				return;
 			end
 		end
 	end

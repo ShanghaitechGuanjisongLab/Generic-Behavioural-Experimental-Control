@@ -4,7 +4,7 @@ if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server'))
 end
 %[text] # 在下方输入会话设置
 %[text] 串口号
-BOX1.Initialize('BOX1',9600);
+BOX1.Initialize('COM3',9600);
 if~(exist('Formal3','var')&&Formal3.Server==BOX1)
 	Formal3=Gbec.Formal(BOX1);
 	Formal3.LogName='BOX1';

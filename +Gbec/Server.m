@@ -55,7 +55,7 @@ classdef Server<handle
 	methods
 		function obj=Server(SerialCountdown)
 			arguments
-				SerialCountdown=minutes(3)
+				SerialCountdown=minutes(4)
 			end
 			disp(['通用行为实验控制器' Gbec.Version().Me ' by 张天夫']);
 			WeakReference=matlab.lang.WeakReference(obj);
@@ -78,17 +78,26 @@ classdef Server<handle
 			obj.SerialCountdown.stop;
 			if isa(varargin{1},'Async_stream_IO.IAsyncStream')
 				obj.AsyncStream=varargin{1};
-			elseif~isempty(obj.AsyncStream)&&obj.AsyncStream.isvalid&&obj.AsyncStream.CheckArguments(varargin{:})
-				obj.SerialCountdown.start;
-				return;
 			else
-				obj.AsyncStream=Async_stream_IO.AsyncSerialStream(varargin{:});
+				HasOld=~isempty(obj.AsyncStream)&&obj.AsyncStream.isvalid&&obj.AsyncStream.CheckArguments(varargin{:});
+				if HasOld
+					try
+						obj.AsyncStream.Serial.NumBytesAvailable;
+					catch ME
+						if ME.identifier=="transportlib:transport:invalidConnectionState"
+							HasOld=false;
+						else
+							ME.rethrow;
+						end
+					end
+				end
+				if~HasOld
+					obj.AllProcesses=dictionary;
+					obj.AsyncStream=Async_stream_IO.AsyncSerialStream(varargin{:});
+					obj.AsyncStream.Serial.Timeout=1;
+					obj.AsyncStream.Listen(Gbec.UID.PortC_ImReady);
+				end
 			end
-			while(~obj.AsyncStream.SyncInvoke(uint8(Gbec.UID.PortA_IsReady)))
-			end
-			obj.PointerSize=obj.AsyncStream.SyncInvoke(uint8(Gbec.UID.PortA_PointerSize));
-			obj.PointerType="uint"+string(obj.PointerSize*8);
-			obj.AsyncStream.AsyncInvoke(uint8(Gbec.UID.PortA_RandomSeed),randi([0,intmax('uint32')],'uint32'));
 			WeakReference=matlab.lang.WeakReference(obj);
 			obj.AsyncStream.BindFunctionToPort(@(Arguments)WeakReference.Handle.ProcessForward(Arguments,"ProcessFinished_"),Gbec.UID.PortC_ProcessFinished);
 			obj.AsyncStream.BindFunctionToPort(@(Arguments)WeakReference.Handle.ProcessForward(Arguments,"Signal_"),Gbec.UID.PortC_Signal);
@@ -98,21 +107,33 @@ classdef Server<handle
 				obj.Name=formattedDisplayText(varargin);
 			end
 			obj.ConnectionInterruptedListener=event.listener(obj.AsyncStream,'ConnectionInterrupted',@(~,EventData)WeakReference.Handle.ConnectionInterruptedHandler(EventData));
+			obj.PointerSize=obj.AsyncStream.SyncInvoke(Gbec.UID.PortA_PointerSize);
+			obj.PointerType="uint"+string(obj.PointerSize*8);
+			obj.AsyncStream.AsyncInvoke(Gbec.UID.PortA_RandomSeed,randi([0,intmax('uint32')],'uint32'));
 			obj.SerialCountdown.start;
 		end
 		function RefreshAllProcesses(obj)
 			%刷新AllProcesses属性
 			%此方法会清除AllProcesses属性并重新获取当前所有进程。通常不需要调用此方法，因为Server会自动维护AllProcesses属性。调用此方法后，所有之前的Process对象不会再收到消息；要继续接收消息，必须重新获取Process对象。
 			Port=obj.AsyncStream.AllocatePort;
+			TCO=Async_stream_IO.TemporaryCallbackOff(obj.AsyncStream.Serial);
 			obj.AsyncStream.Send(Port,Gbec.UID.PortA_AllProcesses);
-			MessageSize=obj.AsyncStream.Listen(Port);
-			for P=0:obj.PointerSize:MessageSize-1
+			NewDict=dictionary;
+			for P=0:int8(obj.PointerSize):int8(obj.AsyncStream.Listen(Port))-1
 				Pointer=obj.AsyncStream.Read(obj.PointerType);
-				if~obj.AllProcesses.isKey(Pointer)
-					obj.AllProcesses(Pointer)=matlab.lang.WeakReference;
+				if obj.AllProcesses.isKey(Pointer)
+					NewDict(Pointer)=obj.AllProcesses(Pointer);
+				else
+					NewDict(Pointer)=matlab.lang.WeakReference;
 				end
 			end
+			obj.AllProcesses=NewDict;
 			obj.FeedDogIfActive();
+		end
+		function delete(obj)
+			warning off MATLAB:timer:deleterunning;
+			delete(obj.SerialCountdown);
+			delete(obj.ConnectionInterruptedListener);
 		end
 	end
 end

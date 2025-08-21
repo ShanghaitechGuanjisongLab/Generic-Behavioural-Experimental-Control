@@ -40,19 +40,18 @@ bool CommonListenersHeader(uint8_t& MessageSize, GbecHeader& Header) {
 }
 
 void setup() {
-	pinMode(8, OUTPUT);
-	digitalWrite(8, HIGH);
+	pinMode(6, OUTPUT);
 	Serial.begin(9600);
 	Serial.setTimeout(-1);
 	SerialStream = new Async_stream_IO::AsyncStream{ Serial };
 	BindFunctionToPort([]() {
-		return true;
-	},
-	                   UID::PortA_IsReady);
-	BindFunctionToPort([]() {
 		return static_cast<uint8_t>(sizeof(void const*));
 	},
 	                   UID::PortA_PointerSize);
+	BindFunctionToPort([]() {
+		return true;
+	},
+	                   UID::PortA_IsReady);
 #ifdef ARDUINO_ARCH_AVR
 	BindFunctionToPort(std::ArduinoUrng::seed,
 	                   UID::PortA_RandomSeed);
@@ -149,6 +148,7 @@ void setup() {
 			Session << P;
 	},
 	             UID::PortA_AllProcesses);
+	SerialStream->Send(nullptr, 0, static_cast<uint8_t>(UID::PortC_ImReady));
 }
 void loop() {
 	PinListener::ClearPending();

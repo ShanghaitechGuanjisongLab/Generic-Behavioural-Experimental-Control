@@ -13,6 +13,8 @@ namespace Async_stream_IO
 		Function_runtime_error,
 		Message_received_on_allocated_port,
 		Unlistened_port_received_message,
+		Remote_function_have_no_return,
+		Serial_not_respond_in_time,
 	};
 	// 构造此临时对象以禁用中断并保存状态。当前作用域退出时，此对象析构并恢复之前的中断状态。
 	struct InterruptGuard

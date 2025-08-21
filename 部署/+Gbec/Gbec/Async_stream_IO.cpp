@@ -34,7 +34,6 @@ namespace Async_stream_IO {
 	}
 	SendSession::SendSession(uint8_t Length, uint8_t ToPort, Stream& BaseStream)
 		: BaseStream(BaseStream) {
-		BaseStream.setTimeout(-1);
 		BaseStream.write(MagicByte);
 		BaseStream.write(ToPort);
 		BaseStream.write(Length);

@@ -13,8 +13,8 @@ enum class UID : uint8_t {
 	PortA_GetInformation,
 	PortA_DeleteProcess,
 	PortA_AllProcesses,
-	PortA_IsReady,
 	PortA_RandomSeed,
+	PortA_IsReady,
 
 	//Computer提供的服务端口
 
@@ -22,6 +22,7 @@ enum class UID : uint8_t {
 	PortC_Signal,
 	PortC_TrialStart,
 	PortC_Exception,
+	PortC_ImReady,
 
 	Exception_Success,
 	Exception_InvalidProcess,
@@ -89,15 +90,26 @@ enum class UID : uint8_t {
 	State_Idle,
 
 	Event_TrialStart,
-	Event_Capacitor,
+	Event_MonitorHit,
+	Event_MonitorMiss,
 	Event_ProcessPaused,
-	Event_ProcessContinued,
+	Event_ProcessContinue,
 	Event_ProcessAborted,
 	Event_AudioUp,
 	Event_AudioDown,
 	Event_LightUp,
 	Event_LightDown,
 	Event_Water,
+	Event_AirPuff,
+	Event_HitCount,
+	Event_HFImage,
+	Event_LFImage,
+	Event_Optogenetic,
+	Event_Image,
+	Event_LowUp,
+	Event_LowDown,
+	Event_HighUp,
+	Event_HighDown,
 
 	Test_BlueLed,
 	Test_WaterPump,

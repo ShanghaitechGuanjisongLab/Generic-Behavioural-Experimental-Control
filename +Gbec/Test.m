@@ -17,7 +17,7 @@ classdef Test<Gbec.Process
 			end
 			obj.Server.FeedDogIfActive();
 			fprintf('%s×%u……\n',TestID,NumTimes);
-			Gbec.Process.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_StartModule,obj.Pointer,TestID,NumTimes));
+			obj.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_StartModule,obj.Pointer,TestID,NumTimes));
 		end
 		function OneEnterOneCheck(obj,TestID,Prompt)
 			arguments
@@ -28,7 +28,7 @@ classdef Test<Gbec.Process
 			obj.Server.FeedDogIfActive();
 			while input(Prompt,"s")==""
 				obj.Server.FeedDogIfActive();
-				Gbec.Process.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_StartModule,obj.Pointer,TestID,1));
+				obj.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_StartModule,obj.Pointer,TestID,0x001));
 			end
 		end
 		function StartCheck(obj,TestID)
@@ -38,15 +38,16 @@ classdef Test<Gbec.Process
 			end
 			obj.Server.FeedDogIfActive();
 			fprintf('%s……\n',TestID);
-			Gbec.Process.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_StartModule,obj.Pointer,TestID,1));
+			obj.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_StartModule,obj.Pointer,TestID,0x001));
 		end
 		function StopCheck(obj)
 			obj.Server.FeedDogIfActive();
-			Gbec.Process.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_AbortProcess,obj.Pointer));
+			obj.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_AbortProcess,obj.Pointer));
 			disp('测试结束');
 		end
-		function Signal(~,Message)
+		function Signal_(obj,Message)
 			persistent Count
+			obj.Server.FeedDogIfActive;
 			if isempty(Count)
 				Count = 0;
 			end

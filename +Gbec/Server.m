@@ -103,6 +103,7 @@ classdef Server<handle
 			obj.AsyncStream.BindFunctionToPort(@(Arguments)WeakReference.Handle.ProcessForward(Arguments,"Signal_"),Gbec.UID.PortC_Signal);
 			obj.AsyncStream.BindFunctionToPort(@(Arguments)WeakReference.Handle.ProcessForward(Arguments,"TrialStart_"),Gbec.UID.PortC_TrialStart);
 			obj.AsyncStream.BindFunctionToPort(@(Arguments)Gbec.UID(Arguments).Throw,Gbec.UID.PortC_Exception);
+			obj.AsyncStream.BindFunctionToPort(@(Arguments)typecast(Arguments,'uint16'),Gbec.UID.PortC_Debug);
 			if ismissing(obj.Name)
 				obj.Name=formattedDisplayText(varargin);
 			end

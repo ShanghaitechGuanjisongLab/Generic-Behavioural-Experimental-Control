@@ -23,6 +23,7 @@ enum class UID : uint8_t {
 	PortC_TrialStart,
 	PortC_Exception,
 	PortC_ImReady,
+	PortC_Debug,
 
 	Exception_Success,
 	Exception_InvalidProcess,

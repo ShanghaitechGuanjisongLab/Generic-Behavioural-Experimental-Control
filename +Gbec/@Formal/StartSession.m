@@ -23,7 +23,7 @@ if isfile(obj.SavePath)
 			movefile(obj.SavePath,fullfile(Directory,Filename+".将合并.mat"));
 		catch ME
 			if questdlg('合并失败，是否要覆盖文件？',ME.identifier,'是','否','否')=="否"
-				obj.FeedDog;
+				obj.Server.FeedDogIfActive;
 				obj.LogPrint("取消会话");
 				return;
 			else

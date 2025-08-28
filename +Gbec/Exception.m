@@ -37,5 +37,6 @@ classdef Exception<MATLAB.Lang.IEnumerableException
 		Process_not_idle
 		Process_not_running
 		Process_not_paused
+		Fail_to_merge_existing_dataset
 	end
 end

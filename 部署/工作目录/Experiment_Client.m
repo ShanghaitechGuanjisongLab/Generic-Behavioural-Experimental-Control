@@ -1,19 +1,19 @@
 %[text] 将本文件中的“BOX1”替换成任何自定义名称，可以同时在工作区中存在多个Server和Formal对象，以在本MATLAB会话中同时执行多个实验会话，甚至从同一个COM口（开发板）同时运行多个实验
-if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server'))
+if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid)
 	BOX1=Gbec.Server;
 end
 %[text] # 在下方输入会话设置
 %[text] 串口号
-BOX1.Initialize('COM3',9600);
-if~(exist('Formal3','var')&&Formal3.Server==BOX1)
+BOX1.Initialize('COM4',9600);
+if~(exist('Formal3','var')&&Formal3.IsValid&&Formal3.Server==BOX1)
 	Formal3=Gbec.Formal(BOX1);
 	Formal3.LogName='BOX1';
 end
 %[text] 选择要运行的会话
-Formal3.SessionUID=Gbec.UID.Session_AudioWater;
-SessionName=char(Formal3.SessionUID);
+Formal3.SessionID=Gbec.UID.Session_AudioWater;
+SessionName=char(Formal3.SessionID);
 %[text] 设置实验基本信息
-Formal3.Mouse='yqn0204';
+Formal3.Mouse='假🐀';
 Formal3.DateTime=datetime;
 %[text] 是否要在每次实验（第一次除外）后监控行为曲线；若无需监控可设为false。若设为true，必须安装[统一实验分析作图](https://github.com/ShanghaitechGuanjisongLab/Unified-Experimental-Analysis-and-Figuring/releases)工具箱。
 if true
@@ -21,7 +21,7 @@ if true
 else
 	Filename=sprintf('D:\\张天夫\\%s.%s.%s',Formal3.Mouse,char(Formal3.DateTime,'yyyyMMddHHmm'),SessionName(9:end));
 end
-Formal3.SavePath=strcat(Filename,'.行为.UniExp.mat');
+Formal3.SavePath=strcat(Filename,'.行为.UniExp.mat'); %[output:24af404a] %[output:1e340892]
 %[text] 是否要在每次会话结束后展示事件记录图，如不设置则将此属性设为空；如设置，必须安装[统一实验分析作图](https://github.com/ShanghaitechGuanjisongLab/Unified-Experimental-Analysis-and-Figuring/releases)工具箱。
 %[text] 此属性是一个元胞数组，分别代表要用于标志回合的事件、每个回合相对于标志事件的时间范围、要排除不作图的事件
 Formal3.TepArguments={["灯光亮","声音响"],seconds([-5,20]),'ExcludedEvents',["灯光灭","错失","命中","回合开始","声音停"]};
@@ -88,4 +88,10 @@ clearvars Formal3;
 %---
 %[metadata:view]
 %   data: {"layout":"inline","rightPanelPercent":40}
+%---
+%[output:24af404a]
+%   data: {"dataType":"text","outputData":{"text":"\nBOX1：目标文件已存在，将尝试合并","truncated":false}}
+%---
+%[output:1e340892]
+%   data: {"dataType":"error","outputData":{"errorType":"runtime","text":"错误使用 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Gbec.Formal\/set.SavePath', 'D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\@Formal\\Formal.m', 133)\" style=\"font-weight:bold\">Gbec.Formal\/set.SavePath<\/a> (<a href=\"matlab: opentoline('D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\@Formal\\Formal.m',133,0)\">第 133 行<\/a>)\nGbec:Exception:Fail_to_merge_existing_dataset"}}
 %---

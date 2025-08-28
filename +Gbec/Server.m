@@ -129,7 +129,7 @@ classdef Server<handle
 				end
 			end
 			obj.AllProcesses=NewDict;
-			obj.FeedDogIfActive();
+			obj.Server.FeedDogIfActive();
 		end
 		function delete(obj)
 			warning off MATLAB:timer:deleterunning;

@@ -7,7 +7,7 @@
 %[text] ## 返回值
 %[text] Information(1,1)struct，信息结构体
 function Information = GetInformation(obj)
-obj.FeedDogIfActive;
+obj.Server.FeedDogIfActive;
 AsyncStream=obj.Server.AsyncStream;
 LocalPort=AsyncStream.AllocatePort;
 AsyncStream.BeginSend(Gbec.UID.PortA_GetInfo,obj.Server.PointerSize+1);

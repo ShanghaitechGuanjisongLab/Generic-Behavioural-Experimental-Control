@@ -1,6 +1,6 @@
 %[text] 获取并保存上次运行的会话信息到SaveFile文件。
 function SaveInformation(obj)
-obj.FeedDogIfActive;
+obj.Server.FeedDogIfActive;
 DateTimes=table;
 DateTimes.DateTime=obj.DateTime;
 DateTimes.Mouse=categorical(obj.Mouse);

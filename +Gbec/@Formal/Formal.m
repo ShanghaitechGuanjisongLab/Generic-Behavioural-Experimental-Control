@@ -130,7 +130,7 @@ classdef Formal<Gbec.Process
 						if questdlg('合并失败，是否要覆盖文件？',ME.identifier,'是','否','否')=="是"
 							obj.OverwriteExisting=true;
 						else
-							Gbec.Exception.Failure_to_merge_existing_dataset.Throw;
+							Gbec.Exception.Fail_to_merge_existing_dataset.Throw;
 						end
 					end
 				end

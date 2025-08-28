@@ -77,7 +77,7 @@ void setup() {
 				return { UID::Exception_InvalidModule };
 			P->TrialsDone.clear();
 			uint16_t NumTrials;
-			if (Iterator->second(P, Times, NumTrials))
+			if (!Iterator->second(P, Times, NumTrials)) 
 				SerialStream->AsyncInvoke(static_cast<uint8_t>(UID::PortC_ProcessFinished), P);
 			return { UID::Exception_Success, NumTrials };
 		}
@@ -102,7 +102,7 @@ void setup() {
 			TrialsDone[TrialID] = SerialStream->Read<uint16_t>();
 		}
 		uint16_t NumTrials;
-		bool const ProcessFinished = Iterator->second(Header.P, 1, NumTrials);
+		bool const ProcessFinished = !Iterator->second(Header.P, 1, NumTrials);
 		SerialStream->Send(UID::Exception_Success, Header.RemotePort);
 		if (ProcessFinished)
 			SerialStream->AsyncInvoke(static_cast<uint8_t>(UID::PortC_ProcessFinished), Header.P);

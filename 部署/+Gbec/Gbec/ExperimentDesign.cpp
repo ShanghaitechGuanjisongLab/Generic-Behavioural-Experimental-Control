@@ -49,7 +49,7 @@ using Tone = typename RepeatEvery<ConstantDuration<std::chrono::microseconds, 10
 
 using CalmDown = Sequential<MonitorRestart, Delay5To10, ModuleAbort<MonitorRestart>, ModuleRandomize<Delay5To10>>;
 
-using AudioWater = Trial<UID::Trial_AudioWater, Sequential<CalmDown, PinFlashUpDown<ActiveBuzzer, 200, UID::Event_AudioUp, UID::Event_AudioDown>, DelayMilliseconds<800>, PinFlashUp<WaterPump, 150, UID::Event_Water>, DelaySeconds<20>>>;
+using AudioWater = Trial<UID::Trial_AudioWater, Sequential< DelayMilliseconds<800>,  DelaySeconds<20>>>;
 
 // 列出所有公开模块，允许PC端调用
 std::unordered_map<UID, bool (*)(Process*, uint16_t, uint16_t&)> SessionMap = {

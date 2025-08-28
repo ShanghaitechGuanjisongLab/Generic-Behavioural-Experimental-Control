@@ -196,7 +196,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			Arguments=cellfun(@(x)typecast(x(:),'uint8'),varargin,UniformOutput=false);
 			obj.Send(vertcat(LocalPort,Arguments{:}),RemotePort);
 		end
-		function BeginSend(ToPort,NumBytes)
+		function BeginSend(obj,ToPort,NumBytes)
 			%准备开始分多次写入总字节数已知的单个报文
 			% 调用此方法后，可以使用le运算符（<=）向单个报文中流式写出基本数据类型，并按字节拼接，总字节数必须恰好为指定的报文大小。使用typecast转换到uint8可以检查每
 			%  个输入数据实际占用字节数。
@@ -209,6 +209,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			% NumBytes(1,1)uint8，要写入的总字节数
 			%See also Async_stream_IO.AsyncSerialStream.le typecast
 			arguments
+				obj
 				ToPort(1,1)uint8
 				NumBytes(1,1)uint8
 			end

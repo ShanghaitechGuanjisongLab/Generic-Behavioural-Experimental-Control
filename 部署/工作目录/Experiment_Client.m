@@ -1,7 +1,7 @@
 %[text] 将本文件中的“BOX1”替换成任何自定义名称，可以同时在工作区中存在多个Server和Formal对象，以在本MATLAB会话中同时执行多个实验会话，甚至从同一个COM口（开发板）同时运行多个实验
-if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid)
-	BOX1=Gbec.Server;
-end
+if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid) %[output:group:1b62f730]
+	BOX1=Gbec.Server; %[output:159adb75]
+end %[output:group:1b62f730]
 %[text] # 在下方输入会话设置
 %[text] 串口号
 BOX1.Initialize('COM4',9600);
@@ -21,7 +21,7 @@ if true
 else
 	Filename=sprintf('D:\\张天夫\\%s.%s.%s',Formal3.Mouse,char(Formal3.DateTime,'yyyyMMddHHmm'),SessionName(9:end));
 end
-Formal3.SavePath=strcat(Filename,'.行为.UniExp.mat'); %[output:24af404a] %[output:1e340892]
+Formal3.SavePath=strcat(Filename,'.行为.UniExp.mat'); %[output:76c6cd47]
 %[text] 是否要在每次会话结束后展示事件记录图，如不设置则将此属性设为空；如设置，必须安装[统一实验分析作图](https://github.com/ShanghaitechGuanjisongLab/Unified-Experimental-Analysis-and-Figuring/releases)工具箱。
 %[text] 此属性是一个元胞数组，分别代表要用于标志回合的事件、每个回合相对于标志事件的时间范围、要排除不作图的事件
 Formal3.TepArguments={["灯光亮","声音响"],seconds([-5,20]),'ExcludedEvents',["灯光灭","错失","命中","回合开始","声音停"]};
@@ -61,7 +61,7 @@ if false
 end
 %[text] 此例中，在Arduino端向串口发送UID.Host\_GratingImage即可显示图像。参见[Gbec.GratingImage](<matlab:edit Gbec.GratingImage>)
 %[text] # 然后运行脚本，在命令行窗口中执行交互
-Formal3.StartSession;
+Formal3.StartSession; %[output:81ff0f11]
 return;
 %%
 %[text] # 实时控制命令
@@ -73,7 +73,7 @@ Formal3.PauseSession;
 Formal3.ContinueSession;
 %%
 %[text] 放弃会话
-Formal3.AbortSession;
+Formal3.AbortSession; %[output:80600dc3]
 %%
 %[text] 获取信息
 Formal3.GetInformation
@@ -89,9 +89,15 @@ clearvars Formal3;
 %[metadata:view]
 %   data: {"layout":"inline","rightPanelPercent":40}
 %---
-%[output:24af404a]
+%[output:159adb75]
+%   data: {"dataType":"text","outputData":{"text":"通用行为实验控制器v6.2.1 by 张天夫\n","truncated":false}}
+%---
+%[output:76c6cd47]
 %   data: {"dataType":"text","outputData":{"text":"\nBOX1：目标文件已存在，将尝试合并","truncated":false}}
 %---
-%[output:1e340892]
-%   data: {"dataType":"error","outputData":{"errorType":"runtime","text":"错误使用 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Gbec.Formal\/set.SavePath', 'D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\@Formal\\Formal.m', 133)\" style=\"font-weight:bold\">Gbec.Formal\/set.SavePath<\/a> (<a href=\"matlab: opentoline('D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\@Formal\\Formal.m',133,0)\">第 133 行<\/a>)\nGbec:Exception:Fail_to_merge_existing_dataset"}}
+%[output:81ff0f11]
+%   data: {"dataType":"text","outputData":{"text":"\nBOX1：回合1-Trial_AudioWater：\nBOX1：会话开始，回合总数：30，将保存为：D:\\张天夫\\假🐀.AudioWater.行为.UniExp.mat\n","truncated":false}}
+%---
+%[output:80600dc3]
+%   data: {"dataType":"error","outputData":{"errorType":"runtime","text":"类 Gbec.Process 没有名为 'ThrowResult' 的常量属性或静态方法。\n\n出错 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Gbec.Formal\/AbortSession', 'D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\@Formal\\Formal.m', 220)\" style=\"font-weight:bold\">Gbec.Formal\/AbortSession<\/a> (<a href=\"matlab: opentoline('D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\@Formal\\Formal.m',220,0)\">第 220 行<\/a>)\n\t\t\tobj.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_AbortProcess,obj.Pointer));\n   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"}}
 %---

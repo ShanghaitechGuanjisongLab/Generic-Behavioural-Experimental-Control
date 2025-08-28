@@ -49,7 +49,7 @@ classdef IAsyncStream<handle
 		% ToPort(1,1)uint8，要发送到的远程端口
 		% NumBytes(1,1)uint8，要写入的总字节数
 		%See also Async_stream_IO.IAsyncStream.le typecast
-		BeginSend(ToPort,NumBytes)
+		BeginSend(obj,ToPort,NumBytes)
 
 		%将本地服务函数绑定到端口，等待远程调用。
 		%将任意可调用对象绑定端口上作为服务，当收到消息时调用。远程要调用此对象，需要将所有参数序列化拼接成一个连续的内存块，并且头部加上一个uint8的远程端口号用来接收

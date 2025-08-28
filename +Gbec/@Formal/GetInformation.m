@@ -10,12 +10,14 @@ function Information = GetInformation(obj)
 obj.Server.FeedDogIfActive;
 AsyncStream=obj.Server.AsyncStream;
 LocalPort=AsyncStream.AllocatePort;
-AsyncStream.BeginSend(Gbec.UID.PortA_GetInfo,obj.Server.PointerSize+1);
+AsyncStream.BeginSend(Gbec.UID.PortA_GetInformation,obj.Server.PointerSize+1);
 AsyncStream<=LocalPort<=obj.Pointer;
 AsyncStream.Listen(LocalPort);
 Information=CollectStruct(obj.Server);
-for K=obj.HostActions.keys.'
-	Information.(string(K))=obj.HostActions(K).GetInformation;
+if obj.HostActions.numEntries%空字典直接取键可能会出错
+	for K=obj.HostActions.keys.'
+		Information.(string(K))=obj.HostActions(K).GetInformation;
+	end
 end
 end
 function Struct=CollectStruct(Server)

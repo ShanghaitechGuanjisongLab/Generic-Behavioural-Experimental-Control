@@ -1,14 +1,14 @@
 %[text] 将本文件中的“BOX1”替换成任何自定义名称，可以同时在工作区中存在多个Server和Formal对象，以在本MATLAB会话中同时执行多个实验会话，甚至从同一个COM口（开发板）同时运行多个实验
-if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid) %[output:group:1b62f730]
-	BOX1=Gbec.Server; %[output:159adb75]
-end %[output:group:1b62f730]
+if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid)
+	BOX1=Gbec.Server;
+end
 %[text] # 在下方输入会话设置
 %[text] 串口号
 BOX1.Initialize('COM4',9600);
-if~(exist('Formal3','var')&&Formal3.IsValid&&Formal3.Server==BOX1)
-	Formal3=Gbec.Formal(BOX1);
+if~(exist('Formal3','var')&&Formal3.IsValid&&Formal3.Server==BOX1) %[output:group:8afaf86e]
+	Formal3=Gbec.Formal(BOX1); %[output:2a5cd0c7]
 	Formal3.LogName='BOX1';
-end
+end %[output:group:8afaf86e]
 %[text] 选择要运行的会话
 Formal3.SessionID=Gbec.UID.Session_AudioWater;
 SessionName=char(Formal3.SessionID);
@@ -73,7 +73,7 @@ Formal3.PauseSession;
 Formal3.ContinueSession;
 %%
 %[text] 放弃会话
-Formal3.AbortSession; %[output:80600dc3]
+Formal3.AbortSession;
 %%
 %[text] 获取信息
 Formal3.GetInformation
@@ -89,15 +89,12 @@ clearvars Formal3;
 %[metadata:view]
 %   data: {"layout":"inline","rightPanelPercent":40}
 %---
-%[output:159adb75]
-%   data: {"dataType":"text","outputData":{"text":"通用行为实验控制器v6.2.1 by 张天夫\n","truncated":false}}
+%[output:2a5cd0c7]
+%   data: {"dataType":"warning","outputData":{"text":"警告: 执行 'Gbec.CountdownExempt_' 类析构函数时，捕获到以下错误:\n)\n由于计时器已在运行，无法启动。\n\n出错 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Gbec.CountdownExempt_\/delete', 'D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\CountdownExempt_.m', 15)\" style=\"font-weight:bold\">Gbec.CountdownExempt_\/delete<\/a> (<a href=\"matlab: opentoline('D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\CountdownExempt_.m',15,0)\">第 15 行<\/a>)\n\t\t\t\tobj.Server.SerialCountdown.start;\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n出错 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('LiveEditorEvaluationHelperEeditor24A6D8C1motw', 'D:\\Users\\Administrator\\AppData\\Local\\Temp\\1\\Editor_dfaah\\LiveEditorEvaluationHelperEeditor24A6D8C1motw.m', 9)\" style=\"font-weight:bold\">LiveEditorEvaluationHelperEeditor24A6D8C1motw<\/a> (<a href=\"matlab: opentoline('D:\\Users\\Administrator\\AppData\\Local\\Temp\\1\\Editor_dfaah\\LiveEditorEvaluationHelperEeditor24A6D8C1motw.m',9,0)\">第 9 行<\/a>)\n\tFormal3=Gbec.Formal(BOX1);\n ^^^^^^^"}}
 %---
 %[output:76c6cd47]
 %   data: {"dataType":"text","outputData":{"text":"\nBOX1：目标文件已存在，将尝试合并","truncated":false}}
 %---
 %[output:81ff0f11]
 %   data: {"dataType":"text","outputData":{"text":"\nBOX1：回合1-Trial_AudioWater：\nBOX1：会话开始，回合总数：30，将保存为：D:\\张天夫\\假🐀.AudioWater.行为.UniExp.mat\n","truncated":false}}
-%---
-%[output:80600dc3]
-%   data: {"dataType":"error","outputData":{"errorType":"runtime","text":"类 Gbec.Process 没有名为 'ThrowResult' 的常量属性或静态方法。\n\n出错 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Gbec.Formal\/AbortSession', 'D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\@Formal\\Formal.m', 220)\" style=\"font-weight:bold\">Gbec.Formal\/AbortSession<\/a> (<a href=\"matlab: opentoline('D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\@Formal\\Formal.m',220,0)\">第 220 行<\/a>)\n\t\t\tobj.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_AbortProcess,obj.Pointer));\n   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"}}
 %---

@@ -70,20 +70,6 @@ void setup() {
 		return UID::Exception_InvalidProcess;
 	},
 	                   UID::PortA_DeleteProcess);
-	BindFunctionToPort([](Process* P, UID ModuleID, uint16_t Times) -> ModuleStartReturn {
-		if (ExistingProcesses.contains(P)) {
-			auto const Iterator = SessionMap.find(ModuleID);
-			if (Iterator == SessionMap.end())
-				return { UID::Exception_InvalidModule };
-			P->TrialsDone.clear();
-			uint16_t NumTrials;
-			if (!Iterator->second(P, Times, NumTrials)) 
-				SerialStream->AsyncInvoke(static_cast<uint8_t>(UID::PortC_ProcessFinished), P);
-			return { UID::Exception_Success, NumTrials };
-		}
-		return { UID::Exception_InvalidProcess };
-	},
-	                   UID::PortA_StartModule);
 	SerialListen([](uint8_t MessageSize) {
 		GbecHeader Header;
 		if (CommonListenersHeader(MessageSize, Header))
@@ -95,60 +81,79 @@ void setup() {
 			SerialStream->Send(UID::Exception_InvalidModule, Header.RemotePort);
 			return;
 		}
-		MessageSize /= (sizeof(UID) + sizeof(uint16_t));
-		std::unordered_map<UID, uint16_t>& TrialsDone = Header.P->TrialsDone;
-		for (uint8_t i = 0; i < MessageSize; ++i) {
-			UID const TrialID = SerialStream->Read<UID>();
-			TrialsDone[TrialID] = SerialStream->Read<uint16_t>();
-		}
+		P->TrialsDone.clear();
 		uint16_t NumTrials;
-		bool const ProcessFinished = !Iterator->second(Header.P, 1, NumTrials);
-		SerialStream->Send(UID::Exception_Success, Header.RemotePort);
-		if (ProcessFinished)
-			SerialStream->AsyncInvoke(static_cast<uint8_t>(UID::PortC_ProcessFinished), Header.P);
-	},
-	             UID::PortA_RestoreModule);
-	BindFunctionToPort([](Process* P) {
-		if (ExistingProcesses.contains(P)) {
-			P->Pause();
-			return UID::Exception_Success;
+		if (!Iterator->second(P, Times, NumTrials))
+			SerialStream->AsyncInvoke(static_cast<uint8_t>(UID::PortC_ProcessFinished), P);
+		return { UID::Exception_Success, NumTrials };
 		}
-		return UID::Exception_InvalidProcess;
-	},
-	                   UID::PortA_PauseProcess);
-	BindFunctionToPort([](Process* P) {
-		if (ExistingProcesses.contains(P)) {
-			P->Continue();
-			return UID::Exception_Success;
-		}
-		return UID::Exception_InvalidProcess;
-	},
-	                   UID::PortA_ContinueProcess);
-	BindFunctionToPort([](Process* P) {
-		if (ExistingProcesses.contains(P)) {
-			P->Abort();
-			return UID::Exception_Success;
-		}
-		return UID::Exception_InvalidProcess;
-	},
-	                   UID::PortA_AbortProcess);
-	SerialListen([](uint8_t MessageSize) {
-		GbecHeader Header;
-		if (CommonListenersHeader(MessageSize, Header))
-			return;
-		std::string const Info = Header.P->GetInfo();
-		SerialStream->Send(Info.data(), Info.size(), Header.RemotePort);
-	},
-	             UID::PortA_GetInformation);
-	SerialListen([](uint8_t MessageSize) {
-		if (MessageSize < sizeof(uint8_t))
-			return;
-		Async_stream_IO::SendSession const Session{ sizeof(Process*) * ExistingProcesses.size(), SerialStream->Read<uint8_t>(), Serial };
-		for (Process* const P : ExistingProcesses)
-			Session << P;
-	},
-	             UID::PortA_AllProcesses);
-	SerialStream->Send(nullptr, 0, static_cast<uint8_t>(UID::PortC_ImReady));
+		return { UID::Exception_InvalidProcess };
+},
+	                   UID::PortA_StartModule);
+SerialListen([](uint8_t MessageSize) {
+	GbecHeader Header;
+	if (CommonListenersHeader(MessageSize, Header))
+		return;
+	auto const Iterator = SessionMap.find(SerialStream->Read<UID>());
+	MessageSize -= sizeof(UID);
+	if (Iterator == SessionMap.end()) {
+		SerialStream->Skip(MessageSize);
+		SerialStream->Send(UID::Exception_InvalidModule, Header.RemotePort);
+		return;
+	}
+	MessageSize /= (sizeof(UID) + sizeof(uint16_t));
+	std::unordered_map<UID, uint16_t>& TrialsDone = Header.P->TrialsDone;
+	for (uint8_t i = 0; i < MessageSize; ++i) {
+		UID const TrialID = SerialStream->Read<UID>();
+		TrialsDone[TrialID] = SerialStream->Read<uint16_t>();
+	}
+	uint16_t NumTrials;
+	SerialStream->Send(UID::Exception_Success, Header.RemotePort);
+	if (!Iterator->second(Header.P, 1, NumTrials))
+		SerialStream->AsyncInvoke(static_cast<uint8_t>(UID::PortC_ProcessFinished), Header.P);
+},
+             UID::PortA_RestoreModule);
+BindFunctionToPort([](Process* P) {
+	if (ExistingProcesses.contains(P)) {
+		P->Pause();
+		return UID::Exception_Success;
+	}
+	return UID::Exception_InvalidProcess;
+},
+                   UID::PortA_PauseProcess);
+BindFunctionToPort([](Process* P) {
+	if (ExistingProcesses.contains(P)) {
+		P->Continue();
+		return UID::Exception_Success;
+	}
+	return UID::Exception_InvalidProcess;
+},
+                   UID::PortA_ContinueProcess);
+BindFunctionToPort([](Process* P) {
+	if (ExistingProcesses.contains(P)) {
+		P->Abort();
+		return UID::Exception_Success;
+	}
+	return UID::Exception_InvalidProcess;
+},
+                   UID::PortA_AbortProcess);
+SerialListen([](uint8_t MessageSize) {
+	GbecHeader Header;
+	if (CommonListenersHeader(MessageSize, Header))
+		return;
+	std::string const Info = Header.P->GetInfo();
+	SerialStream->Send(Info.data(), Info.size(), Header.RemotePort);
+},
+             UID::PortA_GetInformation);
+SerialListen([](uint8_t MessageSize) {
+	if (MessageSize < sizeof(uint8_t))
+		return;
+	Async_stream_IO::SendSession const Session{ sizeof(Process*) * ExistingProcesses.size(), SerialStream->Read<uint8_t>(), Serial };
+	for (Process* const P : ExistingProcesses)
+		Session << P;
+},
+             UID::PortA_AllProcesses);
+SerialStream->Send(nullptr, 0, static_cast<uint8_t>(UID::PortC_ImReady));
 }
 void loop() {
 	PinListener::ClearPending();

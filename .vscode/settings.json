@@ -72,6 +72,6 @@
 		"iomanip": "cpp",
 		"stack": "cpp"
 	},
-	"C_Cpp.formatting": "vcFormat",
+	"C_Cpp.formatting": "clangFormat",
 	"editor.insertSpaces": false
 }

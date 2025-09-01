@@ -52,7 +52,7 @@ using CalmDown = Sequential<MonitorRestart, Delay5To10, ModuleAbort<MonitorResta
 using AudioWater = Trial<UID::Trial_AudioWater, Sequential< DelayMilliseconds<800>,  DelaySeconds<20>>>;
 
 // 列出所有公开模块，允许PC端调用
-std::unordered_map<UID, bool (*)(Process*, uint16_t, uint16_t&)> SessionMap = {
+std::unordered_map<UID, uint16_t (*)(Process*)> SessionMap = {
   { UID::Test_BlueLed, Session<PinFlash<BlueLed, 200>> },
   { UID::Test_WaterPump, Session<PinFlash<WaterPump, 150>> },
   { UID::Test_CapacitorReset, Session<Sequential<DigitalWrite<CapacitorVdd, LOW>, Delay<ConstantDuration<std::chrono::milliseconds, 100>>, DigitalWrite<CapacitorVdd, HIGH>>> },

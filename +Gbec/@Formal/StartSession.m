@@ -19,8 +19,8 @@ if ~isempty(obj.VideoInput)
 	start(obj.VideoInput);
 	waitfor(obj.VideoInput,'Running','on');
 end
-Return=obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_StartModule,obj.Pointer,obj.SessionID,0x001);
 TCO=Async_stream_IO.TemporaryCallbackOff(obj.Server.AsyncStream.Serial);
+Return=obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_StartModule,obj.Pointer,obj.SessionID);
 obj.ThrowResult(Return(1));
 obj.CountdownExempt=Gbec.CountdownExempt_(obj.Server);
 obj.DesignedNumTrials=typecast(Return(2:end),'uint16');

@@ -33,6 +33,7 @@ enum class UID : uint8_t {
 	Exception_ProcessNotPaused,
 	Exception_ProcessNotIdle,
 	Exception_ProcessFinished,
+	Exception_BrokenStartArguments,
 	Exception_BrokenRestoreArguments,
 	Exception_MethodNotImplemented,
 	Exception_InvalidModule,

@@ -6,7 +6,18 @@ classdef Test<Gbec.Process
 		HostAction
 	end
 	methods(Access=protected)
-		function TestCycle(obj)
+		function TestCycle(obj,Port,TestID,Times)
+			obj.Server.FeedDogIfActive();
+			AsyncStream=obj.Server.AsyncStream;
+			TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream.Serial);
+			AsyncStream.Send(Async_stream_IO.ArgumentSerialize(Port,obj.Pointer,TestID,Times),Gbec.UID.PortA_StartModule);
+			NumBytes=AsyncStream.Listen(Port);
+			if NumBytes
+				obj.ThrowResult(AsyncStream.Read);
+				AsyncStream.Read(NumBytes-1);
+			else
+				Gbec.Exception.StartModule_no_return.Throw;
+			end
 		end
 	end
 	methods
@@ -19,8 +30,8 @@ classdef Test<Gbec.Process
 				TestID(1,1)Gbec.UID
 				NumTimes(1,1)uint16=str2double(inputdlg('检查几次？','检查几次？'))
 			end
-			obj.Server.FeedDogIfActive();
 			fprintf('%s×%u……\n',TestID,NumTimes);
+			obj.Server.FeedDogIfActive();
 			AsyncStream=obj.Server.AsyncStream;
 			Port=AsyncStream.AllocatePort();
 			TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream.Serial);

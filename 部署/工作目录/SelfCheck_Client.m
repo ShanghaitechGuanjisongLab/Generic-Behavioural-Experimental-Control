@@ -1,8 +1,8 @@
 %[text] # 此脚本用于在实验前检查硬件设备是否正常工作
 %[text] 所有检查之前先初始化
-if~(exist('BOX1','var')&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid) %[output:group:7ff8581a]
-	BOX1=Gbec.Server; %[output:423af717]
-end %[output:group:7ff8581a]
+if~(exist('BOX1','var')&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid) %[output:group:8f06d6a1]
+	BOX1=Gbec.Server; %[output:2dc27c8f]
+end %[output:group:8f06d6a1]
 BOX1.Initialize('COM4',9600);
 if~(exist('Test1','var')&&Test1.IsValid&&Test1.Server==BOX1)
 	Test1=Gbec.Test(BOX1);
@@ -25,7 +25,7 @@ Test1.StartCheck(Gbec.UID.Test_CapacitorMonitor); %[output:74f72178]
 Test1.StopCheck; %[output:43ac16ee]
 %%
 %[text] 检查蓝光
-Test1.OneEnterOneCheck(Gbec.UID.Test_BlueLed,"按一次回车闪一次光，输入任意字符结束检查：");
+Test1.OneEnterOneCheck(Gbec.UID.Test_BlueLed,"按一次回车闪一次光，输入任意字符结束检查："); %[output:9187bfa6]
 %%
 %[text] 检查CD1
 Test1.OneEnterOneCheck(Gbec.UID.Test_CD1,"按一次回车打一个标，输入任意字符结束检查：");
@@ -64,7 +64,7 @@ clearvars BOX1;
 %[metadata:view]
 %   data: {"layout":"inline","rightPanelPercent":40}
 %---
-%[output:423af717]
+%[output:2dc27c8f]
 %   data: {"dataType":"text","outputData":{"text":"通用行为实验控制器v6.2.1 by 张天夫\n","truncated":false}}
 %---
 %[output:2ca65dc3]
@@ -78,6 +78,9 @@ clearvars BOX1;
 %---
 %[output:43ac16ee]
 %   data: {"dataType":"text","outputData":{"text":"测试结束\n","truncated":false}}
+%---
+%[output:9187bfa6]
+%   data: {"dataType":"error","outputData":{"errorType":"runtime","text":"错误使用 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Gbec.Process\/ThrowResult', 'D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\Process.m', 26)\" style=\"font-weight:bold\">Gbec.Process\/ThrowResult<\/a> (<a href=\"matlab: opentoline('D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\Process.m',26,0)\">第 26 行<\/a>)\nGbec:UID:PortA_RestoreModule\n\n出错 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Gbec.Test\/OneEnterOneCheck', 'D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\Test.m', 42)\" style=\"font-weight:bold\">Gbec.Test\/OneEnterOneCheck<\/a> (<a href=\"matlab: opentoline('D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\Test.m',42,0)\">第 42 行<\/a>)\n\t\t\t\tobj.ThrowResult(Return(1));\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^"}}
 %---
 %[output:1b367dda]
 %   data: {"dataType":"warning","outputData":{"text":"警告: Async_stream_IO:Exception:Unlistened_port_received_message：Port 16, MessageSize 0"}}

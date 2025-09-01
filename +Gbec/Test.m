@@ -5,6 +5,10 @@ classdef Test<Gbec.Process
 		%可调用对象，收到Host类UID消息时调用
 		HostAction
 	end
+	methods(Access=protected)
+		function TestCycle(obj)
+		end
+	end
 	methods
 		function obj = Test(Server)
 			obj@Gbec.Process(Server);
@@ -17,7 +21,17 @@ classdef Test<Gbec.Process
 			end
 			obj.Server.FeedDogIfActive();
 			fprintf('%s×%u……\n',TestID,NumTimes);
-			obj.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_StartModule,obj.Pointer,TestID,NumTimes));
+			AsyncStream=obj.Server.AsyncStream;
+			Port=AsyncStream.AllocatePort();
+			TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream.Serial);
+			AsyncStream.Send(Async_stream_IO.ArgumentSerialize(Port,obj.Pointer,TestID,NumTimes),Gbec.UID.PortA_StartModule);
+			NumBytes=AsyncStream.Listen(Port);
+			if NumBytes
+				obj.ThrowResult(AsyncStream.Read);
+				AsyncStream.Read(NumBytes-1);
+			else
+				Gbec.Exception.StartModule_no_return.Throw;
+			end
 		end
 		function OneEnterOneCheck(obj,TestID,Prompt)
 			arguments
@@ -26,9 +40,20 @@ classdef Test<Gbec.Process
 				Prompt
 			end
 			obj.Server.FeedDogIfActive();
+			AsyncStream=obj.Server.AsyncStream;
+			Port=AsyncStream.AllocatePort();
 			while input(Prompt,"s")==""
 				obj.Server.FeedDogIfActive();
-				obj.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_StartModule,obj.Pointer,TestID,0x001));
+				TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream.Serial);
+				AsyncStream.Send(Async_stream_IO.ArgumentSerialize(Port,obj.Pointer,TestID),Gbec.UID.PortA_StartModule);
+				NumBytes=AsyncStream.Listen(Port);
+				if NumBytes
+					obj.ThrowResult(AsyncStream.Read);
+					AsyncStream.Read(NumBytes-1);
+				else
+					Gbec.Exception.StartModule_no_return.Throw;
+				end
+				delete(TCO);
 			end
 		end
 		function StartCheck(obj,TestID)
@@ -38,7 +63,17 @@ classdef Test<Gbec.Process
 			end
 			obj.Server.FeedDogIfActive();
 			fprintf('%s……\n',TestID);
-			obj.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_StartModule,obj.Pointer,TestID,0x001));
+			AsyncStream=obj.Server.AsyncStream;
+			Port=AsyncStream.AllocatePort();
+			TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream.Serial);
+			AsyncStream.Send(Async_stream_IO.ArgumentSerialize(Port,obj.Pointer,TestID),Gbec.UID.PortA_StartModule);
+			NumBytes=AsyncStream.Listen(Port);
+			if NumBytes
+				obj.ThrowResult(AsyncStream.Read);
+				AsyncStream.Read(NumBytes-1);
+			else
+				Gbec.Exception.StartModule_no_return.Throw;
+			end
 		end
 		function StopCheck(obj)
 			obj.Server.FeedDogIfActive();

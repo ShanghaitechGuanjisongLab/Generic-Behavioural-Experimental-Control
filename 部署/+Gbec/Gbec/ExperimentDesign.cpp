@@ -1,10 +1,10 @@
 #pragma once
 #include "Predefined.hpp"
 // 快速切换BOX设定集
-#define BOX 1
+#define BOX 2
 
 // 引脚设定集
-#if BOX == 1
+#if BOX == 2
 Pin BlueLed = 8;
 Pin WaterPump = 2;
 Pin CapacitorVdd = 7;

@@ -38,5 +38,6 @@ classdef Exception<MATLAB.Lang.IEnumerableException
 		Process_not_running
 		Process_not_paused
 		Fail_to_merge_existing_dataset
+		StartModule_no_return
 	end
 end

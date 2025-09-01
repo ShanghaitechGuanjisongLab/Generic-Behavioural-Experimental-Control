@@ -188,7 +188,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 				Callback=varargin{2};
 				varargin(1:2)=[];
 			else
-				obj.Send(ArgumentSerialize(0xff,varargin{:}),RemotePort);
+				obj.Send(Async_stream_IO.ArgumentSerialize(0xff,varargin{:}),RemotePort);
 				return; %不需要监听返回值
 			end
 			WeakReference=matlab.lang.WeakReference(obj);
@@ -391,7 +391,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			%See also Async_stream_IO.AsyncSerialStream.AsyncInvoke
 			LocalPort=obj.AllocatePort_;
 			TCO=Async_stream_IO.TemporaryCallbackOff(obj.Serial);
-			obj.Send(ArgumentSerialize(LocalPort,varargin{:}),RemotePort);
+			obj.Send(Async_stream_IO.ArgumentSerialize(LocalPort,varargin{:}),RemotePort);
 			MessageSize=obj.Listen(LocalPort);
 			if MessageSize<1
 				Async_stream_IO.Exception.Corrupted_object_received.Throw(sprintf('RemotePort %u, LocalPort %u, MessageSize %u',RemotePort,LocalPort,MessageSize));
@@ -440,6 +440,10 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 					Type=Arg;
 				end
 			end
+			if~Number
+				Data=createArray(1,0,Type);
+				return;
+			end
 			Type64=Type=="uint64";
 			if Type64
 				Type='uint32';
@@ -459,12 +463,4 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			delete(obj.Serial);
 		end
 	end
-end
-function Bytes=ArgumentSerialize(varargin)
-for V=1:nargin
-	varargin{V}=typecast(varargin{V}(:),'uint8');
-	%typecast总有可能返回行向量（例如输入是标量），必须全部统一成列向量
-	varargin{V}=varargin{V}(:);
-end
-Bytes=vertcat(varargin{:});
 end

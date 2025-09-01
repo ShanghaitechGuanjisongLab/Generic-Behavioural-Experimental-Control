@@ -8,7 +8,7 @@ struct GbecHeader
 };
 struct ModuleStartReturn
 {
-	UID Exception;
+	UID GbecException;
 	uint16_t NumTrials;
 };
 #pragma pack(pop)
@@ -86,6 +86,7 @@ void setup()
 			SerialStream->Send(UID::Exception_InvalidModule, Header.RemotePort);
 			return;
 		}
+		digitalWrite(6,HIGH);
 		uint16_t Times;
 		switch (MessageSize)
 		{

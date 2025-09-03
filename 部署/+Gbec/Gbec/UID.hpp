@@ -151,7 +151,9 @@ enum class UID : uint8_t {
 	Host_StartRecord,
 
 	Trial_AudioWater,
+	Trial_LightWater,
 
 	Session_AudioWater,
+	Session_LightWater,
 
 };

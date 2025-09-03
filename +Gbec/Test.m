@@ -7,14 +7,21 @@ classdef Test<Gbec.Process
 	end
 	methods(Access=protected)
 		function TestCycle(obj,Port,TestID,Times)
+			arguments
+				obj
+				Port uint8
+				TestID Gbec.UID
+				Times uint16=0x001
+			end
 			obj.Server.FeedDogIfActive();
 			AsyncStream=obj.Server.AsyncStream;
 			TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream.Serial);
 			AsyncStream.Send(Async_stream_IO.ArgumentSerialize(Port,obj.Pointer,TestID,Times),Gbec.UID.PortA_StartModule);
 			NumBytes=AsyncStream.Listen(Port);
 			if NumBytes
-				obj.ThrowResult(AsyncStream.Read);
+				Exception=AsyncStream.Read;
 				AsyncStream.Read(NumBytes-1);
+				obj.ThrowResult(Exception);
 			else
 				Gbec.Exception.StartModule_no_return.Throw;
 			end
@@ -31,18 +38,7 @@ classdef Test<Gbec.Process
 				NumTimes(1,1)uint16=str2double(inputdlg('检查几次？','检查几次？'))
 			end
 			fprintf('%s×%u……\n',TestID,NumTimes);
-			obj.Server.FeedDogIfActive();
-			AsyncStream=obj.Server.AsyncStream;
-			Port=AsyncStream.AllocatePort();
-			TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream.Serial);
-			AsyncStream.Send(Async_stream_IO.ArgumentSerialize(Port,obj.Pointer,TestID,NumTimes),Gbec.UID.PortA_StartModule);
-			NumBytes=AsyncStream.Listen(Port);
-			if NumBytes
-				obj.ThrowResult(AsyncStream.Read);
-				AsyncStream.Read(NumBytes-1);
-			else
-				Gbec.Exception.StartModule_no_return.Throw;
-			end
+			obj.TestCycle(Async_stream_IO.RaiiPort(obj.Server.AsyncStream).Port,TestID,NumTimes);
 		end
 		function OneEnterOneCheck(obj,TestID,Prompt)
 			arguments
@@ -50,21 +46,9 @@ classdef Test<Gbec.Process
 				TestID(1,1)Gbec.UID
 				Prompt
 			end
-			obj.Server.FeedDogIfActive();
-			AsyncStream=obj.Server.AsyncStream;
-			Port=AsyncStream.AllocatePort();
+			Port=Async_stream_IO.RaiiPort(obj.Server.AsyncStream);
 			while input(Prompt,"s")==""
-				obj.Server.FeedDogIfActive();
-				TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream.Serial);
-				AsyncStream.Send(Async_stream_IO.ArgumentSerialize(Port,obj.Pointer,TestID),Gbec.UID.PortA_StartModule);
-				NumBytes=AsyncStream.Listen(Port);
-				if NumBytes
-					obj.ThrowResult(AsyncStream.Read);
-					AsyncStream.Read(NumBytes-1);
-				else
-					Gbec.Exception.StartModule_no_return.Throw;
-				end
-				delete(TCO);
+				obj.TestCycle(Port.Port,TestID);
 			end
 		end
 		function StartCheck(obj,TestID)
@@ -72,19 +56,8 @@ classdef Test<Gbec.Process
 				obj
 				TestID(1,1)Gbec.UID
 			end
-			obj.Server.FeedDogIfActive();
 			fprintf('%s……\n',TestID);
-			AsyncStream=obj.Server.AsyncStream;
-			Port=AsyncStream.AllocatePort();
-			TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream.Serial);
-			AsyncStream.Send(Async_stream_IO.ArgumentSerialize(Port,obj.Pointer,TestID),Gbec.UID.PortA_StartModule);
-			NumBytes=AsyncStream.Listen(Port);
-			if NumBytes
-				obj.ThrowResult(AsyncStream.Read);
-				AsyncStream.Read(NumBytes-1);
-			else
-				Gbec.Exception.StartModule_no_return.Throw;
-			end
+			obj.TestCycle(Async_stream_IO.RaiiPort(obj.Server.AsyncStream).Port,TestID);
 		end
 		function StopCheck(obj)
 			obj.Server.FeedDogIfActive();

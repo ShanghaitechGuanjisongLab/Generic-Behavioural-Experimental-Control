@@ -1,9 +1,20 @@
 #pragma once
 #include "Predefined.hpp"
 // 快速切换BOX设定集
-#define BOX 2
+#define BOX 1
 
 // 引脚设定集
+#if BOX == 1
+Pin BlueLed = 11;
+Pin WaterPump = 2;
+Pin CapacitorVdd = 7;
+Pin CapacitorOut = 18;
+Pin CD1 = 6;
+Pin ActiveBuzzer = 52;
+Pin AirPump = 12;
+Pin Laser = 49;
+Pin PassiveBuzzer = 25;
+#endif
 #if BOX == 2
 Pin BlueLed = 8;
 Pin WaterPump = 2;
@@ -49,7 +60,9 @@ using Tone = typename RepeatEvery<ConstantDuration<std::chrono::microseconds, 10
 
 using CalmDown = Sequential<MonitorRestart, Delay5To10, ModuleAbort<MonitorRestart>, ModuleRandomize<Delay5To10>>;
 
-using AudioWater = Trial<UID::Trial_AudioWater, Sequential< DelayMilliseconds<800>,  DelaySeconds<20>>>;
+using AudioWater = Trial<UID::Trial_AudioWater, Sequential< DelayMilliseconds<800>, DelaySeconds<20>>>;
+
+using LightWater = Trial< UID::Trial_LightWater, Sequential< PinFlashUp<BlueLed, 200, UID::Event_LightUp>, DelaySeconds< 20 >>>;
 
 // 列出所有公开模块，允许PC端调用
 std::unordered_map<UID, uint16_t (*)(Process*)> SessionMap = {
@@ -66,4 +79,5 @@ std::unordered_map<UID, uint16_t (*)(Process*)> SessionMap = {
   { UID::Test_LowTone, Session<Tone<500, 1000>> },
   { UID::Test_HighTone, Session<Tone<5000, 1000>> },
   { UID::Session_AudioWater, Session<Repeat<AudioWater>::UntilTimes<30>> },
+  { UID::Session_LightWater, Session<Repeat<LightWater>::UntilTimes<30>> },
 };

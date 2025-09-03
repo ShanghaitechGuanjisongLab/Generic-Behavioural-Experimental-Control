@@ -20,13 +20,23 @@ if ~isempty(obj.VideoInput)
 	waitfor(obj.VideoInput,'Running','on');
 end
 AsyncStream=obj.Server.AsyncStream;
-Port=AsyncStream.AllocatePort();
+Port=Async_stream_IO.RaiiPort(AsyncStream);
 TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream.Serial);
-AsyncStream.Send(Async_stream_IO.ArgumentSerialize(Port,obj.Pointer,obj.SessionID),Gbec.UID.PortA_StartModule);
-Return=AsyncStream.Listen(Port);
-obj.ThrowResult(Return(1));
+AsyncStream.Send(Async_stream_IO.ArgumentSerialize(Port.Port,obj.Pointer,obj.SessionID),Gbec.UID.PortA_StartModule);
+NumBytes=AsyncStream.Listen(Port);
+switch NumBytes
+	case 0
+		Gbec.Exception.StartModule_no_return.Throw;
+	case 3
+	otherwise
+		Exception=AsyncStream.Read;
+		AsyncStream.Read(NumBytes-1);
+		obj.ThrowResult(Exception);
+		Gbec.Exception.StartModule_return_unexpected.Throw;
+end
+obj.ThrowResult(AsyncStream.Read);
 obj.CountdownExempt=Gbec.CountdownExempt_(obj.Server);
-obj.DesignedNumTrials=typecast(Return(2:end),'uint16');
+obj.DesignedNumTrials=AsyncStream.Read('uint16');
 obj.EventRecorder.Reset;
 obj.TrialRecorder.Reset;
 obj.LogPrint('会话开始，回合总数：%u，将保存为：%s\n',obj.DesignedNumTrials,obj.SavePath);

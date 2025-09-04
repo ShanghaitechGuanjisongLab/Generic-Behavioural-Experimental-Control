@@ -58,11 +58,11 @@ using DelaySeconds = Delay<ConstantDuration<std::chrono::seconds, Seconds>>;
 template<DurationRep FrequencyHz, DurationRep Milliseconds>
 using Tone = typename RepeatEvery<ConstantDuration<std::chrono::microseconds, 1000000 / FrequencyHz>, DigitalToggle<PassiveBuzzer>>::template UntilDuration<ConstantDuration<std::chrono::microseconds, Milliseconds * 1000>>;
 
-using CalmDown = Sequential<MonitorRestart, Delay5To10, ModuleAbort<MonitorRestart>, ModuleRandomize<Delay5To10>>;
+using CalmDown = Sequential<MonitorRestart, Delay5To10, ModuleAbort<MonitorRestart>, ModuleRandomize<Duration5To10>>;
 
 using AudioWater = Trial<UID::Trial_AudioWater, Sequential< DelayMilliseconds<800>, DelaySeconds<20>>>;
 
-using LightWater = Trial< UID::Trial_LightWater, Sequential< PinFlashUp<BlueLed, 200, UID::Event_LightUp>, DelaySeconds< 20 >>>;
+using LightWater = Trial< UID::Trial_LightWater, Sequential<CalmDown, PinFlashUp<BlueLed, 200, UID::Event_LightUp>, DelaySeconds<20>>>;
 
 // 列出所有公开模块，允许PC端调用
 std::unordered_map<UID, uint16_t (*)(Process*)> SessionMap = {

@@ -75,7 +75,7 @@ classdef Server<handle
 			%# 输入参数
 			% AsyncStream(1,1)Async_stream_IO.IAsyncStream，自定义底层异步流
 			%See also Async_stream_IO.AsyncSerialStream Async_stream_IO.IAsyncStream
-			obj.SerialCountdown.stop;
+			obj.FeedDogIfActive;
 			if isa(varargin{1},'Async_stream_IO.IAsyncStream')
 				obj.AsyncStream=varargin{1};
 			else
@@ -111,13 +111,12 @@ classdef Server<handle
 			obj.PointerSize=obj.AsyncStream.SyncInvoke(Gbec.UID.PortA_PointerSize);
 			obj.PointerType="uint"+string(obj.PointerSize*8);
 			obj.AsyncStream.AsyncInvoke(Gbec.UID.PortA_RandomSeed,randi([0,intmax('uint32')],'uint32'));
-			obj.SerialCountdown.start;
 		end
 		function RefreshAllProcesses(obj)
 			%刷新AllProcesses属性
 			%此方法会清除AllProcesses属性并重新获取当前所有进程。通常不需要调用此方法，因为Server会自动维护AllProcesses属性。调用此方法后，所有之前的Process对象不会再收到消息；要继续接收消息，必须重新获取Process对象。
 			Port=obj.AsyncStream.AllocatePort;
-			TCO=Async_stream_IO.TemporaryCallbackOff(obj.AsyncStream.Serial);
+			TCO=Async_stream_IO.TemporaryCallbackOff(obj.AsyncStream);
 			obj.AsyncStream.Send(Port,Gbec.UID.PortA_AllProcesses);
 			NewDict=dictionary;
 			for P=0:int8(obj.PointerSize):int8(obj.AsyncStream.Listen(Port))-1

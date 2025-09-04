@@ -21,9 +21,9 @@ if ~isempty(obj.VideoInput)
 end
 AsyncStream=obj.Server.AsyncStream;
 Port=Async_stream_IO.RaiiPort(AsyncStream);
-TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream.Serial);
+TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream);
 AsyncStream.Send(Async_stream_IO.ArgumentSerialize(Port.Port,obj.Pointer,obj.SessionID),Gbec.UID.PortA_StartModule);
-NumBytes=AsyncStream.Listen(Port);
+NumBytes=AsyncStream.Listen(Port.Port);
 switch NumBytes
 	case 0
 		Gbec.Exception.StartModule_no_return.Throw;
@@ -32,14 +32,20 @@ switch NumBytes
 		Exception=AsyncStream.Read;
 		AsyncStream.Read(NumBytes-1);
 		obj.ThrowResult(Exception);
-		Gbec.Exception.StartModule_return_unexpected.Throw;
 end
 obj.ThrowResult(AsyncStream.Read);
-obj.CountdownExempt=Gbec.CountdownExempt_(obj.Server);
 obj.DesignedNumTrials=AsyncStream.Read('uint16');
+switch obj.DesignedNumTrials
+	case 0
+		Gbec.Exception.Session_has_no_trials.Throw;
+	case intmax('uint16')
+		obj.LogPrint('会话开始，回合总数：不确定，将保存为：%s\n',obj.SavePath);
+	otherwise
+		obj.LogPrint('会话开始，回合总数：%u，将保存为：%s\n',obj.DesignedNumTrials,obj.SavePath);
+end
+obj.CountdownExempt=Gbec.CountdownExempt_(obj.Server);
 obj.EventRecorder.Reset;
 obj.TrialRecorder.Reset;
-obj.LogPrint('会话开始，回合总数：%u，将保存为：%s\n',obj.DesignedNumTrials,obj.SavePath);
 obj.State=Gbec.UID.State_Running;
 end
 

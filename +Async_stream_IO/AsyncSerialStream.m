@@ -3,7 +3,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 	properties(SetAccess=protected,Transient)
 		Serial
 	end
-	properties(Access=protected)
+	properties(Access=protected,Transient)
 		Listeners
 	end
 	properties
@@ -12,6 +12,12 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 
 		%断线重连尝试次数
 		MaxRetryTimes(1,1)uint8=3
+	end
+	properties(Access=protected)
+		InterruptEnabled_=true
+	end
+	properties(Dependent)
+		InterruptEnabled
 	end
 	methods(Access=protected)
 		function PortForward(obj,Port,MessageSize)
@@ -79,15 +85,6 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			obj.Read(MessageSize); %读取消息内容以避免阻塞
 			Async_stream_IO.Exception.Message_received_on_allocated_port.Warn(sprintf('Port %u, MessageSize %u',Port,MessageSize));
 		end
-		function ExecuteTransactionsInQueue(obj,varargin)
-			while obj.Serial.NumBytesAvailable
-				if obj.Read==Async_stream_IO.IAsyncStream.MagicByte
-					%读取端口号
-					GetPort=obj.Read;
-					obj.PortForward(GetPort,obj.Read);
-				end
-			end
-		end
 		function SerialInitialize(obj,Port,BaudRate)
 			try
 				obj.Serial=serialport(Port,BaudRate);
@@ -136,7 +133,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 				BaudRate=9600
 			end
 			obj.SerialInitialize(Port,BaudRate);
-			obj.Listeners=dictionary;
+			obj.Listeners=configureDictionary('uint8','function_handle');
 			WeakReference=matlab.lang.WeakReference(obj);
 			obj.Serial.ErrorOccurredFcn=@(varargin)WeakReference.Handle.InterruptRetry(varargin{:});
 		end
@@ -153,7 +150,9 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			P=obj.AllocatePort_;
 			WeakReference=matlab.lang.WeakReference(obj);
 			obj.Listeners(P)=@(MessageSize)WeakReference.Handle.AllocateListener(P,MessageSize);
-			obj.Serial.configureCallback('byte',1,@(~,~)WeakReference.Handle.ExecuteTransactionsInQueue);
+			if obj.InterruptEnabled_
+				obj.Serial.configureCallback('byte',1,@(~,~)WeakReference.Handle.Flush);
+			end
 		end
 		function LocalPort=AsyncInvoke(obj,RemotePort,varargin)
 			%异步用指定远程端口上的函数。
@@ -256,6 +255,17 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			% Correct(1,1)logical，true表示当前流的参数与输入参数相符，否则返回false
 			Correct=obj.Serial.Port==Port&&obj.Serial.BaudRate==BaudRate;
 		end
+		function Flush(obj)
+			%清理已收入缓冲区的挂起消息
+			%刚配置了串口中断时，可能会有未处理的消息残留在缓冲区，不会立即触发回调。使用此方法检查并处理可能残留的消息。
+			while obj.Serial.NumBytesAvailable
+				if obj.Read==Async_stream_IO.IAsyncStream.MagicByte
+					%读取端口号
+					GetPort=obj.Read;
+					obj.PortForward(GetPort,obj.Read);
+				end
+			end
+		end
 		function obj=le(obj,Data)
 			%将数据按字节拼接流式写入
 			% 此运算符<=方法将任何数据typecast为uint8类型然后拼接到报文中。使用前必须调用BeginSend。
@@ -300,10 +310,12 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 					PB=obj.AllocatePort_;
 				end
 				obj.Listeners(PB)=Callback;
-				WeakReference=matlab.lang.WeakReference(obj);
-				obj.Serial.configureCallback('byte',1,@(~,~)WeakReference.Handle.ExecuteTransactionsInQueue);
+				if obj.InterruptEnabled_
+					WeakReference=matlab.lang.WeakReference(obj);
+					obj.Serial.configureCallback('byte',1,@(~,~)WeakReference.Handle.Flush);
+				end
 			else
-				TCO=Async_stream_IO.TemporaryCallbackOff(obj.Serial);
+				TCO=Async_stream_IO.TemporaryCallbackOff(obj);
 				ListeningPort=varargin{1};
 				while true
 					if obj.Read==Async_stream_IO.IAsyncStream.MagicByte
@@ -348,7 +360,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			R=obj.Listeners.isKey(Port);
 			if R
 				obj.Listeners.remove(Port);
-				if~obj.Listeners.NumEntries
+				if~obj.Listeners.numEntries
 					%如果没有监听器了，取消串口的回调配置
 					obj.Serial.configureCallback('off');
 				end
@@ -389,16 +401,16 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			%# 返回值
 			% Return(:,1)uint8，远程函数的返回值。如果远程函数没有返回值，将返回空数组。
 			%See also Async_stream_IO.AsyncSerialStream.AsyncInvoke
-			LocalPort=obj.AllocatePort_;
-			TCO=Async_stream_IO.TemporaryCallbackOff(obj.Serial);
-			obj.Send(Async_stream_IO.ArgumentSerialize(LocalPort,varargin{:}),RemotePort);
-			MessageSize=obj.Listen(LocalPort);
+			LocalPort=Async_stream_IO.RaiiPort(obj);
+			TCO=Async_stream_IO.TemporaryCallbackOff(obj);
+			obj.Send(Async_stream_IO.ArgumentSerialize(LocalPort.Port,varargin{:}),RemotePort);
+			MessageSize=obj.Listen(LocalPort.Port);
 			if MessageSize<1
-				Async_stream_IO.Exception.Corrupted_object_received.Throw(sprintf('RemotePort %u, LocalPort %u, MessageSize %u',RemotePort,LocalPort,MessageSize));
+				Async_stream_IO.Exception.Corrupted_object_received.Throw(sprintf('RemotePort %u, LocalPort %u, MessageSize %u',RemotePort,LocalPort.Port,MessageSize));
 			end
 			Exception=Async_stream_IO.Exception(obj.Read);
 			if Exception~=Async_stream_IO.Exception.Success
-				Exception.Throw(sprintf('RemotePort %u, LocalPort %u, MessageSize %u',RemotePort,LocalPort,MessageSize));
+				Exception.Throw(sprintf('RemotePort %u, LocalPort %u, MessageSize %u',RemotePort,LocalPort.Port,MessageSize));
 			end
 			MessageSize=MessageSize-1;
 			if MessageSize
@@ -461,6 +473,23 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 		end
 		function delete(obj)
 			delete(obj.Serial);
+		end
+		function IE=get.InterruptEnabled(obj)
+			IE=obj.InterruptEnabled_;
+		end
+		function set.InterruptEnabled(obj,Value)
+			obj.InterruptEnabled_=Value;
+			%先改值，因为后面Flush也可能会改值
+
+			if Value
+				obj.Flush;
+				if obj.Listeners.numEntries
+					WeakReference=matlab.lang.WeakReference(obj);
+					obj.Serial.configureCallback('byte',1,@(~,~)WeakReference.Handle.Flush);
+				end
+			else
+				obj.Serial.configureCallback('off');
+			end
 		end
 	end
 end

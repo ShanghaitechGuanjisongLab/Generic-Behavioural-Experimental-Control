@@ -13,36 +13,39 @@ EventLog=obj.EventRecorder.GetTimeTable;
 if ~isempty(EventLog)
 	EventLog.Event=categorical(Gbec.LogTranslate(EventLog.Event));
 end
-Blocks.EventLog={EventLog};
+EventLog={EventLog};
+Blocks.EventLog=EventLog;
 Blocks.BlockIndex=0x1;
 Blocks.BlockUID=0x001;
 Trials=table;
 Stimulus=obj.TrialRecorder.GetTimeTable;
 NumTrials=height(Stimulus);
-TrialIndex=(0x001:NumTrials)';
-Trials.TrialUID=TrialIndex;
-Trials.BlockUID(:)=0x001;
-Trials.TrialIndex=TrialIndex;
-Trials.Time=Stimulus.Time;
-Stimulus=Gbec.LogTranslate(Stimulus.Event);
-Untranslated=startsWith(Stimulus,'Trial_');
-%split必须指定拆分维度，否则标量和向量行为不一致
-SplitStimuli=Stimulus(Untranslated);
-try
-	SplitStimuli=split(SplitStimuli,'_',2);
-	Stimulus(Untranslated)=SplitStimuli(:,2);
-catch ME
-	if ME.identifier=="MATLAB:string:MustHaveSameNumberOf"
-		for S=1:numel(SplitStimuli)
-			Splitted=split(SplitStimuli(S),"_");
-			SplitStimuli(S)=join(Splitted(2:end),"_");
+if NumTrials
+	TrialIndex=(0x001:NumTrials)';
+	Trials.TrialUID=TrialIndex;
+	Trials.BlockUID(:)=0x001;
+	Trials.TrialIndex=TrialIndex;
+	Trials.Time=Stimulus.Time;
+	Stimulus=Gbec.LogTranslate(Stimulus.Event);
+	Untranslated=startsWith(Stimulus,'Trial_');
+	%split必须指定拆分维度，否则标量和向量行为不一致
+	SplitStimuli=Stimulus(Untranslated);
+	try
+		SplitStimuli=split(SplitStimuli,'_',2);
+		Stimulus(Untranslated)=SplitStimuli(:,2);
+	catch ME
+		if ME.identifier=="MATLAB:string:MustHaveSameNumberOf"
+			for S=1:numel(SplitStimuli)
+				Splitted=split(SplitStimuli(S),"_");
+				SplitStimuli(S)=join(Splitted(2:end),"_");
+			end
+			Stimulus(Untranslated)=SplitStimuli;
+		else
+			ME.rethrow;
 		end
-		Stimulus(Untranslated)=SplitStimuli;
-	else
-		ME.rethrow;
 	end
+	Trials.Stimulus=categorical(Stimulus);
 end
-Trials.Stimulus=categorical(Stimulus);
 Version=Gbec.Version;
 SP=obj.SavePath;
 %不能在保存阶段询问用户是否覆盖，因为这可能会干扰其它运行中的实验的消息输出，因此覆盖可行性必须在SavePath时确认。
@@ -56,8 +59,8 @@ else
 end
 [SaveDirectory,Filename]=fileparts(SP);
 obj.LogPrint("数据已保存到<a href=""matlab:load('%s');"">%s</a> <a href=""matlab:cd('%s');"">切换当前文件夹</a> <a href=""matlab:winopen('%s');"">打开数据文件夹</a>",SP,SP,SaveDirectory,SaveDirectory);
-if ~obj.OverwriteExisting
-	EventLog=sortrows(DataSet.TableQuery(["DateTime","EventLog"],Mouse=obj.Mouse),"DateTime");
+if~obj.OverwriteExisting
+	EventLog=sortrows(DataSet.TableQuery(["DateTime","EventLog"],Mouse=obj.Mouse),"DateTime").EventLog;
 	Fig=figure;
 	plot(EventLog.DateTime,UniExp.EventLog2Performance(EventLog.EventLog));
 	xlabel('DateTime');
@@ -71,7 +74,7 @@ if ~isempty(obj.TepArguments)
 		obj.TepArguments{1}(EventLog,obj.TepArguments{2:end});
 	else
 		Fig=figure;
-		UniExp.TrialwiseEventPlot(EventLog.EventLog{end},obj.TepArguments{:});
+		UniExp.TrialwiseEventPlot(EventLog{end},obj.TepArguments{:});
 		title(obj.Mouse);
 		savefig(Fig,fullfile(SaveDirectory,sprintf('%s.%s.fig',Filename,char(obj.DateTime,'yyyyMMddHHmm'))));
 	end

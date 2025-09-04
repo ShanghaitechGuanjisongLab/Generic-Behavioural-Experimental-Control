@@ -1,5 +1,8 @@
 classdef Formal<Gbec.Process
 	%正规实验进程，提供完善可靠的数据收集系统和自定义接口
+	properties(Constant,GetAccess=protected)
+		DurationRep='uint32'
+	end
 	properties
 		%提醒检查回合周期
 		CheckCycle=30
@@ -119,7 +122,7 @@ classdef Formal<Gbec.Process
 					if questdlg('未找到统一实验分析作图工具箱，无法合并已存在的文件','是否覆盖？','是','否','否')=="是"
 						obj.OverwriteExisting=true;
 					else
-						Gbec.Exception.Failure_to_merge_existing_dataset.Throw;
+						Gbec.Exception.Fail_to_merge_existing_dataset.Throw;
 					end
 				else
 					obj.LogPrint("目标文件已存在，将尝试合并");
@@ -169,7 +172,7 @@ classdef Formal<Gbec.Process
 			if TrialMod==1&&TrialIndex>1
 				cprintf([1,0,1],'\n已过%u回合，请检查实验状态',TrialIndex-1);
 			end
-			obj.LogPrint('回合%u-%s：',TrialIndex,TrialID);
+			FprintfInCommandWindow('\n回合%u-%s：',TrialIndex,TrialID);
 		end
 		function Signal_(obj,S)
 			%此方法由Server调用，派生类负责处理，用户不应使用

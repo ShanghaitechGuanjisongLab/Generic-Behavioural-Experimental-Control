@@ -92,10 +92,7 @@ classdef Process<handle
 			if~V
 				return;
 			end
-			V=obj.Server.AllProcesses.isKey(V);
-			if~V
-				return;
-			end
+			V=obj.Server.AllProcesses.isKey(obj.Pointer);
 		end
 	end
 end

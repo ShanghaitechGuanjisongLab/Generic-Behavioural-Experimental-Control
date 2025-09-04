@@ -9,10 +9,11 @@
 function Information = GetInformation(obj)
 obj.Server.FeedDogIfActive;
 AsyncStream=obj.Server.AsyncStream;
-LocalPort=AsyncStream.AllocatePort;
+LocalPort=Async_stream_IO.RaiiPort(AsyncStream);
+TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream);
 AsyncStream.BeginSend(Gbec.UID.PortA_GetInformation,obj.Server.PointerSize+1);
-AsyncStream<=LocalPort<=obj.Pointer;
-AsyncStream.Listen(LocalPort);
+AsyncStream<=LocalPort.Port<=obj.Pointer;
+AsyncStream.Listen(LocalPort.Port);
 Information=CollectStruct(obj.Server);
 if obj.HostActions.numEntries%空字典直接取键可能会出错
 	for K=obj.HostActions.keys.'
@@ -42,11 +43,11 @@ for F=1:NumFields
 		case UID.Type_Struct
 			Value=CollectStruct(Server);
 		case UID.Type_Seconds
-			Value=seconds(AsyncStream.Read('uint16'));
+			Value=seconds(AsyncStream.Read(Gbec.Formal.DurationRep));
 		case UID.Type_Milliseconds
-			Value=milliseconds(AsyncStream.Read('uint16'));
+			Value=milliseconds(AsyncStream.Read(Gbec.Formal.DurationRep));
 		case UID.Type_Microseconds
-			Value=microseconds(AsyncStream.Read('uint16'));
+			Value=microseconds(AsyncStream.Read(Gbec.Formal.DurationRep));
 		case UID.Type_Infinite
 			Value=Inf;
 		case UID.Type_Table
@@ -75,11 +76,11 @@ switch UID(AsyncStream.Read)
 	case UID.Type_UInt16
 		Array=AsyncStream.Read(NumElements,'uint16');
 	case UID.Type_Seconds
-		Array=seconds(AsyncStream.Read(NumElements,'uint16'));
+		Array=seconds(AsyncStream.Read(NumElements,Gbec.Formal.DurationRep));
 	case UID.Type_Milliseconds
-		Array=milliseconds(AsyncStream.Read(NumElements,'uint16'));
+		Array=milliseconds(AsyncStream.Read(NumElements,Gbec.Formal.DurationRep));
 	case UID.Type_Microseconds
-		Array=microseconds(AsyncStream.Read(NumElements,'uint16'));
+		Array=microseconds(AsyncStream.Read(NumElements,Gbec.Formal.DurationRep));
 	case UID.Type_Pointer
 		Array=AsyncStream.Read(NumElements,Server.PointerType);
 	otherwise
@@ -104,11 +105,11 @@ for C=1:NumCols
 		case UID.Type_UInt16
 			Value=AsyncStream.Read(NumRows,'uint16');
 		case UID.Type_Seconds
-			Value=seconds(AsyncStream.Read(NumRows,'uint16'));
+			Value=seconds(AsyncStream.Read(NumRows,Gbec.Formal.DurationRep));
 		case UID.Type_Milliseconds
-			Value=milliseconds(AsyncStream.Read(NumRows,'uint16'));
+			Value=milliseconds(AsyncStream.Read(NumRows,Gbec.Formal.DurationRep));
 		case UID.Type_Microseconds
-			Value=microseconds(AsyncStream.Read(NumRows,'uint16'));
+			Value=microseconds(AsyncStream.Read(NumRows,Gbec.Formal.DurationRep));
 		case UID.Type_Pointer
 			Value=AsyncStream.Read(NumRows,Server.PointerType);
 		otherwise
@@ -131,11 +132,11 @@ switch UID(AsyncStream.Read)
 	case UID.Type_UInt16
 		KeyReader=@(AsyncStream)AsyncStream.Read('uint16');
 	case UID.Type_Seconds
-		KeyReader=@(AsyncStream)seconds(AsyncStream.Read('uint16'));
+		KeyReader=@(AsyncStream)seconds(AsyncStream.Read(Gbec.Formal.DurationRep));
 	case UID.Type_Milliseconds
-		KeyReader=@(AsyncStream)milliseconds(AsyncStream.Read('uint16'));
+		KeyReader=@(AsyncStream)milliseconds(AsyncStream.Read(Gbec.Formal.DurationRep));
 	case UID.Type_Microseconds
-		KeyReader=@(AsyncStream)microseconds(AsyncStream.Read('uint16'));
+		KeyReader=@(AsyncStream)microseconds(AsyncStream.Read(Gbec.Formal.DurationRep));
 	case UID.Type_Pointer
 		KeyReader=@(AsyncStream)AsyncStream.Read(Server.PointerType);
 	otherwise
@@ -151,11 +152,11 @@ switch UID(AsyncStream.Read)
 	case UID.Type_UInt16
 		ValueReader=@(Server)Server.AsyncStream.Read('uint16');
 	case UID.Type_Seconds
-		ValueReader=@(Server)seconds(Server.AsyncStream.Read('uint16'));
+		ValueReader=@(Server)seconds(Server.AsyncStream.Read(Gbec.Formal.DurationRep));
 	case UID.Type_Milliseconds
-		ValueReader=@(Server)milliseconds(Server.AsyncStream.Read('uint16'));
+		ValueReader=@(Server)milliseconds(Server.AsyncStream.Read(Gbec.Formal.DurationRep));
 	case UID.Type_Microseconds
-		ValueReader=@(Server)microseconds(Server.AsyncStream.Read('uint16'));
+		ValueReader=@(Server)microseconds(Server.AsyncStream.Read(Gbec.Formal.DurationRep));
 	case UID.Type_Pointer
 		ValueReader=@(Server)Server.AsyncStream.Read(Server.PointerType);
 	case UID.Type_Struct

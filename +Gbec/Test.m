@@ -15,7 +15,7 @@ classdef Test<Gbec.Process
 			end
 			obj.Server.FeedDogIfActive();
 			AsyncStream=obj.Server.AsyncStream;
-			TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream.Serial);
+			TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream);
 			AsyncStream.Send(Async_stream_IO.ArgumentSerialize(Port,obj.Pointer,TestID,Times),Gbec.UID.PortA_StartModule);
 			NumBytes=AsyncStream.Listen(Port);
 			if NumBytes

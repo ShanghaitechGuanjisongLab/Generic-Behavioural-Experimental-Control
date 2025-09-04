@@ -40,5 +40,6 @@ classdef Exception<MATLAB.Lang.IEnumerableException
 		Fail_to_merge_existing_dataset
 		StartModule_no_return
 		StartModule_return_unexpected
+		Session_has_no_trials
 	end
 end

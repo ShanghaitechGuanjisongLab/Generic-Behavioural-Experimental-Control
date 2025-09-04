@@ -3,6 +3,11 @@ classdef IAsyncStream<handle
 	properties(Constant,GetAccess=protected)
 		MagicByte=0x5A
 	end
+	properties(Dependent,Abstract)
+		%指示当前中断是否处于可用状态。
+		%中断不可用状态时，仍可以附加监听回调，但会被缓存，不会自动触发。中断被启用后，缓存的回调将会被清理。也可以调用Flush方法在中断禁用情况下手动触发回调。
+		InterruptEnabled
+	end
 	methods(Abstract)
 		%分配一个空闲端口号。
 		% 该端口号将保持被占用状态，不再参与自动分配，直到调用ReleasePort
@@ -82,6 +87,11 @@ classdef IAsyncStream<handle
 		% Correct(1,1)logical，true表示当前流的参数与输入参数相符，否则返回false
 		Correct=CheckArguments(obj,varargin)
 
+		%清理已收入缓冲区的挂起消息
+		%调用Pause后，未处理的消息会被缓存，不会触发回调。使用此方法检查并处理任何缓存的消息。
+		%See also Async_stream_IO.IAsyncStream.Pause
+		Flush(obj)
+
 		%将数据按字节拼接流式写入
 		% 此运算符<=方法将任何数据typecast为uint8类型然后拼接到报文中。使用前必须调用BeginSend。
 		%# 语法
@@ -131,6 +141,30 @@ classdef IAsyncStream<handle
 		%See also Async_stream_IO.IAsyncStream.ReleasePort
 		O=PortOccupied(obj,Port)
 
+		%从基础流直接读出数据类型
+		% 此方法仅用于配合Listen方法实现同步读入消息，其它情形不应使用此方法，以免破坏数据报文。累计读入字节数不能超过Listen返回的字节数。
+		%# 语法
+		% ```
+		% Data=Read(obj);
+		% %读入一个字节
+		%
+		% Data=Read(obj,Type);
+		% %读入1个指定类型的数据
+		%
+		% Data=Read(obj,Number);
+		% %读入指定数量的uint8
+		%
+		% Data=Read(obj,Number,Type);
+		% %读入指定数量的指定类型的数据
+		% ```
+		%# 输入参数
+		% Number(1,1)=1，要读取的数据数量
+		% Type(1,1)string="uint8"，要读取的数据类型，注意不同类型数据有不同的字节数
+		%# 返回值
+		% Data(1,Number)Type，读取到的数据。
+		%See also Async_stream_IO.IAsyncStream.Listen
+		Data=Read(obj,Type,Number)
+
 		%立即释放指定本地端口，取消任何异步监听或绑定函数。
 		%# 语法
 		% ```
@@ -173,30 +207,6 @@ classdef IAsyncStream<handle
 		% Return(:,1)uint8，远程函数的返回值。如果远程函数没有返回值，将返回空数组。
 		%See also Async_stream_IO.IAsyncStream.AsyncInvoke
 		Return=SyncInvoke(obj,RemotePort,varargin)
-
-		%从基础流直接读出数据类型
-		% 此方法仅用于配合Listen方法实现同步读入消息，其它情形不应使用此方法，以免破坏数据报文。累计读入字节数不能超过Listen返回的字节数。
-		%# 语法
-		% ```
-		% Data=Read(obj);
-		% %读入一个字节
-		%
-		% Data=Read(obj,Type);
-		% %读入1个指定类型的数据
-		%
-		% Data=Read(obj,Number);
-		% %读入指定数量的uint8
-		%
-		% Data=Read(obj,Number,Type);
-		% %读入指定数量的指定类型的数据
-		% ```
-		%# 输入参数
-		% Number(1,1)=1，要读取的数据数量
-		% Type(1,1)string="uint8"，要读取的数据类型，注意不同类型数据有不同的字节数
-		%# 返回值
-		% Data(1,Number)Type，读取到的数据。
-		%See also Async_stream_IO.IAsyncStream.Listen
-		Data=Read(obj,Type,Number)
 	end
 	events(NotifyAccess=protected)
 		%如果基础流支持断线重连，重连成功后抛出此事件

@@ -38,7 +38,9 @@ classdef Test<Gbec.Process
 				NumTimes(1,1)uint16=str2double(inputdlg('检查几次？','检查几次？'))
 			end
 			fprintf('%s×%u……\n',TestID,NumTimes);
-			obj.TestCycle(Async_stream_IO.RaiiPort(obj.Server.AsyncStream).Port,TestID,NumTimes);
+			Port=obj.Server.AsyncStream.AllocatePort;
+			OCU=onCleanup(@()obj.Server.AsyncStream.ReleasePort(Port));
+			obj.TestCycle(Port,TestID,NumTimes);
 		end
 		function OneEnterOneCheck(obj,TestID,Prompt)
 			arguments
@@ -46,9 +48,10 @@ classdef Test<Gbec.Process
 				TestID(1,1)Gbec.UID
 				Prompt
 			end
-			Port=Async_stream_IO.RaiiPort(obj.Server.AsyncStream);
+			Port=obj.Server.AsyncStream.AllocatePort;
+			OCU=onCleanup(@()obj.Server.AsyncStream.ReleasePort(Port));
 			while input(Prompt,"s")==""
-				obj.TestCycle(Port.Port,TestID);
+				obj.TestCycle(Port,TestID);
 			end
 		end
 		function StartCheck(obj,TestID)
@@ -57,7 +60,9 @@ classdef Test<Gbec.Process
 				TestID(1,1)Gbec.UID
 			end
 			fprintf('%s……\n',TestID);
-			obj.TestCycle(Async_stream_IO.RaiiPort(obj.Server.AsyncStream).Port,TestID);
+			Port=obj.Server.AsyncStream.AllocatePort;
+			OCU=onCleanup(@()obj.Server.AsyncStream.ReleasePort(Port));
+			obj.TestCycle(Port,TestID);
 		end
 		function StopCheck(obj)
 			obj.Server.FeedDogIfActive();

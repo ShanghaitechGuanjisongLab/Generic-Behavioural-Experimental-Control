@@ -20,10 +20,11 @@ if ~isempty(obj.VideoInput)
 	waitfor(obj.VideoInput,'Running','on');
 end
 AsyncStream=obj.Server.AsyncStream;
-Port=Async_stream_IO.RaiiPort(AsyncStream);
+Port=AsyncStream.AllocatePort;
+OCU=onCleanup(@()AsyncStream.ReleasePort(Port));
 TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream);
-AsyncStream.Send(Async_stream_IO.ArgumentSerialize(Port.Port,obj.Pointer,obj.SessionID),Gbec.UID.PortA_StartModule);
-NumBytes=AsyncStream.Listen(Port.Port);
+AsyncStream.Send(Async_stream_IO.ArgumentSerialize(Port,obj.Pointer,obj.SessionID),Gbec.UID.PortA_StartModule);
+NumBytes=AsyncStream.Listen(Port);
 switch NumBytes
 	case 0
 		Gbec.Exception.StartModule_no_return.Throw;

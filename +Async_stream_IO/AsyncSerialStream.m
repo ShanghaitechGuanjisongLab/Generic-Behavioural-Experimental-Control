@@ -401,16 +401,17 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			%# 返回值
 			% Return(:,1)uint8，远程函数的返回值。如果远程函数没有返回值，将返回空数组。
 			%See also Async_stream_IO.AsyncSerialStream.AsyncInvoke
-			LocalPort=Async_stream_IO.RaiiPort(obj);
+			LocalPort=obj.AllocatePort_;
+			OCU=onCleanup(@()obj.ReleasePort(LocalPort));
 			TCO=Async_stream_IO.TemporaryCallbackOff(obj);
-			obj.Send(Async_stream_IO.ArgumentSerialize(LocalPort.Port,varargin{:}),RemotePort);
-			MessageSize=obj.Listen(LocalPort.Port);
+			obj.Send(Async_stream_IO.ArgumentSerialize(LocalPort,varargin{:}),RemotePort);
+			MessageSize=obj.Listen(LocalPort);
 			if MessageSize<1
-				Async_stream_IO.Exception.Corrupted_object_received.Throw(sprintf('RemotePort %u, LocalPort %u, MessageSize %u',RemotePort,LocalPort.Port,MessageSize));
+				Async_stream_IO.Exception.Corrupted_object_received.Throw(sprintf('RemotePort %u, LocalPort %u, MessageSize %u',RemotePort,LocalPort,MessageSize));
 			end
 			Exception=Async_stream_IO.Exception(obj.Read);
 			if Exception~=Async_stream_IO.Exception.Success
-				Exception.Throw(sprintf('RemotePort %u, LocalPort %u, MessageSize %u',RemotePort,LocalPort.Port,MessageSize));
+				Exception.Throw(sprintf('RemotePort %u, LocalPort %u, MessageSize %u',RemotePort,LocalPort,MessageSize));
 			end
 			MessageSize=MessageSize-1;
 			if MessageSize

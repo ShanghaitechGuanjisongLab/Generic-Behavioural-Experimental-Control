@@ -85,7 +85,9 @@ classdef Formal<Gbec.Process
 			end
 			TrialsDone=groupsummary(TrialsDone,'Event');
 			NumDistinctTrials=height(TrialsDone);
-			LocalPort=AsyncStream.AllocatePort();
+			LocalPort=AsyncStream.AllocatePort;
+			OCU=onCleanup(@()AsyncStream.ReleasePort(LocalPort));
+			TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream);
 			AsyncStream.BeginSend(Gbec.UID.PortA_RestoreModule,NumDistinctTrials*3+1+AsyncStream.PointerSize);
 			AsyncStream<=LocalPort<=obj.Pointer;
 			for T=1:NumDistinctTrials

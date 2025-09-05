@@ -13,8 +13,8 @@ EventLog=obj.EventRecorder.GetTimeTable;
 if ~isempty(EventLog)
 	EventLog.Event=categorical(Gbec.LogTranslate(EventLog.Event));
 end
-EventLog={EventLog};
-Blocks.EventLog=EventLog;
+Blocks.EventLog={EventLog};
+EventLog=Blocks;
 Blocks.BlockIndex=0x1;
 Blocks.BlockUID=0x001;
 Trials=table;
@@ -60,7 +60,7 @@ end
 [SaveDirectory,Filename]=fileparts(SP);
 obj.LogPrint("数据已保存到<a href=""matlab:load('%s');"">%s</a> <a href=""matlab:cd('%s');"">切换当前文件夹</a> <a href=""matlab:winopen('%s');"">打开数据文件夹</a>",SP,SP,SaveDirectory,SaveDirectory);
 if~obj.OverwriteExisting
-	EventLog=sortrows(DataSet.TableQuery(["DateTime","EventLog"],Mouse=obj.Mouse),"DateTime").EventLog;
+	EventLog=sortrows(DataSet.TableQuery(["DateTime","EventLog"],Mouse=obj.Mouse),"DateTime");
 	Fig=figure;
 	plot(EventLog.DateTime,UniExp.EventLog2Performance(EventLog.EventLog));
 	xlabel('DateTime');
@@ -74,7 +74,7 @@ if ~isempty(obj.TepArguments)
 		obj.TepArguments{1}(EventLog,obj.TepArguments{2:end});
 	else
 		Fig=figure;
-		UniExp.TrialwiseEventPlot(EventLog{end},obj.TepArguments{:});
+		UniExp.TrialwiseEventPlot(EventLog.EventLog{end},obj.TepArguments{:});
 		title(obj.Mouse);
 		savefig(Fig,fullfile(SaveDirectory,sprintf('%s.%s.fig',Filename,char(obj.DateTime,'yyyyMMddHHmm'))));
 	end

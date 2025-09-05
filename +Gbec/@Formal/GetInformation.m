@@ -9,11 +9,12 @@
 function Information = GetInformation(obj)
 obj.Server.FeedDogIfActive;
 AsyncStream=obj.Server.AsyncStream;
-LocalPort=Async_stream_IO.RaiiPort(AsyncStream);
+LocalPort=AsyncStream.AllocatePort;
+OCU=onCleanup(@()AsyncStream.ReleasePort(LocalPort));
 TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream);
 AsyncStream.BeginSend(Gbec.UID.PortA_GetInformation,obj.Server.PointerSize+1);
-AsyncStream<=LocalPort.Port<=obj.Pointer;
-AsyncStream.Listen(LocalPort.Port);
+AsyncStream<=LocalPort<=obj.Pointer;
+AsyncStream.Listen(LocalPort);
 Information=CollectStruct(obj.Server);
 if obj.HostActions.numEntries%空字典直接取键可能会出错
 	for K=obj.HostActions.keys.'

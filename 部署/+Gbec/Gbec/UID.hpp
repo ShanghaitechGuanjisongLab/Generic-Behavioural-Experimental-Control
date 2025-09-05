@@ -41,8 +41,6 @@ enum class UID : uint8_t {
 	Field_After,
 	Field_Do,
 	Field_ID,
-	Field_SubSteps,
-	Field_RandomStep,
 	Field_RandomDuration,
 	Field_Duration,
 	Field_AbortStep,
@@ -62,6 +60,7 @@ enum class UID : uint8_t {
 	Field_PeriodB,
 	Field_ContentA,
 	Field_ContentB,
+	Field_TargetID,
 
 	Column_SubSteps,
 	Column_Repeats,
@@ -146,6 +145,8 @@ enum class UID : uint8_t {
 	Module_DoubleRepeat,
 	Module_Repeat,
 	Module_DigitalToggle,
+	Module_AssignModuleID,
+	Module_ReferModuleID,
 
 	Host_GratingImage,
 	Host_StartRecord,

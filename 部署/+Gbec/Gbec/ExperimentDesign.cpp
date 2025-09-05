@@ -64,6 +64,10 @@ using AudioWater = Trial<UID::Trial_AudioWater, Sequential< DelayMilliseconds<80
 
 using LightWater = Trial< UID::Trial_LightWater, Sequential<CalmDown, PinFlashUpDown<BlueLed, 200, UID::Event_LightUp,UID::Event_LightDown>, DelaySeconds<20>>>;
 
+//可以给模块指定别名ID，用于循环引用
+
+AssignModuleID()
+
 // 列出所有公开模块，允许PC端调用
 std::unordered_map<UID, uint16_t (*)(Process*)> SessionMap = {
   { UID::Test_BlueLed, Session<PinFlash<BlueLed, 200>> },

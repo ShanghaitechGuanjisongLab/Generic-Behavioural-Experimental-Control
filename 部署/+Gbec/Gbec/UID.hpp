@@ -1,7 +1,8 @@
 #pragma once
 #include <stdint.h>
-enum class UID : uint8_t {
-	//Arduino提供的服务端口
+enum class UID : uint8_t
+{
+	// Arduino提供的服务端口
 
 	PortA_PointerSize,
 	PortA_CreateProcess,
@@ -16,7 +17,7 @@ enum class UID : uint8_t {
 	PortA_RandomSeed,
 	PortA_IsReady,
 
-	//Computer提供的服务端口
+	// Computer提供的服务端口
 
 	PortC_ProcessFinished,
 	PortC_Signal,
@@ -24,6 +25,8 @@ enum class UID : uint8_t {
 	PortC_Exception,
 	PortC_ImReady,
 	PortC_Debug,
+
+	// 运行时异常
 
 	Exception_Success,
 	Exception_InvalidProcess,
@@ -37,7 +40,9 @@ enum class UID : uint8_t {
 	Exception_BrokenRestoreArguments,
 	Exception_MethodNotImplemented,
 	Exception_InvalidModule,
-	
+
+	// 信息字段
+
 	Field_After,
 	Field_Do,
 	Field_ID,
@@ -62,9 +67,13 @@ enum class UID : uint8_t {
 	Field_ContentB,
 	Field_TargetID,
 
+	// 表列
+
 	Column_SubSteps,
 	Column_Repeats,
 	Column_Module,
+
+	// 信息字段数据类型
 
 	Type_Bool,
 	Type_UInt8,
@@ -80,6 +89,8 @@ enum class UID : uint8_t {
 	Type_Pointer,
 	Type_Map,
 
+	// 进程状态
+
 	State_Ready,
 	State_Running,
 	State_Paused,
@@ -89,6 +100,8 @@ enum class UID : uint8_t {
 	State_Repeat,
 	State_Restore,
 	State_Idle,
+
+	// 信号事件
 
 	Event_TrialStart,
 	Event_MonitorHit,
@@ -112,6 +125,8 @@ enum class UID : uint8_t {
 	Event_HighUp,
 	Event_HighDown,
 
+	// 测试
+
 	Test_BlueLed,
 	Test_WaterPump,
 	Test_CapacitorReset,
@@ -125,10 +140,18 @@ enum class UID : uint8_t {
 	Test_LowTone,
 	Test_HighTone,
 
+	// 回合
+
 	Trial_Invalid,
+	Trial_AudioWater,
+	Trial_LightWater,
+
+	// 持续时间类型
 
 	Duration_Random,
 	Duration_Infinite,
+
+	// 基础模块
 
 	Module_Sequential,
 	Module_RandomSequential,
@@ -148,11 +171,16 @@ enum class UID : uint8_t {
 	Module_AssignModuleID,
 	Module_ReferModuleID,
 
+	// 组合模块
+
+	Using_ResponseWindow,
+
+	// 主机动作
+
 	Host_GratingImage,
 	Host_StartRecord,
 
-	Trial_AudioWater,
-	Trial_LightWater,
+	// 会话
 
 	Session_AudioWater,
 	Session_LightWater,

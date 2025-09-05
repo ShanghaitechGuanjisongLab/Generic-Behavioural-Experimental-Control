@@ -54,22 +54,19 @@ using DelayMilliseconds = Delay<ConstantDuration<std::chrono::milliseconds, Mill
 template<DurationRep Seconds>
 using DelaySeconds = Delay<ConstantDuration<std::chrono::seconds, Seconds>>;
 
-// 注意RepeatEvery和UntilDuration的时间单位必须统一
 template<DurationRep FrequencyHz, DurationRep Milliseconds>
 using Tone = typename RepeatEvery<ConstantDuration<std::chrono::microseconds, 1000000 / FrequencyHz>, DigitalToggle<PassiveBuzzer>>::template UntilDuration<ConstantDuration<std::chrono::microseconds, Milliseconds * 1000>>;
 
 using CalmDown = Sequential<MonitorRestart, Delay5To10, ModuleAbort<MonitorRestart>, ModuleRandomize<Duration5To10>>;
 
-using AudioWater = Trial<UID::Trial_AudioWater, Sequential< DelayMilliseconds<800>, DelaySeconds<20>>>;
+using AudioWater = Trial<UID::Trial_AudioWater, Sequential<DelayMilliseconds<800>, DelaySeconds<20>>>;
 
-using LightWater = Trial< UID::Trial_LightWater, Sequential<CalmDown, PinFlashUpDown<BlueLed, 200, UID::Event_LightUp,UID::Event_LightDown>, DelaySeconds<20>>>;
+using ResponseWindow = MonitorPin<CapacitorOut, SerialMessage<UID::Event_MonitorHit>>;
 
-//可以给模块指定别名ID，用于循环引用
-
-AssignModuleID()
+using LightWater = Trial<UID::Trial_LightWater, Sequential<CalmDown, ResponseWindow, PinFlashUpDown<BlueLed, 200, UID::Event_LightUp, UID::Event_LightDown>, DelayMilliseconds<800>, ModuleAbort<ResponseWindow>, PinFlashUp<WaterPump, 150, UID::Event_Water>, DelaySeconds<20>>>;
 
 // 列出所有公开模块，允许PC端调用
-std::unordered_map<UID, uint16_t (*)(Process*)> SessionMap = {
+std::unordered_map<UID, uint16_t (*)(Process *)> SessionMap = {
   { UID::Test_BlueLed, Session<PinFlash<BlueLed, 200>> },
   { UID::Test_WaterPump, Session<PinFlash<WaterPump, 150>> },
   { UID::Test_CapacitorReset, Session<Sequential<DigitalWrite<CapacitorVdd, LOW>, Delay<ConstantDuration<std::chrono::milliseconds, 100>>, DigitalWrite<CapacitorVdd, HIGH>>> },

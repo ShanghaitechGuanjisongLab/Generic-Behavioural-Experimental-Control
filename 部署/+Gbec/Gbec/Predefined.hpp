@@ -105,6 +105,8 @@ protected:
 		}
 	};
 };
+extern bool Debug;
+
 inline static void InfoWrite(std::ostringstream &InfoStream, UID InfoValue) {
 	InfoStream.put(static_cast<char>(InfoValue));
 }
@@ -121,6 +123,11 @@ inline static void InfoWrite(std::ostringstream &InfoStream, T1 InfoValue1, T2 I
 	int _[] = { (InfoWrite(InfoStream, InfoValue1), 0), (InfoWrite(InfoStream, InfoValue2), 0), (InfoWrite(InfoStream, InfoValues), 0)... };
 }
 extern Async_stream_IO::AsyncStream *SerialStream;
+
+template<typename Target>
+struct ModuleID {
+	static UID const &ID;
+};
 
 struct Process {
 	void Pause() const {
@@ -167,11 +174,11 @@ struct Process {
 	}
 	template<typename ModuleType>
 	ModuleType *LoadModule() {
-		auto Iter = Modules.find(&ModuleType::ID);
+		auto Iter = Modules.find(&ModuleID<ModuleType>::ID);
 		if (Iter == Modules.end()) {
 			std::unique_ptr<ModuleType> NewModule = std::make_unique<ModuleType>(*this);
 			ModuleType *ModulePtr = NewModule.get();
-			Modules[&ModuleType::ID] = std::move(NewModule);
+			Modules[&ModuleID<ModuleType>::ID] = std::move(NewModule);
 			return ModulePtr;
 		}
 		return reinterpret_cast<ModuleType *>(Iter->second.get());
@@ -182,7 +189,7 @@ struct Process {
 	uint16_t LoadStartModule() {
 		Abort();
 		Modules.clear();
-		StartPointer = &Entry::ID;
+		StartPointer = &ModuleID<Entry>::ID;
 		StartModule = LoadModule<Entry>();
 		return Entry::NumTrials;
 	}
@@ -280,10 +287,6 @@ struct RandomDuration : Module, IRandom {
 template<typename Unit, DurationRep Min, DurationRep Max, UID CustomID>
 UID const RandomDuration<Unit, Min, Max, CustomID>::ID = CustomID;
 struct InfiniteDuration;
-template<typename Target>
-struct ModuleID {
-	static UID const &ID;
-};
 // 无限重复模块，也可以额外指定UntilTimes重复次数。不能指定重复时间，请组合使用 Async Delay ModuleAbort 等模块实现。
 template<typename Content>
 struct Repeat : Module {
@@ -319,7 +322,10 @@ struct Repeat : Module {
 		}
 		static UID const ID;
 		void WriteInfo(std::ostringstream &InfoStream) const override {
-			InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ModuleID<UntilTimes>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID, UID::Field_Times, UID::Type_UInt16, Times);
+			InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID);
+			
+			Debug = true;
+			InfoWrite(InfoStream, ModuleID<UntilTimes>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID, UID::Field_Times, UID::Type_UInt16, Times);
 		}
 		static constexpr uint16_t NumTrials = Content::NumTrials * Times;
 
@@ -615,8 +621,6 @@ struct Delay<ConstantDuration<Unit, Value>> : _Delay {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		pinMode(51, OUTPUT);
-		digitalWrite(51, HIGH);
 		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<Delay>::ID, UID::Field_Duration, _TypeID<Unit>::value, Value);
 	}
 };
@@ -1456,7 +1460,8 @@ UID const &ModuleID<Target>::ID = Target::ID;
 	}; \
 	UID const ModuleID<TargetModule>::ID = TargetID; \
 	template<> \
-	struct IDModule<TargetID> : TargetModule /*跟基类ID完全相同，因此会被视为同一模块*/ \ 
+	struct IDModule<TargetID> : TargetModule /*跟基类ID完全相同，因此会被视为同一模块*/ \
+	\ 
 { \
 		using TargetModule::TargetModule; \
 	};

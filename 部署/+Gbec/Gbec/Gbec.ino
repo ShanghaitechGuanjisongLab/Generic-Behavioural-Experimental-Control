@@ -81,7 +81,6 @@ void setup() {
 			SerialStream->Send(UID::Exception_InvalidModule, Header.RemotePort);
 			return;
 		}
-		digitalWrite(6, HIGH);
 		uint16_t Times;
 		switch (MessageSize) {
 			case 0:
@@ -171,3 +170,4 @@ void loop() {
 	SerialStream->ExecuteTransactionsInQueue();
 }
 #include <TimersOneForAll_Define.hpp>
+bool Debug=false;

@@ -52,7 +52,7 @@ classdef IAsyncStream<handle
 		% ```
 		%# 输入参数
 		% ToPort(1,1)uint8，要发送到的远程端口
-		% NumBytes(1,1)uint8，要写入的总字节数
+		% NumBytes(1,1)Async_stream_IO.MessageSize，要写入的总字节数
 		%See also Async_stream_IO.IAsyncStream.le typecast
 		BeginSend(obj,ToPort,NumBytes)
 
@@ -120,7 +120,7 @@ classdef IAsyncStream<handle
 		% %谨慎使用此语法。如果指定端口一直收不到消息，此方法将永不返回。
 		% ```
 		%# 输入参数
-		% Callback function_handle((1,1)uint8)，当远程传来指向该端口的消息时，将调用Callback(MessageSize)，由用户负责手动从基础流读出消息内容。在Callback返回之前，
+		% Callback function_handle((1,1)Async_stream_IO.MessageSize)，当远程传来指向该端口的消息时，将调用Callback(MessageSize)，由用户负责手动从基础流读出消息内容。在Callback返回之前，
 		%  必须不多不少恰好读入全部MessageSize字节，否则行为未定义。
 		% Port(1,1)，手动指定要监听的端口。
 		%# 返回值

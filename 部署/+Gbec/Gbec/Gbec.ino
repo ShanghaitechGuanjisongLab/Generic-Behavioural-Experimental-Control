@@ -2,7 +2,7 @@
 // SAM编译器bug，此定义必须放前面否则找不到
 #pragma pack(push, 1)
 struct GbecHeader {
-	uint8_t RemotePort;
+	Async_stream_IO::Port RemotePort;
 	Process *P;
 };
 struct ModuleStartReturn {
@@ -21,13 +21,13 @@ UID const Delay<InfiniteDuration>::ID = UID::Module_Delay;
 
 template<typename T>
 inline void BindFunctionToPort(T &&Function, UID Port) {
-	SerialStream->BindFunctionToPort(std::forward<T>(Function), static_cast<uint8_t>(Port));
+	SerialStream->BindFunctionToPort(std::forward<T>(Function), static_cast<Async_stream_IO::Port>(Port));
 }
 template<typename T>
 inline void SerialListen(T &&Callback, UID Port) {
-	SerialStream->Listen(std::forward<T>(Callback), static_cast<uint8_t>(Port));
+	SerialStream->Listen(std::forward<T>(Callback), static_cast<Async_stream_IO::Port>(Port));
 }
-bool CommonListenersHeader(uint8_t &MessageSize, GbecHeader &Header) {
+bool CommonListenersHeader(Async_stream_IO::MessageSize &MessageSize, GbecHeader &Header) {
 	if (MessageSize < sizeof(Header))
 		return true;
 	*SerialStream >> Header;
@@ -70,7 +70,7 @@ void setup() {
 		return UID::Exception_InvalidProcess;
 	},
 	                   UID::PortA_DeleteProcess);
-	SerialListen([](uint8_t MessageSize) {
+	SerialListen([](Async_stream_IO::MessageSize MessageSize) {
 		GbecHeader Header;
 		if (CommonListenersHeader(MessageSize, Header))
 			return;
@@ -97,10 +97,10 @@ void setup() {
 		Header.P->TrialsDone.clear();
 		SerialStream->Send(ModuleStartReturn{ UID::Exception_Success, Iterator->second(Header.P) }, Header.RemotePort);
 		if (!Header.P->Start(Times))
-			SerialStream->AsyncInvoke(static_cast<uint8_t>(UID::PortC_ProcessFinished), Header.P);
+			SerialStream->AsyncInvoke(static_cast<Async_stream_IO::Port>(UID::PortC_ProcessFinished), Header.P);
 	},
 	             UID::PortA_StartModule);
-	SerialListen([](uint8_t MessageSize) {
+	SerialListen([](Async_stream_IO::MessageSize MessageSize) {
 		GbecHeader Header;
 		if (CommonListenersHeader(MessageSize, Header))
 			return;
@@ -120,7 +120,7 @@ void setup() {
 		Iterator->second(Header.P);
 		SerialStream->Send(UID::Exception_Success, Header.RemotePort);
 		if (!Header.P->Start(1))
-			SerialStream->AsyncInvoke(static_cast<uint8_t>(UID::PortC_ProcessFinished), Header.P);
+			SerialStream->AsyncInvoke(static_cast<Async_stream_IO::Port>(UID::PortC_ProcessFinished), Header.P);
 	},
 	             UID::PortA_RestoreModule);
 	BindFunctionToPort([](Process *P) {
@@ -147,7 +147,7 @@ void setup() {
 		return UID::Exception_InvalidProcess;
 	},
 	                   UID::PortA_AbortProcess);
-	SerialListen([](uint8_t MessageSize) {
+	SerialListen([](Async_stream_IO::MessageSize MessageSize) {
 		GbecHeader Header;
 		if (CommonListenersHeader(MessageSize, Header))
 			return;
@@ -155,19 +155,18 @@ void setup() {
 		SerialStream->Send(Info.data(), Info.size(), Header.RemotePort);
 	},
 	             UID::PortA_GetInformation);
-	SerialListen([](uint8_t MessageSize) {
-		if (MessageSize < sizeof(uint8_t))
+	SerialListen([](Async_stream_IO::MessageSize MessageSize) {
+		if (MessageSize < sizeof(Async_stream_IO::Port))
 			return;
-		Async_stream_IO::SendSession const Session{ sizeof(Process *) * ExistingProcesses.size(), SerialStream->Read<uint8_t>(), Serial };
+		Async_stream_IO::SendSession const Session{ sizeof(Process *) * ExistingProcesses.size(), SerialStream->Read<Async_stream_IO::Port>(), Serial };
 		for (Process *const P : ExistingProcesses)
 			Session << P;
 	},
 	             UID::PortA_AllProcesses);
-	SerialStream->Send(nullptr, 0, static_cast<uint8_t>(UID::PortC_ImReady));
+	SerialStream->Send(nullptr, 0, static_cast<Async_stream_IO::Port>(UID::PortC_ImReady));
 }
 void loop() {
 	PinListener::ClearPending();
 	SerialStream->ExecuteTransactionsInQueue();
 }
 #include <TimersOneForAll_Define.hpp>
-bool Debug=false;

@@ -105,7 +105,6 @@ protected:
 		}
 	};
 };
-extern bool Debug;
 
 inline static void InfoWrite(std::ostringstream &InfoStream, UID InfoValue) {
 	InfoStream.put(static_cast<char>(InfoValue));
@@ -227,7 +226,7 @@ protected:
 		  while (--TimesLeft)
 			  if (StartModule->Start(FinishCallback))
 				  return;
-		  SerialStream->AsyncInvoke(static_cast<uint8_t>(UID::PortC_ProcessFinished), this);
+		  SerialStream->AsyncInvoke(static_cast<Async_stream_IO::Port>(UID::PortC_ProcessFinished), this);
 		}
 	};
 
@@ -322,10 +321,7 @@ struct Repeat : Module {
 		}
 		static UID const ID;
 		void WriteInfo(std::ostringstream &InfoStream) const override {
-			InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID);
-			
-			Debug = true;
-			InfoWrite(InfoStream, ModuleID<UntilTimes>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID, UID::Field_Times, UID::Type_UInt16, Times);
+			InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ModuleID<UntilTimes>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID, UID::Field_Times, UID::Type_UInt16, Times);
 		}
 		static constexpr uint16_t NumTrials = Content::NumTrials * Times;
 
@@ -1308,7 +1304,7 @@ struct SerialMessage : _InstantaneousModule {
 	  : _InstantaneousModule(Container) {
 	}
 	void Restart() override {
-		SerialStream->AsyncInvoke(static_cast<uint8_t>(UID::PortC_Signal), &Container, Message);
+		SerialStream->AsyncInvoke(static_cast<Async_stream_IO::Port>(UID::PortC_Signal), &Container, Message);
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {

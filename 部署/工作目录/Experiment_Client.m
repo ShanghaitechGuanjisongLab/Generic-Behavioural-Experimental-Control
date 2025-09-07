@@ -1,10 +1,10 @@
 %[text] 将本文件中的“BOX1”替换成任何自定义名称，可以同时在工作区中存在多个Server和Formal对象，以在本MATLAB会话中同时执行多个实验会话，甚至从同一个COM口（开发板）同时运行多个实验
-if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid)
-	BOX1=Gbec.Server;
-end
+if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid) %[output:group:08be0162]
+	BOX1=Gbec.Server; %[output:15a786a8]
+end %[output:group:08be0162]
 %[text] # 在下方输入会话设置
 %[text] 串口号
-BOX1.Initialize('COM11',9600); %[output:9b5ee1e3] %[output:8802ddfb]
+BOX1.Initialize('COM11',9600);
 if~(exist('Formal3','var')&&Formal3.IsValid&&Formal3.Server==BOX1)
 	Formal3=Gbec.Formal(BOX1);
 	Formal3.LogName='BOX1';
@@ -89,9 +89,6 @@ clearvars Formal3;
 %[metadata:view]
 %   data: {"layout":"inline","rightPanelPercent":40}
 %---
-%[output:9b5ee1e3]
-%   data: {"dataType":"warning","outputData":{"text":"警告: 在 'read' 的超时期限内未返回指定的数据量。\n'serialport' unable to read any data. For more information on possible reasons, see <a href=\"matlab: helpview('matlab', 'serialport_nodata')\"'>serialport 读取警告<\/a>."}}
-%---
-%[output:8802ddfb]
-%   data: {"dataType":"error","outputData":{"errorType":"runtime","text":"错误使用 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Async_stream_IO.AsyncSerialStream\/Read', 'D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m', 467)\" style=\"font-weight:bold\">Async_stream_IO.AsyncSerialStream\/Read<\/a> (<a href=\"matlab: opentoline('D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m',467,0)\">第 467 行<\/a>)\nAsync_stream_IO:Exception:Serial_not_respond_in_time\n\n出错 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Async_stream_IO.AsyncSerialStream\/Listen', 'D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m', 321)\" style=\"font-weight:bold\">Async_stream_IO.AsyncSerialStream\/Listen<\/a> (<a href=\"matlab: opentoline('D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m',321,0)\">第 321 行<\/a>)\n\t\t\t\t\tif obj.Read==Async_stream_IO.IAsyncStream.MagicByte\n     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n出错 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Async_stream_IO.AsyncSerialStream\/SyncInvoke', 'D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m', 408)\" style=\"font-weight:bold\">Async_stream_IO.AsyncSerialStream\/SyncInvoke<\/a> (<a href=\"matlab: opentoline('D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m',408,0)\">第 408 行<\/a>)\n\t\t\tMessageSize=obj.Listen(LocalPort);\n   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n出错 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Gbec.Server\/Initialize', 'D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\Server.m', 111)\" style=\"font-weight:bold\">Gbec.Server\/Initialize<\/a> (<a href=\"matlab: opentoline('D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\Server.m',111,0)\">第 111 行<\/a>)\n\t\t\tobj.PointerSize=obj.AsyncStream.SyncInvoke(Gbec.UID.PortA_PointerSize);\n   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"}}
+%[output:15a786a8]
+%   data: {"dataType":"text","outputData":{"text":"通用行为实验控制器v6.2.1 by 张天夫\n","truncated":false}}
 %---

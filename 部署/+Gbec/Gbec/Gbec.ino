@@ -32,13 +32,14 @@ bool CommonListenersHeader(Async_stream_IO::MessageSize &MessageSize, GbecHeader
 		return true;
 	*SerialStream >> Header;
 	MessageSize -= sizeof(Header);
-	if (ExistingProcesses.contains(Header.P)) 
+	if (ExistingProcesses.contains(Header.P))
 		return false;
 	SerialStream->Send(UID::Exception_InvalidProcess, Header.RemotePort);
 	SerialStream->Skip(MessageSize);
 	return true;
 }
 
+bool Debug = false;
 void setup() {
 	pinMode(6, OUTPUT);
 	Serial.begin(9600);
@@ -152,6 +153,7 @@ void setup() {
 		if (CommonListenersHeader(MessageSize, Header))
 			return;
 		std::string const Info = Header.P->GetInfo();
+		Debug = true;
 		SerialStream->Send(Info.data(), Info.size(), Header.RemotePort);
 	},
 	             UID::PortA_GetInformation);

@@ -87,7 +87,7 @@ struct Module {
 	}
 	// 返回是否需要等待回调，并提供回调函数。返回true表示模块还在执行中，将在执行完毕后调用回调函数；返回false表示模块已执行完毕，不会调用回调函数。
 	virtual bool Start(std::move_only_function<void()> &FinishCallback) {}
-	virtual void WriteInfo(std::ostringstream &InfoStream){};
+	virtual void WriteInfo(std::ostringstream &InfoStream) const {};
 	// 放弃该步骤。未在执行的步骤放弃也不会出错。
 	virtual void Abort() {}
 	// 重新开始当前执行中的步骤，不改变下一步。不应试图重启当前未在执行中的步骤。
@@ -1460,7 +1460,7 @@ struct DynamicSlot : Module {
 	template<typename Content>
 	struct Load : _InstantaneousModule {
 		Load(Process &Container)
-		  : _InstantaneousModule(Container) {
+		  : _InstantaneousModule(Container), ContentPtr(Container.LoadModule<Content>()) {
 		}
 		void Restart() override {
 			SlotPtr->ContentPtr = ContentPtr;
@@ -1472,7 +1472,7 @@ struct DynamicSlot : Module {
 
 	protected:
 		DynamicSlot *const SlotPtr = Module::Container.LoadModule<DynamicSlot>();
-		Content *const ContentPtr = Module::Container.LoadModule<Content>();
+		Content *const ContentPtr;//SAM编译器bug：只能在构造函数中初始化
 	};
 	struct Clear : _InstantaneousModule {
 		Clear(Process &Container)

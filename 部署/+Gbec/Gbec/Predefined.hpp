@@ -374,10 +374,9 @@ template<uint16_t Only>
 struct _Sum<Only> {
 	static constexpr uint16_t value = Only;
 };
-
 template<typename... SubModules>
-struct Sequential : Module {
-	Sequential(Process &Container)
+struct _Sequential : Module {
+	_Sequential(Process &Container)
 	  : Module(Container), NextBlock{ [this]() {
 		    while (++CurrentModule < std::cend(SubPointers))
 			    if ((*CurrentModule)->Start(NextBlock))
@@ -411,7 +410,7 @@ struct Sequential : Module {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<Sequential>::ID, UID::Field_Modules, UID::Type_Array, static_cast<uint8_t>(sizeof...(SubModules)), UID::Type_Pointer, &ModuleID<SubModules>::ID...);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<_Sequential>::ID, UID::Field_Modules, UID::Type_Array, static_cast<uint8_t>(sizeof...(SubModules)), UID::Type_Pointer, &ModuleID<SubModules>::ID...);
 	}
 	static constexpr uint16_t NumTrials = _Sum<SubModules::NumTrials...>::value;
 
@@ -423,7 +422,46 @@ protected:
 	std::move_only_function<void()> NextBlock;
 };
 template<typename... SubModules>
-UID const Sequential<SubModules...>::ID = UID::Module_Sequential;
+UID const _Sequential<SubModules...>::ID = UID::Module_Sequential;
+
+namespace detail {
+template<typename... Ts> struct type_list {};
+
+template<typename A, typename B> struct concat;
+template<typename... A, typename... B>
+struct concat<type_list<A...>, type_list<B...>> {
+	using type = type_list<A..., B...>;
+};
+
+template<typename... Args> struct flatten_pack;
+
+template<typename T>
+struct flatten_one { using type = type_list<T>; };
+
+template<typename... Inner>
+struct flatten_one<_Sequential<Inner...>> {
+	using type = typename flatten_pack<Inner...>::type;
+};
+
+template<> struct flatten_pack<> { using type = type_list<>; };
+
+template<typename Head, typename... Tail>
+struct flatten_pack<Head, Tail...> {
+	using type = typename concat<
+	  typename flatten_one<Head>::type,
+	  typename flatten_pack<Tail...>::type >::type;
+};
+
+template<typename List> struct list_to_seq;
+template<typename... Ts>
+struct list_to_seq<type_list<Ts...>> {
+	using type = _Sequential<Ts...>;
+};
+}
+//依次执行模块。嵌套的Sequential会被展开。
+template<typename... Args>
+using Sequential = typename detail::list_to_seq<
+  typename detail::flatten_pack<Args...>::type >::type;
 
 template<typename... SubModules>
 struct RandomSequential : Module, IRandom {
@@ -1472,7 +1510,7 @@ struct DynamicSlot : Module {
 
 	protected:
 		DynamicSlot *const SlotPtr = Module::Container.LoadModule<DynamicSlot>();
-		Content *const ContentPtr;//SAM编译器bug：只能在构造函数中初始化
+		Content *const ContentPtr;  //SAM编译器bug：只能在构造函数中初始化
 	};
 	struct Clear : _InstantaneousModule {
 		Clear(Process &Container)

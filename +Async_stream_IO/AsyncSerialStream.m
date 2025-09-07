@@ -33,7 +33,10 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			if~MessageSize
 				return;
 			end
+			try
 			Port=obj.Read;
+			catch
+			end
 			Arguments=obj.Read(MessageSize-1);
 			if Port==255
 				Function(Arguments);

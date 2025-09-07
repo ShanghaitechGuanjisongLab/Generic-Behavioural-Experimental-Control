@@ -94,7 +94,7 @@ classdef Server<handle
 				if~HasOld
 					obj.AllProcesses=dictionary;
 					obj.AsyncStream=Async_stream_IO.AsyncSerialStream(varargin{:});
-					obj.AsyncStream.Serial.Timeout=1;
+					obj.AsyncStream.Serial.Timeout=10;
 					obj.AsyncStream.Listen(Gbec.UID.PortC_ImReady);
 				end
 			end

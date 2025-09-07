@@ -160,9 +160,9 @@ void setup() {
 	SerialListen([](Async_stream_IO::MessageSize MessageSize) {
 		if (MessageSize < sizeof(Async_stream_IO::Port))
 			return;
-		Async_stream_IO::SendSession const Session{ sizeof(Process *) * ExistingProcesses.size(), SerialStream->Read<Async_stream_IO::Port>(), Serial };
+		Async_stream_IO::InterruptGuard const Token = SerialStream->BeginSend(sizeof(Process *) * ExistingProcesses.size(), SerialStream->Read<Async_stream_IO::Port>());
 		for (Process *const P : ExistingProcesses)
-			Session << P;
+			*SerialStream << P;
 	},
 	             UID::PortA_AllProcesses);
 	SerialStream->Send(nullptr, 0, static_cast<Async_stream_IO::Port>(UID::PortC_ImReady));

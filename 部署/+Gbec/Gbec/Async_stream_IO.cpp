@@ -26,25 +26,25 @@ Port AsyncStream::AllocatePort() {
 constexpr uint8_t MagicByte = 0x5A;
 
 template<typename T>
-inline std::enable_if_t<(sizeof(T) > 1), Stream> &operator<<(Stream &S, T const &Value) {
-	S.write(reinterpret_cast<const char *>(&Value), sizeof(T));
+inline std::enable_if_t<(sizeof(T) > 1), std::vector<byte>> &operator<<(std::vector<byte> &S, T const &Value) {
+	S.insert(S.end(), reinterpret_cast<const char *>(&Value), reinterpret_cast<const char *>(&Value + 1));
 	return S;
 }
 template<typename T>
-inline std::enable_if_t<sizeof(T) == 1, Stream> &operator<<(Stream &S, T const &Value) {
-	S.write(Value);
+inline std::enable_if_t<sizeof(T) == 1, std::vector<byte>> &operator<<(std::vector<byte> &S, T const &Value) {
+	S.push_back(Value);
 	return S;
 }
-
-void AsyncStream::Send(const void *Message, MessageSize Length, Port ToPort) const {
+void AsyncStream::Send(const void *Message, MessageSize Length, Port ToPort) {
 	InterruptGuard const _;
-	BaseStream << MagicByte << ToPort << Length;
-	BaseStream.write(reinterpret_cast<const char *>(Message), Length);
+	(InputBuffer << MagicByte << ToPort << Length).insert(InputBuffer.end(), reinterpret_cast<const char *>(Message), reinterpret_cast<const char *>(Message) + Length);
 }
-SendSession::SendSession(MessageSize Length, Port ToPort, Stream &BaseStream)
-  : BaseStream(BaseStream) {
-	BaseStream << MagicByte << ToPort << Length;
+InterruptGuard AsyncStream::BeginSend(MessageSize Length, Port ToPort) {
+	InterruptGuard Token;
+	(InputBuffer << MagicByte << ToPort << Length);
+	return Token;
 }
+
 void AsyncStream::PortForward(AsioHeader Header) {
 	noInterrupts();
 	auto PortListener = _Listeners.find(Header.ToPort);
@@ -66,13 +66,21 @@ void AsyncStream::PortForward(AsioHeader Header) {
 		PortListener->second = std::move(L);
 	interrupts();
 }
-void AsyncStream::ExecuteTransactionsInQueue() {
+void AsyncStream::Flush() {
+	noInterrupts();
+	std::swap(InputBuffer, OutputBuffer);
 	interrupts();
+	BaseStream.write(OutputBuffer.data(), OutputBuffer.size());
+	OutputBuffer.clear();
+}
+void AsyncStream::ExecuteTransactionsInQueue() {
+	Flush();
 	while (BaseStream.available())
 		if (BaseStream.read() == MagicByte)
 			PortForward(Read<AsioHeader>());
 }
 MessageSize AsyncStream::Listen(Port FromPort) {
+	Flush();
 	for (;;) {
 		if (Read<decltype(MagicByte)>() == MagicByte) {
 			AsioHeader const Header = Read<AsioHeader>();

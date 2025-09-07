@@ -1,7 +1,7 @@
 %[text] 将本文件中的“BOX1”替换成任何自定义名称，可以同时在工作区中存在多个Server和Formal对象，以在本MATLAB会话中同时执行多个实验会话，甚至从同一个COM口（开发板）同时运行多个实验
-if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid) %[output:group:08be0162]
-	BOX1=Gbec.Server; %[output:15a786a8]
-end %[output:group:08be0162]
+if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid) %[output:group:2aab970e]
+	BOX1=Gbec.Server; %[output:7b99225c]
+end %[output:group:2aab970e]
 %[text] # 在下方输入会话设置
 %[text] 串口号
 BOX1.Initialize('COM11',9600);
@@ -21,7 +21,7 @@ if true
 else
 	Filename=sprintf('D:\\张天夫\\%s.%s.%s',Formal3.Mouse,char(Formal3.DateTime,'yyyyMMddHHmm'),SessionName(9:end));
 end
-Formal3.SavePath=strcat(Filename,'.行为.UniExp.mat');
+Formal3.SavePath=strcat(Filename,'.行为.UniExp.mat'); %[output:2e40ad23]
 %[text] 是否要在每次会话结束后展示事件记录图，如不设置则将此属性设为空；如设置，必须安装[统一实验分析作图](https://github.com/ShanghaitechGuanjisongLab/Unified-Experimental-Analysis-and-Figuring/releases)工具箱。
 %[text] 此属性是一个元胞数组，分别代表要用于标志回合的事件、每个回合相对于标志事件的时间范围、要排除不作图的事件
 Formal3.TepArguments={["灯光亮","声音响"],seconds([-5,20]),'ExcludedEvents',["灯光灭","错失","命中","回合开始","声音停"]};
@@ -61,7 +61,7 @@ if false
 end
 %[text] 此例中，在Arduino端向串口发送UID.Host\_GratingImage即可显示图像。参见[Gbec.GratingImage](<matlab:edit Gbec.GratingImage>)
 %[text] # 然后运行脚本，在命令行窗口中执行交互
-Formal3.StartSession;
+Formal3.StartSession; %[output:99784aa3]
 return;
 %%
 %[text] # 实时控制命令
@@ -89,6 +89,12 @@ clearvars Formal3;
 %[metadata:view]
 %   data: {"layout":"inline","rightPanelPercent":40}
 %---
-%[output:15a786a8]
+%[output:7b99225c]
 %   data: {"dataType":"text","outputData":{"text":"通用行为实验控制器v6.2.1 by 张天夫\n","truncated":false}}
+%---
+%[output:2e40ad23]
+%   data: {"dataType":"text","outputData":{"text":"\nBOX1：目标文件已存在，将尝试合并","truncated":false}}
+%---
+%[output:99784aa3]
+%   data: {"dataType":"error","outputData":{"errorType":"runtime","text":"错误使用 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Gbec.Formal\/StartSession', 'D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\@Formal\\StartSession.m', 14)\" style=\"font-weight:bold\">Gbec.Formal\/StartSession<\/a> (<a href=\"matlab: opentoline('D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\@Formal\\StartSession.m',14,0)\">第 14 行<\/a>)\nGbec:Exception:User_canceled_operation：如果希望改变覆盖\/合并行为，请重新设置SavePath"}}
 %---

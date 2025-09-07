@@ -65,6 +65,7 @@ enum class UID : uint8_t {
 	Field_ContentA,
 	Field_ContentB,
 	Field_TargetID,
+	Field_Slot,
 
 	// 表列
 
@@ -169,6 +170,9 @@ enum class UID : uint8_t {
 	Module_DigitalToggle,
 	Module_AssignModuleID,
 	Module_ReferModuleID,
+	Module_DynamicSlot,
+	Module_LoadSlot,
+	Module_ClearSlot,
 
 	// 组合模块
 
@@ -183,5 +187,7 @@ enum class UID : uint8_t {
 
 	Session_AudioWater,
 	Session_LightWater,
+
+	MagicByte,
 
 };

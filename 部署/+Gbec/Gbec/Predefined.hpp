@@ -79,14 +79,15 @@ protected:
 	};
 };
 struct Process;
+// 所有模块的基类，本身可以当作一个什么都不做的空模块使用
 struct Module {
 	Process &Container;
 	Module(Process &Container)
 	  : Container(Container) {
 	}
-	// 返回是否需要等待回调。回调函数只能在Start时提供，不能在构造时提供，因为存在复杂的虚继承关系，只能默认构造。
+	// 返回是否需要等待回调，并提供回调函数。返回true表示模块还在执行中，将在执行完毕后调用回调函数；返回false表示模块已执行完毕，不会调用回调函数。
 	virtual bool Start(std::move_only_function<void()> &FinishCallback) {}
-	virtual void WriteInfo(std::ostringstream &InfoStream) const = 0;
+	virtual void WriteInfo(std::ostringstream &InfoStream){};
 	// 放弃该步骤。未在执行的步骤放弃也不会出错。
 	virtual void Abort() {}
 	// 重新开始当前执行中的步骤，不改变下一步。不应试图重启当前未在执行中的步骤。
@@ -353,7 +354,7 @@ struct Repeat : Module {
 	void WriteInfo(std::ostringstream &InfoStream) const override {
 		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<Repeat>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID);
 	}
-	static constexpr uint16_t NumTrials = -1;
+	static constexpr uint16_t NumTrials = Content::NumTrials;
 
 protected:
 	Content *const ContentPtr = Module::Container.LoadModule<Content>();
@@ -544,7 +545,6 @@ struct _TimedModule : Module {
 			UnregisterTimer();
 		}
 	}
-	static constexpr uint16_t NumTrials = -1;
 
 protected:
 	Timers_one_for_all::TimerClass *Timer = nullptr;
@@ -580,8 +580,6 @@ struct _Delay : _TimedModule {
 		Restart();
 		return true;
 	}
-	// 不能给基类设置ID，必须给最终派生类，因为要求每个派生类ID具有唯一的地址
-	static constexpr uint16_t NumTrials = 0;
 
 protected:
 	// 确保直接Restart也能正常释放计时器
@@ -1292,6 +1290,7 @@ struct MonitorPin : _InstantaneousModule {
 	void WriteInfo(std::ostringstream &InfoStream) const override {
 		InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ModuleID<MonitorPin>::ID, UID::Field_Pin, UID::Type_UInt8, Pin, UID::Field_Monitor, UID::Type_Pointer, &ModuleID<Monitor>::ID);
 	}
+	static constexpr uint16_t NumTrials = Monitor::NumTrials;
 
 protected:
 	Monitor *const MonitorPtr = Module::Container.LoadModule<Monitor>();
@@ -1437,6 +1436,67 @@ protected:
 };
 template<typename Target, typename Cleaner>
 UID const CleanWhenAbort<Target, Cleaner>::ID = UID::Module_CleanWhenAbort;
+template<UID UniqueID = UID::Module_DynamicSlot>
+struct DynamicSlot : Module {
+	DynamicSlot(Process &Container)
+	  : Module(Container) {
+	}
+	void Abort() override {
+		if (ContentPtr)
+			ContentPtr->Abort();
+	}
+	void Restart() override {
+		if (ContentPtr)
+			ContentPtr->Restart();
+	}
+	bool Start(std::move_only_function<void()> &FC) override {
+		return ContentPtr && ContentPtr->Start(FC);
+	}
+	static UID const ID;
+	void WriteInfo(std::ostringstream &InfoStream) const override {
+		InfoWrite(InfoStream, static_cast<uint8_t>(1), UID::Field_ID, UID::Type_UID, ModuleID<DynamicSlot>::ID);
+	}
+	Module *ContentPtr = nullptr;
+	template<typename Content>
+	struct Load : _InstantaneousModule {
+		Load(Process &Container)
+		  : _InstantaneousModule(Container) {
+		}
+		void Restart() override {
+			SlotPtr->ContentPtr = ContentPtr;
+		}
+		static UID const ID;
+		void WriteInfo(std::ostringstream &InfoStream) const override {
+			InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ModuleID<Load>::ID, UID::Field_Slot, UID::Type_Pointer, &ModuleID<DynamicSlot>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID);
+		}
+
+	protected:
+		DynamicSlot *const SlotPtr = Module::Container.LoadModule<DynamicSlot>();
+		Content *const ContentPtr = Module::Container.LoadModule<Content>();
+	};
+	struct Clear : _InstantaneousModule {
+		Clear(Process &Container)
+		  : _InstantaneousModule(Container) {
+		}
+		void Restart() override {
+			SlotPtr->ContentPtr = nullptr;
+		}
+		static UID const ID;
+		void WriteInfo(std::ostringstream &InfoStream) const override {
+			InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<Clear>::ID, UID::Field_Slot, UID::Type_Pointer, &ModuleID<DynamicSlot>::ID);
+		}
+
+	protected:
+		DynamicSlot *const SlotPtr = Module::Container.LoadModule<DynamicSlot>();
+	};
+};
+template<UID UniqueID>
+UID const DynamicSlot<UniqueID>::ID = UniqueID;
+template<UID UniqueID>
+template<typename Content>
+UID const DynamicSlot<UniqueID>::Load<Content>::ID = UID::Module_LoadSlot;
+template<UID UniqueID>
+UID const DynamicSlot<UniqueID>::Clear::ID = UID::Module_ClearSlot;
 template<UID ID>
 struct IDModule;
 

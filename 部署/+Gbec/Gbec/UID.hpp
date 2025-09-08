@@ -147,7 +147,10 @@ enum class UID : uint8_t {
 	Trial_Invalid,
 	Trial_AudioWater,
 	Trial_LightWater,
-
+	Trial_AudioOnly,
+	Trial_LightOnly,
+	Trial_WaterOnly,
+	
 	// 持续时间类型
 
 	Duration_Random,
@@ -189,6 +192,7 @@ enum class UID : uint8_t {
 
 	Session_AudioWater,
 	Session_LightWater,
+	Session_LAuW,
 
 	MagicByte,
 

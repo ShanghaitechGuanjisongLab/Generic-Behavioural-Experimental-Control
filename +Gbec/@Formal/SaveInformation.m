@@ -58,7 +58,7 @@ else
 	save(SP,'DataSet','Version');
 end
 [SaveDirectory,Filename]=fileparts(SP);
-obj.LogPrint("数据已保存到<a href=""matlab:load('%s');"">%s</a> <a href=""matlab:cd('%s');"">切换当前文件夹</a> <a href=""matlab:winopen('%s');"">打开数据文件夹</a>",SP,SP,SaveDirectory,SaveDirectory);
+obj.LogPrint("数据已保存到<a href=""matlab:load('%s');"">%s</a> <a href=""matlab:cd('%s');"">切换当前文件夹</a> <a href=""matlab:winopen('%s');"">打开数据文件夹</a>\n",SP,SP,SaveDirectory,SaveDirectory);
 if~obj.OverwriteExisting
 	EventLog=sortrows(DataSet.TableQuery(["DateTime","EventLog"],Mouse=obj.Mouse),"DateTime");
 	Fig=figure;

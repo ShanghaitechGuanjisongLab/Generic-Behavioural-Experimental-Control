@@ -481,7 +481,7 @@ struct RandomSequential : Module, IRandom {
 		}
 		WithRepeat(Process &Container)
 		  : Module(Container) {
-			Module **_[] = { CurrentModule = std::fill_n(CurrentModule, Repeats, Module::Container.LoadModule<SubModules>())... };
+			Module **_[] = { (CurrentModule = std::fill_n(CurrentModule, Repeats, Module::Container.LoadModule<SubModules>()))... };
 			Randomize();
 		}
 		void Abort() override {

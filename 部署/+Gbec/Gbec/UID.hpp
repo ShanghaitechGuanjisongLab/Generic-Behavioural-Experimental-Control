@@ -104,6 +104,7 @@ enum class UID : uint8_t {
 	// 信号事件
 
 	Event_TrialStart,
+	Event_ConnectionReset,
 	Event_MonitorHit,
 	Event_MonitorMiss,
 	Event_ProcessPaused,
@@ -124,6 +125,7 @@ enum class UID : uint8_t {
 	Event_LowDown,
 	Event_HighUp,
 	Event_HighDown,
+	Event_Debug,
 
 	// 测试
 

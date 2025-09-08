@@ -29,7 +29,7 @@ classdef GratingImage<Gbec.IHostAction
 		%旋转角度
 		AngleRange
 		%呈现秒数
-		DurationRange
+		DurationRange duration
 		%偏移相位
 		InitialPhase
 		%颜色渐变范围
@@ -49,7 +49,7 @@ classdef GratingImage<Gbec.IHostAction
 			%  - (1,2)，表示该参数以行向量中的两个元素为上下界，在此范围内随机抽一个取值
 			% 以下三个参数，如不指定将取默认值：
 			%  - AngleRange=[-pi/2,pi/2]，顺时针旋转弧度。0表示在水平方向上周期变化，竖直方向上不变的栅格图。
-			%  - DurationRange=Inf，图像呈现的秒数。
+			%  - DurationRange duration=Inf，图像呈现的时长。
 			%  - InitialPhase=0，周期变化的初始正弦相位弧度，例如pi/2表示从峰值开始
 			%  - ColorRange(:,3)uint8=[0,0,0;255,255,255]，周期性渐变的颜色梯度，第1维是不同的颜色，第2维RGB。首行是正弦周期的谷值点的颜色，末行是峰值点颜色，中间其'
 			%   它颜色线性插值。
@@ -79,7 +79,11 @@ classdef GratingImage<Gbec.IHostAction
 			WeakReference=matlab.lang.WeakReference(obj);
 			obj.Timer=timer(TimerFcn=@(~,~)WeakReference.Handle.Window.RemoveVisual(WeakReference.Handle.CurrentImage));
 			obj.AngleRange=options.AngleRange;
-			obj.DurationRange=options.DurationRange;
+			if isduration(options.DurationRange)
+				obj.DurationRange=options.DurationRange;
+			else
+				obj.DurationRange=seconds(options.DurationRange);
+			end
 			obj.InitialPhase=options.InitialPhase;
 			obj.ColorRange=options.ColorRange;
 			Fields=["PixelsPerCycle","CyclesPerWidth","CyclesPerHeight"];
@@ -126,7 +130,7 @@ classdef GratingImage<Gbec.IHostAction
 				CF=1/CF;
 			end
 			Angle=GetValue(obj.AngleRange);
-			Duration=GetValue(obj.DurationRange);
+			Duration=GetValue(seconds(obj.DurationRange));
 			IP=GetValue(obj.InitialPhase);
 			Image=permute(uint8(interp1(linspace(-1,1,height(obj.ColorRange)),single(obj.ColorRange),sin(((1:obj.Width)'*cos(Angle)+(1:obj.Height)*sin(Angle))*CF+IP))),[3,1,2]);
 			Image(4,:,:)=255;

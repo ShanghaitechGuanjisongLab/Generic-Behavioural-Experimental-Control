@@ -47,6 +47,7 @@ end
 obj.CountdownExempt=Gbec.CountdownExempt_(obj.Server);
 obj.EventRecorder.Reset;
 obj.TrialRecorder.Reset;
+obj.TrialIndex=0;
 obj.State=Gbec.UID.State_Running;
 end
 

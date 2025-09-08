@@ -24,6 +24,11 @@ classdef Server<handle
 	end
 	properties(Access=protected)
 		ConnectionInterruptedListener
+		ConnectionResetListener
+		oSerialTimeout=1
+	end
+	properties(Dependent)
+		SerialTimeout(1,1)duration
 	end
 	methods(Access=protected)
 		function ProcessForward(obj,Arguments,Method)
@@ -42,6 +47,13 @@ classdef Server<handle
 		end
 		function ConnectionInterruptedHandler(obj,EventData)
 			Gbec.Exception.Server_connection_interrupted.Throw(sprintf('%s %s',obj.Name,formattedDisplayText(EventData)));
+		end
+		function ConnectionResetHandler(obj)
+			obj.AsyncStream.Listen(Gbec.UID.PortC_ImReady);
+			obj.AsyncStream.AsyncInvoke(Gbec.UID.PortA_RandomSeed,randi([0,intmax('uint32')],'uint32'));
+			if obj.AllProcesses.numEntries
+				arrayfun(@(P)P.Handle.ConnectionReset_(),obj.AllProcesses.values);
+			end
 		end
 	end
 	methods(Access=?Gbec.Process)
@@ -94,7 +106,7 @@ classdef Server<handle
 				if~HasOld
 					obj.AllProcesses=dictionary;
 					obj.AsyncStream=Async_stream_IO.AsyncSerialStream(varargin{:});
-					obj.AsyncStream.Serial.Timeout=10;
+					obj.AsyncStream.Serial.Timeout=obj.oSerialTimeout;
 					obj.AsyncStream.Listen(Gbec.UID.PortC_ImReady);
 				end
 			end
@@ -103,14 +115,15 @@ classdef Server<handle
 			obj.AsyncStream.BindFunctionToPort(@(Arguments)WeakReference.Handle.ProcessForward(Arguments,"Signal_"),Gbec.UID.PortC_Signal);
 			obj.AsyncStream.BindFunctionToPort(@(Arguments)WeakReference.Handle.ProcessForward(Arguments,"TrialStart_"),Gbec.UID.PortC_TrialStart);
 			obj.AsyncStream.BindFunctionToPort(@(Arguments)Gbec.UID(Arguments).Throw,Gbec.UID.PortC_Exception);
-			obj.AsyncStream.BindFunctionToPort(@(Arguments)typecast(Arguments,'uint16'),Gbec.UID.PortC_Debug);
+			obj.AsyncStream.BindFunctionToPort(@disp,Gbec.UID.PortC_Debug);
 			if ismissing(obj.Name)
-				obj.Name=formattedDisplayText(varargin);
+				obj.Name=erase(formattedDisplayText(varargin{1}),newline);
 			end
 			obj.ConnectionInterruptedListener=event.listener(obj.AsyncStream,'ConnectionInterrupted',@(~,EventData)WeakReference.Handle.ConnectionInterruptedHandler(EventData));
 			obj.PointerSize=obj.AsyncStream.SyncInvoke(Gbec.UID.PortA_PointerSize);
 			obj.PointerType="uint"+string(obj.PointerSize*8);
 			obj.AsyncStream.AsyncInvoke(Gbec.UID.PortA_RandomSeed,randi([0,intmax('uint32')],'uint32'));
+			obj.ConnectionResetListener=event.listener(obj.AsyncStream,'ConnectionReset',@(~,~)WeakReference.Handle.ConnectionResetHandler());
 		end
 		function RefreshAllProcesses(obj)
 			%刷新AllProcesses属性
@@ -134,6 +147,18 @@ classdef Server<handle
 			warning off MATLAB:timer:deleterunning;
 			delete(obj.SerialCountdown);
 			delete(obj.ConnectionInterruptedListener);
+		end
+		function ST=get.SerialTimeout(obj)
+			ST=seconds(obj.oSerialTimeout);
+		end
+		function set.SerialTimeout(obj,Value)
+			if isduration(Value)
+				Value=seconds(Value);
+			end
+			obj.oSerialTimeout=Value;
+			if~isempty(obj.AsyncStream)&&obj.AsyncStream.isvalid&&obj.AsyncStream.Serial.isvalid
+				obj.AsyncStream.Serial.Timeout=Value;
+			end
 		end
 	end
 end

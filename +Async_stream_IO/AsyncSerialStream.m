@@ -103,6 +103,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			Suffix="/"+string(obj.MaxRetryTimes)+"次";
 			SerialPort=obj.Serial.Port;
 			BaudRate=obj.Serial.BaudRate;
+			Timeout=obj.Serial.Timeout;
 			fprintf("串口连接中断");
 			ReconnectFail=true;
 			for a=1:obj.MaxRetryTimes
@@ -123,6 +124,15 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			if ReconnectFail
 				obj.notify('ConnectionInterrupted');
 			else
+				obj.Serial.Timeout=Timeout;
+				WeakReference=matlab.lang.WeakReference(obj);
+				obj.Serial.ErrorOccurredFcn=@(varargin)WeakReference.Handle.InterruptRetry(varargin{:});
+				if obj.InterruptEnabled_
+					obj.Flush;
+					if obj.Listeners.numEntries
+						obj.Serial.configureCallback('byte',1,@(~,~)WeakReference.Handle.Flush);
+					end
+				end
 				disp("重新连接成功");
 				obj.notify('ConnectionReset');
 			end

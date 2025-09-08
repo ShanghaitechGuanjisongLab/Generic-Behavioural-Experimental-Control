@@ -57,15 +57,17 @@ using DelaySeconds = Delay<ConstantDuration<std::chrono::seconds, Seconds>>;
 template<DurationRep FrequencyHz, DurationRep Milliseconds>
 using Tone = typename RepeatEvery<ConstantDuration<std::chrono::microseconds, 1000000 / FrequencyHz>, DigitalToggle<PassiveBuzzer>>::template UntilDuration<ConstantDuration<std::chrono::microseconds, Milliseconds * 1000>>;
 
-using CalmDown = Sequential<MonitorRestart, Delay5To10, ModuleAbort<MonitorRestart>, ModuleRandomize<Duration5To10>>;
-
 using ResponseWindow = MonitorPin<CapacitorOut, Sequential<DynamicSlot<>::Clear, SerialMessage<UID::Event_MonitorHit>>>;
 
-using AssociationTrial = Trial<UID::Trial_LightWater, Sequential<CalmDown, DynamicSlot<>, ResponseWindow, PinFlashUpDown<BlueLed, 200, UID::Event_LightUp, UID::Event_LightDown>, DelayMilliseconds<800>, ModuleAbort<ResponseWindow>, DynamicSlot<>, PinFlashUp<WaterPump, 10, UID::Event_Water>, DelaySeconds<20>>>;
+template<uint8_t CuePin, UID CueUp, UID CueDown>
+using AssociationTrial = Sequential<MonitorRestart, Delay5To10, ModuleAbort<MonitorRestart>, ModuleRandomize<Duration5To10>, DynamicSlot<>::Load<SerialMessage<UID::Event_MonitorMiss>>, ResponseWindow, PinFlashUpDown<CuePin, 200, CueUp, CueDown>, DelayMilliseconds<800>, ModuleAbort<ResponseWindow>, DynamicSlot<>, PinFlashUp<WaterPump, 150, UID::Event_Water>, DelaySeconds<2>>;
 
-using AudioWater = Trial<UID::Trial_AudioWater, Sequential<DelayMilliseconds<800>, DelaySeconds<20>>>;
+using AudioWater = Trial<UID::Trial_AudioWater, AssociationTrial<ActiveBuzzer, UID::Event_AudioUp, UID::Event_AudioDown>>;
 
-using LightWater = Trial<UID::Trial_LightWater, Sequential<CalmDown, DynamicSlot<>, ResponseWindow, PinFlashUpDown<BlueLed, 200, UID::Event_LightUp, UID::Event_LightDown>, DelayMilliseconds<800>, ModuleAbort<ResponseWindow>, DynamicSlot<>, PinFlashUp<WaterPump, 10, UID::Event_Water>, DelaySeconds<20>>>;
+using LightWater = Trial<UID::Trial_LightWater, AssociationTrial<BlueLed, UID::Event_LightUp, UID::Event_LightDown>>;
+
+template<typename TrialType>
+using AssociationSession = Sequential<DigitalWrite<CapacitorVdd, HIGH>, MonitorPin<CapacitorOut, SerialMessage<UID::Event_HitCount>>, Repeat<TrialType>::UntilTimes<30>>;
 
 // 列出所有公开模块，允许PC端调用
 std::unordered_map<UID, uint16_t (*)(Process *)> SessionMap = {
@@ -81,6 +83,6 @@ std::unordered_map<UID, uint16_t (*)(Process *)> SessionMap = {
   { UID::Test_RandomFlash, Session<Sequential<Async<RandomFlash>, Delay<ConstantDuration<std::chrono::seconds, 10>>, ModuleAbort<RandomFlash>>> },
   { UID::Test_LowTone, Session<Tone<500, 1000>> },
   { UID::Test_HighTone, Session<Tone<5000, 1000>> },
-  { UID::Session_AudioWater, Session<Repeat<AudioWater>::UntilTimes<30>> },
-  { UID::Session_LightWater, Session<Sequential<MonitorPin<CapacitorOut, SerialMessage<UID::Event_HitCount>>, Repeat<LightWater>::UntilTimes<30>>> },
+  { UID::Session_AudioWater, Session<AssociationSession<AudioWater>> },
+  { UID::Session_LightWater, Session<AssociationSession<LightWater>> },
 };

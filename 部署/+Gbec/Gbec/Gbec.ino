@@ -114,11 +114,14 @@ void setup() {
 		}
 		MessageSize /= (sizeof(UID) + sizeof(uint16_t));
 		std::unordered_map<UID, uint16_t> &TrialsDone = Header.P->TrialsDone;
+
+		Iterator->second(Header.P);
+		//必须先载入模块，然后再设置TrialsDone，因为载入模块会清空TrialsDone
 		for (uint8_t i = 0; i < MessageSize; ++i) {
 			UID const TrialID = SerialStream->Read<UID>();
 			TrialsDone[TrialID] = SerialStream->Read<uint16_t>();
 		}
-		Iterator->second(Header.P);
+
 		SerialStream->Send(UID::Exception_Success, Header.RemotePort);
 		if (!Header.P->Start(1))
 			SerialStream->AsyncInvoke(static_cast<Async_stream_IO::Port>(UID::PortC_ProcessFinished), Header.P);

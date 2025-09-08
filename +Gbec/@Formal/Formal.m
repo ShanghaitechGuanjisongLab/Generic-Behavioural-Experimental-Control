@@ -45,7 +45,7 @@ classdef Formal<Gbec.Process
 		VideoInput
 
 		%喵提醒HTTP请求重试次数
-		HttpRetryTimes
+		HttpRetryTimes=1
 	end
 	properties(SetAccess=protected)
 		%指示实验当前是否正在运行中
@@ -53,6 +53,9 @@ classdef Formal<Gbec.Process
 
 		%当前设计的回合总数。65535表示无法确定回合总数，可能是随机的。
 		DesignedNumTrials
+
+		%当前回合序号
+		TrialIndex
 	end
 	properties(Access=protected)
 		MergeData
@@ -74,33 +77,6 @@ classdef Formal<Gbec.Process
 		function LogPrint(obj,Formatter,varargin)
 			fprintf("\n%s："+Formatter,obj.LogName,varargin{:});
 		end
-		function ConnectionResetHandler(obj)
-			obj.Server.AllProcesses.remove(obj.Pointer);
-			AsyncStream=obj.Server.AsyncStream;
-			obj.Pointer=AsyncStream.SyncInvoke(Gbec.UID.PortA_CreateProcess);
-			obj.Server.AllProcesses(obj.Pointer)=matlab.lang.WeakReference(obj);
-			TrialsDone=obj.TrialRecorder.GetTimeTable();
-			if ~isempty(TrialsDone)
-				TrialsDone(end,:)=[];
-			end
-			TrialsDone=groupsummary(TrialsDone,'Event');
-			NumDistinctTrials=height(TrialsDone);
-			LocalPort=AsyncStream.AllocatePort;
-			OCU=onCleanup(@()AsyncStream.ReleasePort(LocalPort));
-			TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream);
-			AsyncStream.BeginSend(Gbec.UID.PortA_RestoreModule,NumDistinctTrials*3+1+AsyncStream.PointerSize);
-			AsyncStream<=LocalPort<=obj.Pointer;
-			for T=1:NumDistinctTrials
-				AsyncStream<=TrialsDone.Event(T)<=uint16(TrialsDone.GroupCount(T));
-			end
-			NumBytes=AsyncStream.Listen(LocalPort);
-			if NumBytes==1
-				obj.ThrowResult(AsyncStream.Read);
-			else
-				AsyncStream.Read(NumBytes);%清除多余的字节
-				Gbec.Exception.Unexpected_response_from_Arduino.Throw;
-			end
-		end
 	end
 	methods
 		function obj = Formal(Server)
@@ -108,8 +84,6 @@ classdef Formal<Gbec.Process
 			obj.LogName=obj.Server.Name;
 			obj.EventRecorder=MATLAB.DataTypes.EventLogger;
 			obj.TrialRecorder=MATLAB.DataTypes.EventLogger;
-			WeakReference=matlab.lang.WeakReference(obj);
-			obj.ConnectionResetListener=event.listener(Server.AsyncStream,'ConnectionReset',@(~,~)WeakReference.Handle.ConnectionResetHandler());
 		end
 		function SP=get.SavePath(obj)
 			SP=obj.oSavePath;
@@ -162,19 +136,19 @@ classdef Formal<Gbec.Process
 			%这里必须记录UID而不是字符串，因为还要用于断线重连
 			obj.TrialRecorder.LogEvent(TrialID);
 			obj.EventRecorder.LogEvent(Gbec.UID.Event_TrialStart)
-			TrialIndex=obj.TrialRecorder.NumEvents;
-			TrialMod=mod(TrialIndex,obj.CheckCycle);
+			obj.TrialIndex=obj.TrialIndex+1;
+			TrialMod=mod(obj.TrialIndex,obj.CheckCycle);
 			if obj.MiaoCode~=""
-				if TrialIndex==obj.DesignedNumTrials
+				if obj.TrialIndex==obj.DesignedNumTrials
 					SendMiao('实验结束',obj.HttpRetryTimes,obj.MiaoCode);
 				elseif TrialMod==0
-					SendMiao(sprintf('已到%u回合，请检查实验状态',TrialIndex),obj.HttpRetryTimes,obj.MiaoCode);
+					SendMiao(sprintf('已到%u回合，请检查实验状态',obj.TrialIndex),obj.HttpRetryTimes,obj.MiaoCode);
 				end
 			end
-			if TrialMod==1&&TrialIndex>1
-				cprintf([1,0,1],'\n已过%u回合，请检查实验状态',TrialIndex-1);
+			if TrialMod==1&&obj.TrialIndex>1
+				cprintf([1,0,1],'\n已过%u回合，请检查实验状态',obj.TrialIndex-1);
 			end
-			FprintfInCommandWindow('\n回合%u-%s：',TrialIndex,TrialID);
+			FprintfInCommandWindow('\n回合%u-%s：',obj.TrialIndex,TrialID);
 		end
 		function Signal_(obj,S)
 			%此方法由Server调用，派生类负责处理，用户不应使用
@@ -194,8 +168,37 @@ classdef Formal<Gbec.Process
 			else
 				FprintfInCommandWindow(" 数据未保存");
 			end
-			obj.State=UID.State_Idle;
+			obj.State=Gbec.UID.State_Idle;
 			obj.CountdownExempt.delete;
+		end
+		function ConnectionReset_(obj)
+			obj.Server.AllProcesses(obj.Pointer)=[];
+			AsyncStream=obj.Server.AsyncStream;
+			obj.Pointer=typecast(AsyncStream.SyncInvoke(Gbec.UID.PortA_CreateProcess),obj.Server.PointerType);
+			obj.Server.AllProcesses(obj.Pointer)=matlab.lang.WeakReference(obj);
+			TrialsDone=obj.TrialRecorder.GetTimeTable();
+			if ~isempty(TrialsDone)
+				TrialsDone(end,:)=[];
+				obj.TrialIndex=obj.TrialIndex-1;
+			end
+			TrialsDone=groupsummary(TrialsDone,'Event');
+			NumDistinctTrials=height(TrialsDone);
+			obj.EventRecorder.LogEvent(Gbec.UID.Event_ConnectionReset);
+			LocalPort=AsyncStream.AllocatePort;
+			OCU=onCleanup(@()AsyncStream.ReleasePort(LocalPort));
+			TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream);
+			AsyncStream.BeginSend(Gbec.UID.PortA_RestoreModule,NumDistinctTrials*3+2+obj.Server.PointerSize);
+			AsyncStream<=LocalPort<=obj.Pointer<=obj.SessionID;
+			for T=1:NumDistinctTrials
+				AsyncStream<=TrialsDone.Event(T)<=uint16(TrialsDone.GroupCount(T));
+			end
+			NumBytes=AsyncStream.Listen(LocalPort);
+			if NumBytes==1
+				obj.ThrowResult(AsyncStream.Read);
+			else
+				AsyncStream.Read(NumBytes);%清除多余的字节
+				Gbec.Exception.Unexpected_response_from_Arduino.Throw;
+			end
 		end
 		function PauseSession(obj)
 			if obj.State~=Gbec.UID.State_Running
@@ -213,7 +216,7 @@ classdef Formal<Gbec.Process
 			end
 			obj.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_ContinueProcess,obj.Pointer));
 			obj.State=Gbec.UID.State_Running;
-			obj.EventRecorder.LogEvent(Gbec.UID.Event_ProcessContinued);
+			obj.EventRecorder.LogEvent(Gbec.UID.Event_ProcessContinue);
 			obj.LogPrint('会话继续');
 			obj.CountdownExempt=Gbec.CountdownExempt_(obj.Server);
 		end
@@ -243,5 +246,21 @@ if feature('SuppressCommandLineOutput')
 	timer(StartDelay=0.1,TimerFcn=@(~,~)fprintf(varargin{:})).start;
 else
 	fprintf(varargin{:});
+end
+end
+function SendMiao(Note,HttpRetryTimes,MiaoCode)
+for a=0:HttpRetryTimes
+	try
+		%HttpRequest不支持中文，必须用webread
+		webread(sprintf('http://miaotixing.com/trigger?id=%s&text=%s',MiaoCode,Note));
+	catch ME
+		if strcmp(ME.identifier,'MATLAB:webservices:UnknownHost')
+			continue;
+		else
+			warning(ME.identifier,'%s',ME.message);
+			break;
+		end
+	end
+	break;
 end
 end

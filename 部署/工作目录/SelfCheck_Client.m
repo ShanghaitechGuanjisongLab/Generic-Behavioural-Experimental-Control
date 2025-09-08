@@ -3,8 +3,8 @@
 if~(exist('BOX1','var')&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid)
 	BOX1=Gbec.Server;
 end
-BOX1.Initialize('COM3',9600);
-if~(exist('Test1','var')&&Test1.IsValid&&Test1.Server==BOX1)
+BOX1.Initialize('COM11',9600);
+if~(exist('Test1','var')&&isa(Test1,'Gbec.Test')&&Test1.IsValid&&Test1.Server==BOX1)
 	Test1=Gbec.Test(BOX1);
 end
 %[text] 初始化完成后可以选择性地执行以下检查步骤
@@ -40,7 +40,7 @@ Test1.OneEnterOneCheck(Gbec.UID.Test_AirPump,"按一次回车喷一次气，输�
 Test1.RepeatCheck(Gbec.UID.Test_AirPump);
 %%
 %[text] 主机动作测试。此处示例GratingImage的主机测试，可根据需要替换为其它类型测试
-GI=Gbec.GratingImage.New(CyclesPerWidth=[1,10]);
+GI=Gbec.GratingImage(CyclesPerWidth=[1,10]);
 Test1.HostAction=@(~)GI.Test;
 Test1.OneEnterOneCheck(Gbec.UID.Test_HostAction,'按一次回车切一张图，输入任意字符结束测试：');
 %%

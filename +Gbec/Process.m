@@ -59,6 +59,9 @@ classdef Process<handle
 		function TrialStart_(~,~)
 			%此方法由Server调用，派生类负责处理，用户不应使用
 		end
+		function ConnectionReset_(~)
+			%此方法由Server调用，派生类负责处理，用户不应使用
+		end
 		function delete(obj)
 			if obj.Server.isvalid
 				obj.Server.FeedDogIfActive();

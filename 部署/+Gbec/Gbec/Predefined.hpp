@@ -78,6 +78,28 @@ protected:
 		}
 	};
 };
+
+inline static void InfoWrite(std::ostringstream &InfoStream, UID InfoValue) {
+	InfoStream.put(static_cast<char>(InfoValue));
+}
+inline static void InfoWrite(std::ostringstream &InfoStream, uint8_t InfoValue) {
+	InfoStream.put(static_cast<char>(InfoValue));
+}
+template<typename T>
+inline static void InfoWrite(std::ostringstream &InfoStream, T InfoValue) {
+	InfoStream.write(reinterpret_cast<const char *>(&InfoValue), sizeof(InfoValue));
+}
+// 强制要求2个以上输入，以免递归
+template<typename T1, typename T2, typename... T>
+inline static void InfoWrite(std::ostringstream &InfoStream, T1 InfoValue1, T2 InfoValue2, T... InfoValues) {
+	int _[] = { (InfoWrite(InfoStream, InfoValue1), 0), (InfoWrite(InfoStream, InfoValue2), 0), (InfoWrite(InfoStream, InfoValues), 0)... };
+}
+extern Async_stream_IO::AsyncStream *SerialStream;
+
+template<typename Target>
+struct ModuleID {
+	static UID const &ID;
+};
 struct Process;
 // 所有模块的基类，本身可以当作一个什么都不做的空模块使用
 struct Module {
@@ -105,28 +127,6 @@ protected:
 			ContentModule->Start(_EmptyCallback);
 		}
 	};
-};
-
-inline static void InfoWrite(std::ostringstream &InfoStream, UID InfoValue) {
-	InfoStream.put(static_cast<char>(InfoValue));
-}
-inline static void InfoWrite(std::ostringstream &InfoStream, uint8_t InfoValue) {
-	InfoStream.put(static_cast<char>(InfoValue));
-}
-template<typename T>
-inline static void InfoWrite(std::ostringstream &InfoStream, T InfoValue) {
-	InfoStream.write(reinterpret_cast<const char *>(&InfoValue), sizeof(InfoValue));
-}
-// 强制要求2个以上输入，以免递归
-template<typename T1, typename T2, typename... T>
-inline static void InfoWrite(std::ostringstream &InfoStream, T1 InfoValue1, T2 InfoValue2, T... InfoValues) {
-	int _[] = { (InfoWrite(InfoStream, InfoValue1), 0), (InfoWrite(InfoStream, InfoValue2), 0), (InfoWrite(InfoStream, InfoValues), 0)... };
-}
-extern Async_stream_IO::AsyncStream *SerialStream;
-
-template<typename Target>
-struct ModuleID {
-	static UID const &ID;
 };
 
 struct Process {
@@ -243,6 +243,9 @@ protected:
 			(*Cleaner)();
 	}
 };
+struct IRandom {
+	virtual void Randomize() = 0;
+};
 
 template<typename T>
 struct _TypeID;
@@ -258,14 +261,128 @@ template<>
 struct _TypeID<std::chrono::microseconds> {
 	static constexpr UID value = UID::Type_Microseconds;
 };
+template<uint16_t First, uint16_t... Rest>
+struct _Sum {
+	static constexpr uint16_t value = First + _Sum<Rest...>::value;
+};
+template<uint16_t Only>
+struct _Sum<Only> {
+	static constexpr uint16_t value = Only;
+};
+template<typename... SubModules>
+struct RandomSequential : Module, IRandom {
+	static constexpr
+#ifdef ARDUINO_ARCH_AVR
+	  std::ArduinoUrng
+#endif
+#ifdef ARDUINO_ARCH_SAM
+	    std::TrueUrng
+#endif
+	      Urng{};
+	template<uint16_t... Repeats>
+	struct WithRepeat : Module, IRandom {
+		static UID const ID;
+		void Randomize() override {
+			std::shuffle(std::begin(SubPointers), std::end(SubPointers), Urng);
+		}
+		WithRepeat(Process &Container)
+		  : Module(Container), NextBlock{ [this]() {
+			    while (++CurrentModule < std::end(SubPointers))
+				    if ((*CurrentModule)->Start(NextBlock))
+					    return;
+			  } } {
+			Module **_[] = { (CurrentModule = std::fill_n(CurrentModule, Repeats, Module::Container.LoadModule<SubModules>()))... };
+			Randomize();
+		}
+		void Abort() override {
+			if (CurrentModule < std::end(SubPointers))
+				(*CurrentModule)->Abort();
+		}
+		void Restart() override {
+			Abort();
+			for (CurrentModule = std::begin(SubPointers); CurrentModule < std::end(SubPointers); ++CurrentModule)
+				if ((*CurrentModule)->Start(NextBlock))
+					return;
+		}
+		bool Start(std::move_only_function<void()> &FC) override {
+			Abort();
+			for (CurrentModule = std::begin(SubPointers); CurrentModule < std::end(SubPointers); ++CurrentModule)
+				if ((*CurrentModule)->Start(NextBlock)) {
+					NextBlock = [this, &FC]() {
+						while (++CurrentModule < std::end(SubPointers))
+							if ((*CurrentModule)->Start(NextBlock))
+								return;
+						FC();
+					};
+					return true;
+				}
+			return false;
+		}
+		void WriteInfo(std::ostringstream &InfoStream) const override {
+			InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<WithRepeat>::ID, UID::Field_Modules, UID::Type_Table, static_cast<uint8_t>(sizeof...(SubModules)), static_cast<uint8_t>(2), UID::Column_Module, UID::Type_Pointer, &ModuleID<SubModules>::ID..., UID::Column_Repeats, UID::Type_UInt16, Repeats...);
+		}
+		static constexpr uint16_t NumTrials = _Sum<SubModules::NumTrials * Repeats...>::value;
 
+	protected:
+		Module *SubPointers[_Sum<Repeats...>::value];
+		Module **CurrentModule = std::begin(SubPointers);
+		std::move_only_function<void()> NextBlock;  //不能在此处等号初始化，SAM会编译器错误
+	};
+	static UID const ID;
+	void Randomize() override {
+		std::shuffle(std::begin(SubPointers), std::end(SubPointers), Urng);
+	}
+	RandomSequential(Process &Container)
+	  : Module(Container) {
+		Randomize();
+	}
+	void Abort() override {
+		if (CurrentModule < std::cend(SubPointers))
+			(*CurrentModule)->Abort();
+	}
+	void Restart() override {
+		Abort();
+		for (CurrentModule = std::cbegin(SubPointers); CurrentModule < std::cend(SubPointers); ++CurrentModule)
+			if ((*CurrentModule)->Start(NextBlock))
+				return;
+	}
+	bool Start(std::move_only_function<void()> &FC) override {
+		Abort();
+		for (CurrentModule = std::cbegin(SubPointers); CurrentModule < std::cend(SubPointers); ++CurrentModule)
+			if ((*CurrentModule)->Start(NextBlock)) {
+				NextBlock = [this, &FC]() {
+					while (++CurrentModule < std::cend(SubPointers))
+						if ((*CurrentModule)->Start(NextBlock))
+							return;
+					FC();
+				};
+				return true;
+			}
+		return false;
+	}
+	void WriteInfo(std::ostringstream &InfoStream) const override {
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<RandomSequential>::ID, UID::Field_Modules, UID::Type_Array, static_cast<uint8_t>(sizeof...(SubModules)), UID::Type_Pointer, &ModuleID<SubModules>::ID...);
+	}
+	static constexpr uint16_t NumTrials = _Sum<SubModules::NumTrials...>::value;
+
+protected:
+	Module *SubPointers[sizeof...(SubModules)] = { Module::Container.LoadModule<SubModules>()... };  // SAM编译器不能自动推断数组长度，导致cend不可用
+	Module *const *CurrentModule = std::cend(SubPointers);
+	std::move_only_function<void()> NextBlock = [this]() {
+		while (++CurrentModule < std::cend(SubPointers))
+			if ((*CurrentModule)->Start(NextBlock))
+				return;
+	};
+};
+template<typename... SubModules>
+UID const RandomSequential<SubModules...>::ID = UID::Module_RandomSequential;
+template<typename... SubModules>
+template<uint16_t... Repeats>
+UID const RandomSequential<SubModules...>::WithRepeat<Repeats...>::ID = UID::Module_RandomSequential;
 // 表示一个常数时间段。Unit必须是std::chrono::duration的一个实例。
 template<typename Unit, DurationRep Value>
 struct ConstantDuration {
 	static constexpr Unit Current = Unit{ Value };
-};
-struct IRandom {
-	virtual void Randomize() = 0;
 };
 // 表示一个随机时间段。Unit必须是std::chrono::duration的一个实例。该步骤维护一个随机变量，只有使用Randomize步骤才能改变这个变量，否则一直保持相同的值。如果有多个随机范围相同的随机变量需要独立控制随机性，可以指定不同的ID，否则视为同一个随机变量。
 template<typename Unit, DurationRep Min, DurationRep Max, UID CustomID = UID::Duration_Random>
@@ -366,14 +483,6 @@ template<typename Content>
 template<uint16_t Times>
 UID const Repeat<Content>::UntilTimes<Times>::ID = UID::Module_Repeat;
 
-template<uint16_t First, uint16_t... Rest>
-struct _Sum {
-	static constexpr uint16_t value = First + _Sum<Rest...>::value;
-};
-template<uint16_t Only>
-struct _Sum<Only> {
-	static constexpr uint16_t value = Only;
-};
 template<typename... SubModules>
 struct _Sequential : Module {
 	_Sequential(Process &Container)
@@ -463,116 +572,6 @@ template<typename... Args>
 using Sequential = typename detail::list_to_seq<
   typename detail::flatten_pack<Args...>::type >::type;
 
-template<typename... SubModules>
-struct RandomSequential : Module, IRandom {
-	static constexpr
-#ifdef ARDUINO_ARCH_AVR
-	  std::ArduinoUrng
-#endif
-#ifdef ARDUINO_ARCH_SAM
-	    std::TrueUrng
-#endif
-	      Urng{};
-	template<uint16_t... Repeats>
-	struct WithRepeat : Module, IRandom {
-		static UID const ID;
-		void Randomize() override {
-			std::shuffle(std::begin(SubPointers), std::end(SubPointers), Urng);
-		}
-		WithRepeat(Process &Container)
-		  : Module(Container) {
-			Module **_[] = { (CurrentModule = std::fill_n(CurrentModule, Repeats, Module::Container.LoadModule<SubModules>()))... };
-			Randomize();
-		}
-		void Abort() override {
-			if (CurrentModule < std::end(SubPointers))
-				(*CurrentModule)->Abort();
-		}
-		void Restart() override {
-			Abort();
-			for (CurrentModule = std::begin(SubPointers); CurrentModule < std::end(SubPointers); ++CurrentModule)
-				if ((*CurrentModule)->Start(NextBlock))
-					return;
-		}
-		bool Start(std::move_only_function<void()> &FC) override {
-			Abort();
-			for (CurrentModule = std::begin(SubPointers); CurrentModule < std::end(SubPointers); ++CurrentModule)
-				if ((*CurrentModule)->Start(NextBlock)) {
-					NextBlock = [this, &FC]() {
-						while (++CurrentModule < std::end(SubPointers))
-							if ((*CurrentModule)->Start(NextBlock))
-								return;
-						FC();
-					};
-					return true;
-				}
-			return false;
-		}
-		void WriteInfo(std::ostringstream &InfoStream) const override {
-			InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<WithRepeat>::ID, UID::Field_Modules, UID::Type_Table, static_cast<uint8_t>(sizeof...(SubModules)), static_cast<uint8_t>(2), UID::Column_Module, UID::Type_Pointer, &ModuleID<SubModules>::ID..., UID::Column_Repeats, UID::Type_UInt16, Repeats...);
-		}
-		static constexpr uint16_t NumTrials = _Sum<SubModules::NumTrials * Repeats...>::value;
-
-	protected:
-		Module *SubPointers[_Sum<Repeats...>::value];
-		Module **CurrentModule = std::begin(SubPointers);
-		std::move_only_function<void()> NextBlock = [this]() {
-			while (++CurrentModule < std::end(SubPointers))
-				if ((*CurrentModule)->Start(NextBlock))
-					return;
-		};
-	};
-	static UID const ID;
-	void Randomize() override {
-		std::shuffle(std::begin(SubPointers), std::end(SubPointers), Urng);
-	}
-	RandomSequential(Process &Container)
-	  : Module(Container) {
-		Randomize();
-	}
-	void Abort() override {
-		if (CurrentModule < std::cend(SubPointers))
-			(*CurrentModule)->Abort();
-	}
-	void Restart() override {
-		Abort();
-		for (CurrentModule = std::cbegin(SubPointers); CurrentModule < std::cend(SubPointers); ++CurrentModule)
-			if ((*CurrentModule)->Start(NextBlock))
-				return;
-	}
-	bool Start(std::move_only_function<void()> &FC) override {
-		Abort();
-		for (CurrentModule = std::cbegin(SubPointers); CurrentModule < std::cend(SubPointers); ++CurrentModule)
-			if ((*CurrentModule)->Start(NextBlock)) {
-				NextBlock = [this, &FC]() {
-					while (++CurrentModule < std::cend(SubPointers))
-						if ((*CurrentModule)->Start(NextBlock))
-							return;
-					FC();
-				};
-				return true;
-			}
-		return false;
-	}
-	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<RandomSequential>::ID, UID::Field_Modules, UID::Type_Array, static_cast<uint8_t>(sizeof...(SubModules)), UID::Type_Pointer, &ModuleID<SubModules>::ID...);
-	}
-	static constexpr uint16_t NumTrials = _Sum<SubModules::NumTrials...>::value;
-
-protected:
-	Module *SubPointers[sizeof...(SubModules)] = { Module::Container.LoadModule<SubModules>()... };  // SAM编译器不能自动推断数组长度，导致cend不可用
-	Module *const *CurrentModule = std::cend(SubPointers);
-	std::move_only_function<void()> NextBlock = [this]() {
-		while (++CurrentModule < std::cend(SubPointers))
-			if ((*CurrentModule)->Start(NextBlock))
-				return;
-	};
-};
-template<typename... SubModules>
-UID const RandomSequential<SubModules...>::ID = UID::Module_RandomSequential;
-template<typename... SubModules>
-template<uint16_t... Repeats>
-UID const RandomSequential<SubModules...>::WithRepeat<Repeats...>::ID = UID::Module_RandomSequential;
 struct _TimedModule : Module {
 	_TimedModule(Process &Container)
 	  : Module(Container) {

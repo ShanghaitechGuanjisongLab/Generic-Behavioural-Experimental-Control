@@ -28,6 +28,7 @@ classdef Server<handle
 		oSerialTimeout=1
 	end
 	properties(Dependent)
+		%串口读写超时时间，默认为1秒
 		SerialTimeout(1,1)duration
 	end
 	methods(Access=protected)
@@ -66,6 +67,16 @@ classdef Server<handle
 	end
 	methods
 		function obj=Server(SerialCountdown)
+			%# 语法
+			% ```
+			% obj = Gbec.Server;
+			% % 创建一个Server对象，使用默认的串口闲置关闭时间
+			%
+			% obj = Gbec.Server(SerialCountdown);
+			% % 创建一个Server对象，使用指定的串口闲置关闭时间
+			% ```
+			%# 输入参数
+			% SerialCountdown(1,1)duration=minutes(4)，串口闲置多长时间后自动关闭
 			arguments
 				SerialCountdown=minutes(4)
 			end

@@ -6,6 +6,12 @@ classdef TemporaryCallbackOff<handle
 	end
 	methods
 		function obj = TemporaryCallbackOff(AsyncStream)
+			%# 语法
+			% ```
+			% obj = Async_stream_IO.TemporaryCallbackOff(AsyncStream);
+			% ```
+			%# 输入参数
+			% AsyncStream(1,1)Async_stream_IO.IAsyncStream，实现了IAsyncStream接口的异步流对象
 			obj.AsyncStream = AsyncStream;
 			obj.InterruptEnabled = AsyncStream.InterruptEnabled;
 			obj.AsyncStream.InterruptEnabled = false;

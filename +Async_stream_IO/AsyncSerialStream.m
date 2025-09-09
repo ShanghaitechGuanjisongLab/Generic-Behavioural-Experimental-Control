@@ -17,6 +17,8 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 		InterruptEnabled_=true
 	end
 	properties(Dependent)
+		%获取或设置中断启用状态
+		% true表示启用中断，收到消息时自动调用监听器回调函数处理消息。false表示禁用中断，必须手动调用Flush方法处理挂起消息。当此属性从false被设置为true时，将自动调用Flush方法处理挂起消息。
 		InterruptEnabled
 	end
 	methods(Access=protected)
@@ -140,7 +142,17 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 	end
 	methods
 		function obj = AsyncSerialStream(Port,BaudRate)
-			%输入串口号和波特率（可选，默认9600），创建一个异步串口流对象。如果串口被占用，可选强抢，需要提权。
+			%# 语法
+			% ```
+			% obj = Async_stream_IO.AsyncSerialStream(Port);
+			% %使用指定串口号和默认波特率9600构造流
+			%
+			% obj = Async_stream_IO.AsyncSerialStream(Port,BaudRate);
+			% %使用指定串口号和波特率构造流
+			% ```
+			%# 输入参数
+			% Port(1,1)string，串口号，例如"COM3"
+			% BaudRate(1,1)=9600，波特率
 			arguments
 				Port
 				BaudRate=9600

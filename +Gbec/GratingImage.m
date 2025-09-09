@@ -20,18 +20,23 @@ classdef GratingImage<Gbec.IHostAction
 	properties(Dependent)
 		%每个周期的像素数
 		PixelsPerCycle
+
 		%图像宽度是周期的几倍
 		CyclesPerWidth
+		
 		%图像高度是周期的几倍
 		CyclesPerHeight
 	end
 	properties
 		%旋转角度
 		AngleRange
+
 		%呈现秒数
 		DurationRange duration
+
 		%偏移相位
 		InitialPhase
+		
 		%颜色渐变范围
 		%(:,3)uint8矩阵，栅格色谱，作为插值锚点
 		ColorRange

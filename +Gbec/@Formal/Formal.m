@@ -66,11 +66,14 @@ classdef Formal<Gbec.Process
 	end
 	properties(Dependent)
 		%数据保存路径
-		% 如果那个路径已经有数据库文件，将尝试合并，然后为多天的行为做学习曲线图。文件存在性和可写性将会在设置该属性时立即检查，如果失败则此属性值不变。
+		% 如果那个路径已经有数据库文件，将尝试合并。文件存在性和可写性将会在设置该属性时立即检查，如果失败则此属性值不变。
 		SavePath
 	end
 	properties(SetAccess=immutable)
+		%事件记录器，可以查看当前已记录的事件
 		EventRecorder MATLAB.DataTypes.EventLogger
+
+		%回合记录器，可以查看当前已进行的回合
 		TrialRecorder MATLAB.DataTypes.EventLogger
 	end
 	methods(Access=protected)
@@ -80,6 +83,12 @@ classdef Formal<Gbec.Process
 	end
 	methods
 		function obj = Formal(Server)
+			%# 语法
+			% ```
+			% obj = Gbec.Formal(Server);
+			% ```
+			%# 输入参数
+			% Server(1,1)Gbec.Server，服务器对象
 			obj@Gbec.Process(Server);
 			obj.LogName=obj.Server.Name;
 			obj.EventRecorder=MATLAB.DataTypes.EventLogger;
@@ -90,8 +99,7 @@ classdef Formal<Gbec.Process
 		end
 		function set.SavePath(obj, SP)
 			FileExists=isfile(SP);
-			%判断是否应该覆盖保存数据。文件不存在，或虽然存在但用户确认覆盖的情况应该覆盖；文件存在但可以执行UniExp合并时不覆盖；文件存在但无法合并，用户也拒绝覆盖则
-			% 报错，拒绝此次SavePath修改。
+			%判断是否应该覆盖保存数据。文件不存在，或虽然存在但用户确认覆盖的情况应该覆盖；文件存在但可以执行UniExp合并时不覆盖；文件存在但无法合并，用户也拒绝覆盖则报错，拒绝此次SavePath修改。
 			obj.Server.FeedDogIfActive;
 			if FileExists
 				if isempty(which('UniExp.Version'))
@@ -172,6 +180,7 @@ classdef Formal<Gbec.Process
 			obj.CountdownExempt.delete;
 		end
 		function ConnectionReset_(obj)
+			%此方法由Server调用，派生类负责处理，用户不应使用
 			obj.Server.AllProcesses(obj.Pointer)=[];
 			AsyncStream=obj.Server.AsyncStream;
 			obj.Pointer=typecast(AsyncStream.SyncInvoke(Gbec.UID.PortA_CreateProcess),obj.Server.PointerType);
@@ -201,6 +210,7 @@ classdef Formal<Gbec.Process
 			end
 		end
 		function PauseSession(obj)
+			%暂停会话
 			if obj.State~=Gbec.UID.State_Running
 				Gbec.Exception.Process_not_running.Throw;
 			end
@@ -211,6 +221,7 @@ classdef Formal<Gbec.Process
 			obj.CountdownExempt.delete;
 		end
 		function ContinueSession(obj)
+			%继续会话
 			if obj.State~=Gbec.UID.State_Paused
 				Gbec.Exception.Process_not_paused.Throw;
 			end

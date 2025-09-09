@@ -29,9 +29,27 @@ classdef Test<Gbec.Process
 	end
 	methods
 		function obj = Test(Server)
+			%# 语法
+			% ```
+			% obj = Gbec.Test(Server);
+			% ```
+			%# 输入参数
+			% Server(1,1)Gbec.Server，目标Server
 			obj@Gbec.Process(Server);
 		end
 		function RepeatCheck(obj,TestID,NumTimes)
+			%重复执行某项测试
+			%# 语法
+			% ```
+			% obj.RepeatCheck(TestID);
+			% %执行指定ID的测试，将弹出对话框询问执行次数
+			%
+			% obj.RepeatCheck(TestID,NumTimes);
+			% %执行指定ID的测试NumTimes次
+			% ```
+			%# 输入参数
+			% TestID(1,1)Gbec.UID，待检查的测试ID
+			% NumTimes(1,1)uint16，检查次数
 			arguments
 				obj
 				TestID(1,1)Gbec.UID
@@ -43,6 +61,14 @@ classdef Test<Gbec.Process
 			obj.TestCycle(Port,TestID,NumTimes);
 		end
 		function OneEnterOneCheck(obj,TestID,Prompt)
+			%每次按回车执行一次测试
+			%# 语法
+			% ```
+			% obj.OneEnterOneCheck(TestID,Prompt);
+			% ```
+			%# 输入参数
+			% TestID(1,1)Gbec.UID，待检查的测试ID
+			% Prompt(1,1)string，提示字符串
 			arguments
 				obj
 				TestID(1,1)Gbec.UID
@@ -55,6 +81,13 @@ classdef Test<Gbec.Process
 			end
 		end
 		function StartCheck(obj,TestID)
+			%开始执行某项测试
+			%# 语法
+			% ```
+			% obj.StartCheck(TestID);
+			% ```
+			%# 输入参数
+			% TestID(1,1)Gbec.UID，待检查的测试ID
 			arguments
 				obj
 				TestID(1,1)Gbec.UID
@@ -65,11 +98,13 @@ classdef Test<Gbec.Process
 			obj.TestCycle(Port,TestID);
 		end
 		function StopCheck(obj)
+			%停止当前测试
 			obj.Server.FeedDogIfActive();
 			obj.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_AbortProcess,obj.Pointer));
 			disp('测试结束');
 		end
 		function Signal_(obj,Message)
+			%此方法由Server调用，用户不应使用
 			persistent Count
 			obj.Server.FeedDogIfActive;
 			if isempty(Count)

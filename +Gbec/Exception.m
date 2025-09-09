@@ -31,7 +31,16 @@ classdef Exception<MATLAB.Lang.IEnumerableException
 		No_right_to_write_SavePath
 		User_canceled_operation
 		Serialport_disconnected
-		Failure_to_merge_existing_dataset
 		Serialport_not_found_in_list
+		Server_initialize_timeout
+		Server_runtime_exception
+		Server_connection_interrupted
+		Process_not_idle
+		Process_not_running
+		Process_not_paused
+		Fail_to_merge_existing_dataset
+		StartModule_no_return
+		StartModule_return_unexpected
+		Session_has_no_trials
 	end
 end

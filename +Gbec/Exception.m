@@ -42,5 +42,6 @@ classdef Exception<MATLAB.Lang.IEnumerableException
 		StartModule_no_return
 		StartModule_return_unexpected
 		Session_has_no_trials
+		UniExp_toolbox_not_found
 	end
 end

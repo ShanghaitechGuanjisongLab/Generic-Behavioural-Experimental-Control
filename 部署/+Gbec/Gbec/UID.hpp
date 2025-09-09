@@ -1,5 +1,8 @@
 #pragma once
 #include <stdint.h>
+/* 本文件定义了所有的UID枚举值，作为模块、异常、信息字段等的唯一标识符，在Arduino端和PC端之间传递信息时使用，且必须保持一致。
+用户可以在此文件中添加自定义的UID枚举值，但请勿修改已有的枚举值，否则可能导致Arduino端和PC端之间无法正确通信。
+*/
 enum class UID : uint8_t {
 	// Arduino提供的服务端口
 
@@ -179,10 +182,6 @@ enum class UID : uint8_t {
 	Module_LoadSlot,
 	Module_ClearSlot,
 
-	// 组合模块
-
-	Using_ResponseWindow,
-
 	// 主机动作
 
 	Host_GratingImage,
@@ -193,7 +192,5 @@ enum class UID : uint8_t {
 	Session_AudioWater,
 	Session_LightWater,
 	Session_LAuW,
-
-	MagicByte,
 
 };

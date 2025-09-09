@@ -15,15 +15,15 @@
 - 随时暂停、放弃实验，不需要拔插头；
 - 实验过程中意外掉线自动重连，不会丢失进度
 # 配置环境
-安装本工具箱之前需要先安装[Arduino IDE 2.0.0 以上版本](https://github.com/arduino/arduino-ide/releases)，以及 Arduino Library Manager 中的TimersOneForAll和 STL for Arduino 库。
+安装本工具箱之前需要先安装[Arduino IDE 2.0.0 以上版本](https://github.com/arduino/arduino-ide/releases)，以及 Arduino Library Manager 中的Timers_one_for_all 和 Quick_digital_IO_interrupt 库及其依赖库。
 
 此外，本实验系统还依赖[埃博拉酱的MATLAB扩展](https://ww2.mathworks.cn/matlabcentral/fileexchange/96344-matlab-extension)。正常情况下，此工具箱在安装本工具箱时会被自动安装。如果安装失败，可以在MATLAB附加功能管理器中安装。
 
 工具箱安装成功后，请务必查看快速入门指南（GettingStarted.mlx），执行进一步安装配置。
 
-本项目是行为实验通用控制程序，因此针对不同的实验设计，你需要自行编写一些自定义Arduino代码（在Development_Client.mlx中有入口）。最常用的就是ExperimentDesign.h，各种实验参数都需要在这里设置好然后上传到Arduino。对于较大的改动，如硬件、回合、实验方案等的增删，可能还需要修改UID.h。
+本项目是行为实验通用控制程序，因此针对不同的实验设计，你需要自行编写一些自定义Arduino代码（在Development_Client.mlx中有入口）。最常用的就是ExperimentDesign.cpp，各种实验参数都需要在这里设置好然后上传到Arduino。对于较大的改动，如硬件、回合、实验方案等的增删，可能还需要修改UID.h。
 
-ExperimentDesign.h的具体配置语法，在文件中有详细的注释说明。但在那之前，建议先浏览一遍本自述文件。
+ExperimentDesign.cpp的具体配置语法，在文件中有详细的注释说明。但在那之前，建议先浏览一遍本自述文件。
 # Arduino C++ 代码结构
 使用本项目之前，你需要理解本项目的概念层级。
 

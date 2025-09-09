@@ -116,7 +116,7 @@ for C=1:NumCols
 		otherwise
 			Gbec.Exceptions.Unexpected_response_from_Arduino.Throw;
 	end
-	Table.(Name(strlength('Column_')+1:end))=Value;
+	Table.(Name(strlength('Column_')+1:end))=Value(:);
 end
 end
 function Map=CollectMap(Server)

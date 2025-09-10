@@ -148,7 +148,6 @@ struct Process {
 		ActiveTimers.clear();
 		TrialsDone.clear();
 		ExtraCleaners.clear();
-		IDReference.clear();
 	}
 	virtual ~Process() {
 		_Abort();
@@ -213,7 +212,6 @@ struct Process {
 	}
 	std::unordered_map<UID, uint16_t> TrialsDone;
 	std::set<std::move_only_function<void()> *> ExtraCleaners;
-	std::unordered_map<UID, Module *> IDReference;
 
 protected:
 	std::set<PinListener *> ActiveInterrupts;
@@ -606,9 +604,6 @@ struct _Delay : _TimedModule {
 			Timer = Module::Container.AllocateTimer();
 	}
 	bool Start(std::move_only_function<void()> &FC) override {
-		if (Module::Container.TrialsDone.size())
-			return false;
-
 		// 在冷静阶段，Restart会被高频执行，因此只能牺牲一下Start，确保Restart的效率
 		FinishCallback = [this, &FC]() {
 			UnregisterTimer();
@@ -663,8 +658,6 @@ struct Delay<InfiniteDuration> : Module {
 	  : Module(Container) {
 	}
 	bool Start(std::move_only_function<void()> &FC) override {
-		if (Module::Container.TrialsDone.size())
-			return false;
 		return true;
 	}
 	// 全特化的ID定义不能放在头文件中，转而放在Gbec.ino中，否则违反ODR
@@ -689,8 +682,6 @@ struct _RepeatEvery : _TimedModule {
 			Timer = Module::Container.AllocateTimer();
 	}
 	bool Start(std::move_only_function<void()> &FC) override {
-		if (Module::Container.TrialsDone.size())
-			return false;
 		// 默认的无限重复，不需要FinishCallback。
 		Restart();
 		return true;
@@ -718,7 +709,7 @@ struct RepeatEvery : _RepeatEvery<Content> {
 			_TimedModule::Timer->RepeatEvery(PeriodPtr->Current, _RepeatEvery<Content>::RepeatCallback, Times, FinishCallback);
 		}
 		bool Start(std::move_only_function<void()> &FC) override {
-			if (!Times || Module::Container.TrialsDone.size())
+			if (!Times )
 				return false;
 			FinishCallback = [this, &FC]() {
 				this->UnregisterTimer();
@@ -767,8 +758,6 @@ struct _RepeatEvery_Random_UntilDuration : RepeatEvery<Period, Content> {
 		_TimedModule::Timer->RepeatEvery(RepeatEvery<Period, Content>::PeriodPtr->Current, _RepeatEvery<Content>::RepeatCallback, DurationPtr->Current / RepeatEvery<Period, Content>::PeriodPtr->Current, FinishCallback);
 	}
 	bool Start(std::move_only_function<void()> &FC) override {
-		if (Module::Container.TrialsDone.size())
-			return false;
 		FinishCallback = [this, &FC]() {
 			this->UnregisterTimer();
 			FC();
@@ -797,8 +786,6 @@ struct _RepeatEvery_Random_UntilDuration<Period, Content, ConstantDuration<Unit,
 		_TimedModule::Timer->RepeatEvery(RepeatEvery<Period, Content>::PeriodPtr->Current, _RepeatEvery<Content>::RepeatCallback, Unit{ Value } / RepeatEvery<Period, Content>::PeriodPtr->Current, FinishCallback);
 	}
 	bool Start(std::move_only_function<void()> &FC) override {
-		if (Module::Container.TrialsDone.size())
-			return false;
 		FinishCallback = [this, &FC]() {
 			this->UnregisterTimer();
 			FC();
@@ -832,8 +819,6 @@ struct _RepeatEvery_Constant_UntilDuration : RepeatEvery<ConstantDuration<Unit, 
 		_TimedModule::Timer->RepeatEvery(Unit{ Period }, _RepeatEvery<Content>::RepeatCallback, DurationPtr->Current / Unit{ Period }, FinishCallback);
 	}
 	bool Start(std::move_only_function<void()> &FC) override {
-		if (Module::Container.TrialsDone.size())
-			return false;
 		FinishCallback = [this, &FC]() {
 			this->UnregisterTimer();
 			FC();
@@ -874,7 +859,7 @@ struct RepeatEvery<ConstantDuration<Unit, Period>, Content> : _RepeatEvery<Conte
 			_TimedModule::Timer->RepeatEvery(Unit{ Period }, _RepeatEvery<Content>::RepeatCallback, Times, FinishCallback);
 		}
 		bool Start(std::move_only_function<void()> &FC) override {
-			if (!Times || Module::Container.TrialsDone.size())
+			if (!Times )
 				return false;
 			FinishCallback = [this, &FC]() {
 				this->UnregisterTimer();
@@ -910,8 +895,6 @@ struct _RepeatEvery_Constant_UntilDuration<Unit, Period, Content, ConstantDurati
 		_TimedModule::Timer->RepeatEvery(Unit{ Period }, _RepeatEvery<Content>::RepeatCallback, Duration / Period, FinishCallback);
 	}
 	bool Start(std::move_only_function<void()> &FC) override {
-		if (Module::Container.TrialsDone.size())
-			return false;
 		FinishCallback = [this, &FC]() {
 			this->UnregisterTimer();
 			FC();
@@ -954,8 +937,6 @@ struct _DoubleRepeat : _TimedModule {
 			Timer = Module::Container.AllocateTimer();
 	}
 	bool Start(std::move_only_function<void()> &FC) override {
-		if (Module::Container.TrialsDone.size())
-			return false;
 		// 默认的无限重复，不需要FinishCallback。
 		Restart();
 		return true;
@@ -986,7 +967,7 @@ struct DoubleRepeat : _DoubleRepeat<ContentA, ContentB> {
 			_TimedModule::Timer->DoubleRepeat(DoubleRepeat<PeriodA, ContentA, PeriodB, ContentB>::PeriodAPtr->Current, _DoubleRepeat<ContentA, ContentB>::RepeatCallbackA, DoubleRepeat<PeriodA, ContentA, PeriodB, ContentB>::PeriodBPtr->Current, _DoubleRepeat<ContentA, ContentB>::RepeatCallbackB, Times, FinishCallback);
 		}
 		bool Start(std::move_only_function<void()> &FC) override {
-			if (!Times || Module::Container.TrialsDone.size())
+			if (!Times)
 				return false;
 			FinishCallback = [this, &FC]() {
 				this->UnregisterTimer();
@@ -1036,8 +1017,6 @@ struct _DoubleRepeat_Random_UntilDuration : DoubleRepeat<PeriodA, ContentA, Peri
 		_TimedModule::Timer->DoubleRepeat(DoubleRepeat<PeriodA, ContentA, PeriodB, ContentB>::PeriodAPtr->Current, _DoubleRepeat<ContentA, ContentB>::RepeatCallbackA, DoubleRepeat<PeriodA, ContentA, PeriodB, ContentB>::PeriodBPtr->Current, _DoubleRepeat<ContentA, ContentB>::RepeatCallbackB, DurationPtr->Current, FinishCallback);
 	}
 	bool Start(std::move_only_function<void()> &FC) override {
-		if (Module::Container.TrialsDone.size())
-			return false;
 		FinishCallback = [this, &FC]() {
 			this->UnregisterTimer();
 			FC();
@@ -1066,8 +1045,6 @@ struct _DoubleRepeat_Random_UntilDuration<PeriodA, ContentA, PeriodB, ContentB, 
 		_TimedModule::Timer->DoubleRepeat(DoubleRepeat<PeriodA, ContentA, PeriodB, ContentB>::PeriodAPtr->Current, _DoubleRepeat<ContentA, ContentB>::RepeatCallbackA, DoubleRepeat<PeriodA, ContentA, PeriodB, ContentB>::PeriodBPtr->Current, _DoubleRepeat<ContentA, ContentB>::RepeatCallbackB, Unit{ Duration }, FinishCallback);
 	}
 	bool Start(std::move_only_function<void()> &FC) override {
-		if (Module::Container.TrialsDone.size())
-			return false;
 		FinishCallback = [this, &FC]() {
 			this->UnregisterTimer();
 			FC();
@@ -1101,8 +1078,6 @@ struct _DoubleRepeat_Constant_UntilDuration : DoubleRepeat<ConstantDuration<Unit
 		_TimedModule::Timer->DoubleRepeat(Unit{ PeriodA }, _DoubleRepeat<ContentA, ContentB>::RepeatCallbackA, Unit{ PeriodB }, _DoubleRepeat<ContentA, ContentB>::RepeatCallbackB, DurationPtr->Current, FinishCallback);
 	}
 	bool Start(std::move_only_function<void()> &FC) override {
-		if (Module::Container.TrialsDone.size())
-			return false;
 		FinishCallback = [this, &FC]() {
 			this->UnregisterTimer();
 			FC();
@@ -1143,7 +1118,7 @@ struct DoubleRepeat<ConstantDuration<Unit, PeriodA>, ContentA, ConstantDuration<
 			_TimedModule::Timer->DoubleRepeat(Unit{ PeriodA }, _DoubleRepeat<ContentA, ContentB>::RepeatCallbackA, Unit{ PeriodB }, _DoubleRepeat<ContentA, ContentB>::RepeatCallbackB, Times, FinishCallback);
 		}
 		bool Start(std::move_only_function<void()> &FC) override {
-			if (!Times || Module::Container.TrialsDone.size())
+			if (!Times )
 				return false;
 			FinishCallback = [this, &FC]() {
 				this->UnregisterTimer();
@@ -1184,8 +1159,6 @@ public:
 		_TimedModule::Timer->DoubleRepeat(Unit{ PeriodA }, _DoubleRepeat<ContentA, ContentB>::RepeatCallbackA, Unit{ PeriodB }, _DoubleRepeat<ContentA, ContentB>::RepeatCallbackB, Unit{ Duration }, FinishCallback);
 	}
 	bool Start(std::move_only_function<void()> &FC) override {
-		if (Module::Container.TrialsDone.size())
-			return false;
 		FinishCallback = [this, &FC]() {
 			this->UnregisterTimer();
 			FC();
@@ -1212,7 +1185,6 @@ struct _InstantaneousModule : Module {
 	  : Module(Container) {
 	}
 	bool Start(std::move_only_function<void()> &FC) override {
-		if (Module::Container.TrialsDone.empty())
 			Restart();
 		return false;
 	}
@@ -1435,8 +1407,6 @@ struct CleanWhenAbort : Module {
 			Module::Container.ExtraCleaners.insert(&StartCleaner);
 	}
 	bool Start(std::move_only_function<void()> &FC) override {
-		if (Module::Container.TrialsDone.size())
-			return false;
 		_Abort();
 		if (TargetPtr->Start(TargetCallback)) {
 			FinishCallback = &FC;

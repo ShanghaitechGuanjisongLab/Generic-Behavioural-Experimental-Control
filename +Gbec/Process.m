@@ -1,4 +1,5 @@
 classdef Process<handle
+	%进程基类。通常不应直接创建，而是使用其派生类Test和Formal。
 	properties(SetAccess=immutable)
 		%该Process从属的Server
 		Server

@@ -1,109 +1,91 @@
 {
-	"Gbec.ExperimentWorker.SerialInitialize": {
+	"Gbec.Formal": {
 		"inputs": [
 			{
-				"name": "obj"
-			},
-			{
-				"name": "SerialPort",
+				"name": "Server",
 				"kind": "required",
 				"type": [
+					"scalar",
+					"Gbec.Server"
+				],
+				"purpose": "要创建进程的服务器"
+			}
+		]
+	},
+	"Gbec.GenerateMatlabUIDs": {
+		"inputs": [
+			{
+				"name": "ArduinoUidPath",
+				"kind": "ordered",
+				"type": [
 					[
-						"string",
-						"scalar"
+						"scalar",
+						"string"
 					],
 					[
 						"char",
 						"row"
 					]
 				],
-				"purpose": "串口名称"
+				"purpose": "Arduino端UIDs.hpp文件路径"
 			}
 		]
 	},
-	"Gbec.ExperimentWorker.StartTest": {
+	"Gbec.Server": {
 		"inputs": [
 			{
-				"name": "obj"
-			},
-			{
-				"name": "TestUID",
-				"kind": "required",
-				"type": [
-					"scalar",
-					"Gbec.UID"
-				],
-				"purpose": "要开始的测试UID"
-			},
-			{
-				"name": "TestTimes",
-				"kind": "ordered",
-				"type": "positive",
-				"purpose": "测试次数",
-				"default": 1
-			}
-		]
-	},
-	"Gbec.ExperimentWorker.StopTest": {
-		"inputs": [
-			{
-				"name": "obj"
-			},
-			{
-				"name": "TestUID",
+				"name": "SerialCountdown",
 				"kind": "ordered",
 				"type": [
 					"scalar",
-					"Gbec.UID"
+					"duration"
 				],
-				"purpose": "要停止的测试UID"
+				"purpose": "串口关闭倒计时"
 			}
 		]
 	},
-	"Gbec.ExpeirmentWorker.OneEnterOneCheck": {
+	"Gbec.Server.Initialize": {
 		"inputs": [
 			{
 				"name": "obj"
 			},
 			{
-				"name": "TestUID",
-				"kind": "required",
-				"type": [
-					"scalar",
-					"Gbec.UID"
-				],
-				"purpose": "要运行的测试UID"
-			},
-			{
-				"name": "EnterPrompt",
-				"kind": "required",
-				"type": [
+				"mutuallyExclusiveGroup": [
 					[
-						"string",
-						"scalar"
+						{
+							"name": "AsyncStream",
+							"kind": "required",
+							"type": [
+								"scalar",
+								"Async_stream_IO.IAsyncStream"
+							],
+							"purpose": "异步流对象"
+						}
 					],
 					[
-						"char",
-						"row"
+						{
+							"name": "Port",
+							"kind": "required",
+							"type": [
+								[
+									"scalar",
+									"string"
+								],
+								[
+									"char",
+									"row"
+								]
+							],
+							"purpose": "串口号"
+						},
+						{
+							"name": "BaudRate",
+							"kind": "ordered",
+							"type": "positive",
+							"purpose": "波特率"
+						}
 					]
-				],
-				"purpose": "提示文字"
-			}
-		]
-	},
-	"Gbec.ExperimentWorker.GetInformation": {
-		"inputs": [
-			{
-				"name": "obj"
-			},
-			{
-				"name": "SessionUID",
-				"kind": "ordered",
-				"type": [
-					"scalar",
-					"Gbec.UID"
-				],
-				"purpose": "要获取的会话UID"
+				]
 			}
 		]
 	},
@@ -171,6 +153,101 @@
 					"vector"
 				],
 				"purpose": "图像高度是周期的几倍"
+			}
+		]
+	},
+	"Gbec.Test": {
+		"inputs": [
+			{
+				"name": "Server",
+				"kind": "required",
+				"type": [
+					"scalar",
+					"Gbec.Server"
+				],
+				"purpose": "要测试的服务器"
+			}
+		]
+	},
+	"Gbec.Test.RepeatCheck": {
+		"inputs": [
+			{
+				"name": "obj"
+			},
+			{
+				"name": "TestID",
+				"kind": "required",
+				"type": [
+					"scalar",
+					"Gbec.UID"
+				],
+				"purpose": "测试ID"
+			},
+			{
+				"name": "NumTimes",
+				"kind": "ordered",
+				"type": "positive",
+				"purpose": "重复测试次数"
+			}
+		]
+	},
+	"Gbec.Test.OneEnterOneCheck": {
+		"inputs": [
+			{
+				"name": "obj"
+			},
+			{
+				"name": "TestID",
+				"kind": "required",
+				"type": [
+					"scalar",
+					"Gbec.UID"
+				],
+				"purpose": "测试ID"
+			},
+			{
+				"name": "Prompt",
+				"kind": "required",
+				"type": [
+					[
+						"scalar",
+						"string"
+					],
+					[
+						"char",
+						"row"
+					]
+				],
+				"purpose": "提示信息"
+			}
+		]
+	},
+	"Gbec.Test.StartCheck": {
+		"inputs": [
+			{
+				"name": "obj"
+			},
+			{
+				"name": "TestID",
+				"kind": "required",
+				"type": [
+					"scalar",
+					"Gbec.UID"
+				],
+				"purpose": "测试ID"
+			}
+		]
+	},
+	"Gbec.VideoRecord": {
+		"inputs": [
+			{
+				"name": "VideoInput",
+				"kind": "required",
+				"type": [
+					"scalar",
+					"videoinput"
+				],
+				"purpose": "视频输入对象"
 			}
 		]
 	}

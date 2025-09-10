@@ -1,5 +1,5 @@
 classdef IHostAction<handle
-	%设为ExperimentWorker的HostAction所必须实现的接口。
+	%设为HostAction所必须实现的接口。
 	%用户需要自行定义一个类，继承自IHostAction，并实现所有抽象方法。这样可以在实验运行中在主机上执行任何自定义动作。
 	%Gbec.GratingImage是一个示例类，展示IHostAction的一种实现。
 	%See also Gbec.GratingImage

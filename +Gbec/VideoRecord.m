@@ -1,4 +1,5 @@
 classdef VideoRecord<Gbec.IHostAction
+	%视频录制主机动作
 	properties
 		%视频硬件适配器对象
 		VideoInput

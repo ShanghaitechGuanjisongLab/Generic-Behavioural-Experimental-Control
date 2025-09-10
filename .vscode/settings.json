@@ -55,6 +55,8 @@
         "span": "cpp",
         "unordered_map": "cpp",
         "cctype": "cpp",
-        "string_view": "cpp"
+        "string_view": "cpp",
+        "mutex": "cpp",
+        "optional": "cpp"
     }
 }

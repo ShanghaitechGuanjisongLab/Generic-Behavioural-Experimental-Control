@@ -1,4 +1,5 @@
 classdef Server<handle
+	%控制服务器串口连接
 	properties(SetAccess=protected,Transient)
 		%此属性只能用Initialize方法修改
 		AsyncStream

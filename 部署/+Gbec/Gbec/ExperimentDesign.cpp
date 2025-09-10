@@ -100,7 +100,8 @@ Pin PassiveBuzzer = 3;
 
 ## Trial<CustomID, Content>
 表示一个回合。CustomID是该模块的唯一标识符。Content是回合内要执行的内容模块。回合开始时将把CustomID发往PC端进行记录并提示回合开始。
-回合还是断线重连恢复执行的基本单位。断线重连后，尚未执行完毕的回合将从头开始重新执行，已经执行完毕的回合将不会重复执行。
+回合还是断线重连恢复执行的基本单位。断线重连后，尚未执行完毕的回合将从头开始重新执行，已经执行完毕的回合将不会重复执行。不在回合内的模块在断线重连后不会跳过，仍会重复执行。
+回合内不允许嵌套回合。
 
 ## DynamicSlot<UniqueID=UID::Module_DynamicSlot>
 表示一个动态插槽，可以在运行时动态加载、清除或切换其内容模块。UniqueID是该模块的唯一标识符。执行此模块时，将执行当前插槽内的内容模块（如果有），否则什么也不做。对此模块的重启和终止操作也将传递给当前插槽内的内容模块（如果有）。要修改插槽内容，请使用以下扩展：
@@ -173,7 +174,7 @@ std::unordered_map<UID, uint16_t (*)(Process *)> SessionMap = {
   { UID::Test_ActiveBuzzer, Session<PinFlash<ActiveBuzzer, 200>> },
   { UID::Test_AirPump, Session<PinFlash<AirPump, 200>> },
   { UID::Test_HostAction, Session<SerialMessage<UID::Host_GratingImage>> },
-  { UID::Test_SquareWave, Session<DoubleRepeat<ConstantDuration<std::chrono::seconds, 1>, DigitalWrite<Laser, HIGH>, ConstantDuration<std::chrono::seconds, 2>, DigitalWrite<Laser, LOW>>::template UntilTimes<6>> },//注意是6次变灯，不是6个周期
+  { UID::Test_SquareWave, Session<DoubleRepeat<ConstantDuration<std::chrono::seconds, 1>, DigitalWrite<Laser, HIGH>, ConstantDuration<std::chrono::seconds, 2>, DigitalWrite<Laser, LOW>>::template UntilTimes<6>> },  //注意是6次变灯，不是6个周期
   { UID::Test_RandomFlash, Session<Sequential<Async<RandomFlash>, Delay<ConstantDuration<std::chrono::seconds, 10>>, ModuleAbort<RandomFlash>>> },
   { UID::Test_LowTone, Session<Tone<500, 1000>> },
   { UID::Test_HighTone, Session<Tone<5000, 1000>> },

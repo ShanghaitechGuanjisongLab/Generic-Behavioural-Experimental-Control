@@ -24,73 +24,81 @@
 本项目是行为实验通用控制程序，因此针对不同的实验设计，你需要自行编写一些自定义Arduino代码（在Development_Client.mlx中有入口）。最常用的就是ExperimentDesign.cpp，各种实验参数都需要在这里设置好然后上传到Arduino。对于较大的改动，如硬件、回合、实验方案等的增删，可能还需要修改UID.h。
 
 ExperimentDesign.cpp的具体配置语法，在文件中有详细的注释说明。但在那之前，建议先浏览一遍本自述文件。
-# Arduino C++ 代码结构
-使用本项目之前，你需要理解本项目的概念层级。
+# 基本概念
+使用本项目之前，你需要理解本项目的概念层级。从顶层到底层依次是：
 
-从顶级到低级，一次实验包含会话、回合、步骤3个层级。我们描述这些层级的常用说法包括：
+1. 服务器，通常对应串口——Arduino开发板，一个串口开发板就是一个服务器。一台PC可以连接多个服务器，同时运行不同的实验。
+2. 进程，服务器上执行的任务。一个服务器上可以也同时执行多个进程，但如果这些进程同时抢占相同的资源，如引脚、串口、计时器等，可能造成意外情况。
+3. 模块，进程内具体执行的操作步骤。一个进程可以包含多个模块，这些模块可以顺序执行也可以同步执行，取决于设计方案。
 
-- 会话：今天做了一个蓝光喷气闭眼实验，喷气100次，随机穿插了20个不喷气的Trial
-- 回合：这个Trial没给喷气刺激
-- 步骤：实验一开始是一个Pretrial等待阶段，需要连续6秒不舔水才继续
-
-因此我们得到3个概念的定义：
-- 步骤：定义了一段具有特殊性质的时间控制流程。一些预定义的模板步骤可在ExperimentDesign.h中查看
-- 回合：定义了几个时相的顺序组合，并可以在会话当中以固定或随机的顺序重复交替运行。
-- 一次实验的最顶级控制单元。一个会话可以包含多个不同的回合，并且可以设置这些回合各自的重复次数，以及这些回合是按固定顺序还是随机顺序交替运行。
+在一次具体的实验会话中，通常需要PC先与服务器串口建立连接，然后创建进程，然后通过指定ID而向进程中载入特定的会话模块，然后开始执行。执行过程中，除了等待执行完毕，还可以暂停、继续、取消、断线重连；进程也可以向PC发送反馈信息，记录实验中发生的各种事件，以及反向控制PC执行一些不便在Arduino上执行的操作。一个服务器上也可以创建多个进程同时执行，但需要注意资源争用问题。实验结束后，可以令Arduino向PC发送本次执行的模块设计详情信息。
+# Arduino C++ 代码
+上传到Arduino的C++代码决定了一个服务器的具体行为。
+## 模块
+已经预定义了大量基础模块，用户通常不需要关心基础模块的实现细节，只需要进行低代码的模块组装。在`ExperimentDesign.cpp`中有详细文档说明和示例。概括地说，你需要先设置Arduino上连接各种具体设备的引脚号，然后组装模块，最后选择其中一些顶级的、可以直接单独载入进程执行的模块进行“公开”并赋予ID。这样，以后可以从PC向Arduino发送这些ID指示要执行哪个模块。
 ## UID与Arduino-PC通信
-系统使用UID作为“密码表”实现Arduino与PC的通信。PC向Arduino发送UID指示要运行哪个会话；Arduino向PC发送UID指示当前运行到哪个回合，等等。所有的步骤、回合、会话都具有各自的UID，需要在定义时指定，并将该UID注册在UID.h中。PC端也需要同样的UID密码表，但可以在安装后用Gbec.GenerateMatlabUIDs自动生成，无需手动操作。
+系统使用UID作为“密码表”实现Arduino与PC的通信。PC向Arduino发送UID指示要运行哪个会话；Arduino向PC发送UID指示当前运行到哪个回合，等等。所有的步骤、回合、会话都具有各自的UID，需要在定义时指定，并将该UID注册在`UID.hpp`中。PC端也需要同样的UID密码表，但可以在安装后用Gbec.GenerateMatlabUIDs自动生成，无需手动操作。
 
 UID具有命名规范，不遵守命名规范可能造成意外错误。除了一些系统保留的内置UID以外，新增的UID必须命名为`类型_实例`结构。常用的类型包括：
-- Step。如果你设计了一种未列出的新步骤，需要指定Step类的UID。例如`Step_Calmdown`表示一个冷静步骤。一般来说，只要保证同一个回合内的时相具有不同的UID即可，不会出现在同一个回合内的时相可以共享相同的UID。
-- Trial。每当你设计了一种未预设的新回合，需要指定Trial类的UID。例如`Trial_BlueAir`表示一个简单的蓝光喷气偶联刺激回合。一个会话内的回合一般应当具有不同的UID，不可能在同一个会话内出现的回合可以共享相同的UID。
-- Session。每当你设计了一种未预设的新会话，需要指定Session类的UID。例如`Session_BlueAir`表示一个由多次蓝光喷气偶联回合串联成的会话。每一个会话都必须具有独特的UID，不允许任何两个会话拥有相同的UID，因为PC端需要通过UID唯一指定一个具体的会话要求Arduino运行。
-
-还有一些其它类型的UID用法，参见[高级](#高级)部分。
-## 测试
-在实验开始之前通常要进行设备测试。在ExperimentDesign.h中提供了一些预定义的测试，包括引脚闪烁测试和监视器测试，你也可以自行添加。在SelfCheck_Client.mlx中可以运行测试。测试时，PC端将发送UID来指示Arduino要测试哪个设备，因此参与测试的所有设备必须具有各不相同的UID。因为一种设备可以对应多个设备对象，只要这些对象具有不同的UID，你就可以用多种方法对设备进行测试。
-## 计时器设置
-对于具有时间控制的对象，必须指定一个物理计时器。Arduino Mega 2560开发板具有0、1、2、3、4、5共6个计时器。其中0精度最低，1、3、4、5精度最高，2居中。一个计时器只能同时执行一个计时任务，即凡是有可能同时运行的两个对象，都不能指定同一个计时器。ExperimentDesign.h中提供了预定义的优化计时器分配方案，如果你有特殊需求（比如同时给两个CS），可能需要自定义分配方案。
+- Module，模块ID。已经预定义了一些模块，有些具有固定的ID，也有些允许你指定自定义的ID。自定义的ID必须前缀Module，记录在`UID.hpp`中。这些ID用于Arduino向PC返回模块设计信息时，供人类识读。
+- Event，事件ID。会话执行过程中，Arduino会在特定时间发生时向PC反馈Event类UID，PC（MATLAB）端会将事件和发生的时间记录下来，形成实验记录。事件通过`SerialMessage`模块发送。你也可以自定义事件，注册为Event类UID。
+- Trial，回合ID。回合是一种特殊的模块，每种不同的回合设计应当有不同的ID。每当你设计了一种未预设的新回合，需要注册Trial类的UID。例如`Trial_BlueAir`表示一个简单的蓝光喷气偶联刺激回合。一个会话内的回合一般应当具有不同的ID，不可能在同一个会话内出现的回合可以共享相同的ID。每个回合开始时，Arduino会将回合ID发送到PC，PC端记录回合开始时间并生成日志等。回合还是断线重连的基本单位，一个未执行完毕的回合在断线重连后会从头开始重新执行；已经执行完毕的回合则不会再重复。不在回合内的模块则一定会重复执行。回合内不允许嵌套回合。
+- Session，会话ID。会话是最顶级的模块，可以直接被载入进程执行。每当你设计了一种未预设的新会话，需要指定Session类的UID。例如`Session_BlueAir`表示一个由多次蓝光喷气偶联回合串联成的会话。每一个会话都必须具有独特的ID，不允许任何两个会话拥有相同的ID，因为PC端需要通过ID唯一指定一个具体的会话载入进程。
+- Test，测试ID。测试是一种轻量级的会话，同样可以由PC指定直接载入进程执行，用于实验前检查各种设备是否正常工作。例如`Test_BlueLed`检查蓝色LED是否能点亮。你编写的任何自定义测试也需要注册为Test类UID。
+- Host，主机动作ID。如果你需要Arduino反控PC执行一些不便在Arduino上执行的动作（如拍摄视频、屏幕显示图像等），需要由Arduino通过`SerialMessage`模块向PC发送Host类的UID。PC收到该类UID后将执行你预先定义的动作。
 ## 高级
 如果上述配置无论怎样组合都无法满足你的需求，你将需要一些更复杂的编码工作。本文假定你对C++语言熟练掌握或具有足够强的检索能力，不再对一些术语进行解释。下面列出一些常见高级更改的指南。
 
-如果项目中预设的步骤模板都不符合需求，或者你的步骤具有特殊的复杂控制方式，你将需要自己写控制代码来控制该设备。所有步骤必须实现IStep接口：
+如果预定义的基础模块都不符合需求，或者你的步骤具有特殊的复杂控制方式，你将需要自己写控制代码来控制该设备。所有步骤必须实现Module接口：
 ```C++
-struct IStep {
-  //会话开始前将被所在回合调用一次，通常用于设置pinMode等初始化状态。
-  virtual void Setup() const {}
-  /*
-  步骤开始时，此方法被所在回合调用。步骤可分为立即完成、无需等待直接进入下一步骤的即时步骤，和需要等待一段时间才能完成的延时步骤。
-  对于即时步骤，可以直接忽略FinishCallback参数，执行完步骤内容后返回false即可，控制权回到回合后将立即进入下一步骤。
-  对于延时步骤，应当保存FinishCallback，然后返回true，提示回合必须等待该步骤调用FinishCallback。步骤应当设置一个时间和/或条件中断，在中断处理函数中调用FinishCallback表示步骤结束，控制权回到回合。
-  参考Predefined.h中预先定义的步骤：
-  PinFlashStep就是一个典型的即时步骤，它将引脚设置为高电平，然后用一个计时器中断在一定时间后将其设为低电平；但是步骤本身不占用主轴时间，立即返回true，进入下一步。
-  WaitStep则是一个简单的延时步骤，它设置一个计时器中断，在一定时间后调用FinishCallback，本身则返回false，提示回合应当等待。而不进入下一步。
-  */
-  virtual bool Start(void (*FinishCallback)()) const {};
-  //  此方法并非必须实现。对于即时步骤，因为步骤立即完成不会被暂停，不需要实现此方法。对于延时步骤，一般应当实现此方法，否则暂停指令将被忽略。
-  virtual void Pause() const {}
-  //如果你实现了Pause，那么显然也必须有一个对应的Continue实现。
-  virtual void Continue() const {}
-  // 默认和暂停相同，如果没有特殊的Abort实现就不需要重写
-  virtual void Abort() const {
-    Pause();
-  }
-  static constexpr UID Info = Step_Null;
+// 所有模块的基类，本身可以当作一个什么都不做的空模块使用
+struct Module {
+	Process &Container;
+	Module(Process &Container)
+	  : Container(Container) {
+	}
+	// 返回是否需要等待回调，并提供回调函数。返回true表示模块还在执行中，将在执行完毕后调用回调函数；返回false表示模块已执行完毕，不会调用回调函数。
+	virtual bool Start(std::move_only_function<void()> &FinishCallback) {}
+  // PC端要求每个模块写出信息时执行此方法。模块应当向流写出自己的信息。
+	virtual void WriteInfo(std::ostringstream &InfoStream) const {};
+	// 放弃该模块。未在执行的模块放弃也不会出错。
+	virtual void Abort() {}
+	// 重新开始当前执行中的模块。
+	virtual void Restart() {}
+	virtual ~Module() = default;
+  //模块内包含的回合数。如果你的模块可以包含确定数目的回合，将此值设为非0。
+	static constexpr uint16_t NumTrials = 0;
 };
 ```
-同样地，你可以编写自己的测试，需要实现ITest接口：
+每个模块都可以访问`Processs`容器`Container`，并调用进程容器提供的服务：
 ```C++
-struct ITest {
-  UID MyUID;
-  // 测试开始时将调用此方法。测试分为自动结束型和手动结束型。对于自动结束型，应当根据TestTimes参数将测试重复指定的次数，并返回true表示该测试将自动结束。对于手动结束型，一般应当忽略TestTimes参数，返回false，持续测试直到Stop被调用。
-  virtual bool Start(uint16_t TestTimes) const = 0;
-  //测试被用户手动结束时将调用此方法。自动结束型测试无需实现此方法，手动结束型则必须实现。
-  virtual void Stop() const {}
-  constexpr ITest(UID MyUID)
-    : MyUID(MyUID) {}
-};
+struct Process
+{
+  //注册一个引脚中断。当指定引脚RISING时，触发Callback回调。返回一个指针供UnregisterInterrupt时使用
+  PinListener *RegisterInterrupt(uint8_t Pin, std::move_only_function<void()> &&Callback);
+
+  //取消中断
+	void UnregisterInterrupt(PinListener *Handle);
+
+  //分配一个空闲的计时器，支持各种定时操作。计时器的用法参考Timers_one_for_all的文档。
+	Timers_one_for_all::TimerClass *AllocateTimer();
+
+	//释放计时器。此操作不负责停止计时器，仅使其可以被再分配
+	void UnregisterTimer(Timers_one_for_all::TimerClass *Timer);
+
+  //载入模块。如果你的模块引用其它模块，需要用此方法载入并获取其指针，而不是自行new模块。容器进程可以确保相同模块不会被重复创建。
+	template<typename ModuleType>
+	ModuleType *LoadModule();
+}
 ```
-可以参见Predefined.h中的的示例写法。
+要向串口发送复杂的信息，使用`SerialStream`全局对象而不是Arduino自带的`Serial`对象，使用方法详见`Async_stream_IO.hpp`中的说明文本：
+```C++
+extern Async_stream_IO::AsyncStream *SerialStream;
+```
+可以参见`Predefined.h`中的各种基础模块的示例写法。在进行高级开发时，你还需要了解以下UID类型：
+- Field，信息字段ID。在你设计的模块中WriteInfo时，需要向InfoStream写入Field类型的UID以标识不通的信息字段供人类识读。
+- Column，表列ID。此类ID仅针对表格类型的信息，标识列名。
+- Type，数据类型ID，用于提示PC端应当以何种类型识别串口字节。
 # MATLAB代码结构
 使用前需导入包：
 ```MATLAB
@@ -98,26 +106,43 @@ import Gbec.*
 ```
 安装阶段生成的Development_Client, Experiment_Client和SelfCheck_Client是你的控制面板。一般先根据脚本中已有的提示信息进行Arduino端配置、设备检查（SelfCheck_Client），然后开始实验（Experiment_Client）
 
-每个类/函数的详细文档可用doc命令查看。以下列出公开接口：
+每个类/函数的详细文档可用doc命令查看。以下列出简要概述：
 
 类
 ```MATLAB
-classdef ExperimentWorker<handle
-    %实验主控制器
-    %一般不直接使用该类，而是通过*_Client.mlx实时脚本作为用户界面来操纵实验。当然您也可以根据我们提供的Client脚本学习本类的使用方法。
+classdef Formal<Gbec.Process
+	%正规实验进程，提供完善可靠的数据收集系统和自定义接口
 end
-classdef UIDs<uint8
-	%该枚举类中记录了和Arduino端完全一致的UID密码表，供MATLAB端参考，识别从串口发来的字节编码。如果要修改UID密码表，应当在Arduino端修改UIDs.h，然后运行GenerateMatlabUIDs.mlx，自动生成UIDs.m，不要手动修改该文件。
+classdef GratingImage<Gbec.IHostAction
+	%示例类，用于在HostAction中显示栅格图
+end
+classdef IHostAction<handle
+	%设为HostAction所必须实现的接口。
+end
+classdef Process<handle
+	%进程基类。通常不应直接创建，而是使用其派生类Test和Formal。
+end
+classdef Server<handle
+	%控制服务器串口连接
+end
+classdef Test<Gbec.Process
+	%轻量级测试类进程，扩展一些便于手动测试设备的实用方法
+end
+classdef VideoRecord<Gbec.IHostAction
+	%视频录制主机动作
 end
 ```
 函数
 ```MATLAB
-%本函数尝试修复 Arduino C++ 标准配置错误的问题。Arduino默认使用C++11标准编译，但本工具箱的Arduino代码使用了C++17新特性，因此必须改用C++17标准编译。
+%本函数尝试修复 Arduino C++ 标准配置错误的问题。Arduino Mega AVR 开发板默认使用C++11标准编译，但本工具箱的Arduino代码使用了C++17新特性，因此必须改用C++17标准编译。推荐使用，Due SAM 开发板，内存更充裕且不会遇到此问题。
 function ArduinoCppStandard
-%根据Arduino端的UIDs.h，生成MATLAB端的UIDs.m
+
+%根据Arduino端的UIDs.hpp，生成MATLAB端的UIDs.m
 function GenerateMatlabUIDs
+
 %安装通用行为控制工具箱的向导
 function Setup
+
 %该函数用于将输出的英文日志翻译成中文。如果你发现实验中输出的日志信息含有英文，而你希望将它翻译成方便阅读的中文，可以模仿已有条目增加新的翻译项。也可以对已有项进行删改。
 function LogTranslate
 ```
@@ -125,8 +150,10 @@ function LogTranslate
 ```MATLAB
 %此脚本用于Arduino端相关的配置，如代码上传、错误排除等
 Development_Client
+
 %实验主控台脚本。在这里完成相关配置，并开始实验。通常你需要设定好串口号，选择要运行的会话，设置保存路径，是否自动关闭串口，设置喵提醒码（如果要用），视频拍摄设置。实验进程中，如需暂停、放弃、继续、返回信息、断开串口等操作，则运行脚本中相应节。
 Experiment_Client
+
 %实验开始前，应当检查各项设备是否运行正常。该脚本中提供了多种常用的设备检查命令。你也可以照例增添新设备的检查命令。
 SelfCheck_Client
 ```

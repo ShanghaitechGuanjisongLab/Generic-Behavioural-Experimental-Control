@@ -5,7 +5,9 @@
 %[text] %获取上次运行的会话信息
 %[text] ```
 %[text] ## 返回值
-%[text] Information(1,1)struct，信息结构体
+%[text] Information(1,1)struct，信息结构体。包含以下字段：
+%[text] - StartModule(1,1)，启动模块的指针。使用这个指针在Modules字典中查找模块的信息。模块还会引用其它模块，那些引用也以指针形式存储，需要再次从字典中根据指针查找引用模块的信息。
+%[text] - Modules(1,1)dictionary，根据指针检索信息的字典。 \
 function Information = GetInformation(obj)
 obj.Server.FeedDogIfActive;
 AsyncStream=obj.Server.AsyncStream;

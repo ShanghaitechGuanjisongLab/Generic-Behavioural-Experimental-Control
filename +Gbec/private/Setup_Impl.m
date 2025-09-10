@@ -65,7 +65,7 @@ end
 function [FromPaths,ToPaths]=FilterPaths(OldDirectory,NewDirectory)
 persistent KeepNames
 if isempty(KeepNames)
-	KeepNames=["UID.h","UID.m","ExperimentDesign.h","Experiment_Client.mlx","SelfCheck_Client.mlx","LogTranslate.mlx"];
+	KeepNames=["UID.hpp","UID.m","ExperimentDesign.cpp","Experiment_Client.m","SelfCheck_Client.m","LogTranslate.m"];
 end
 [~,OldNames,OldExtensions]=fileparts(string(System.IO.Directory.GetFiles(OldDirectory,'*',System.IO.SearchOption.AllDirectories)));
 NewPaths=string(System.IO.Directory.GetFiles(NewDirectory,'*',System.IO.SearchOption.AllDirectories));

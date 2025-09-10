@@ -1,3 +1,5 @@
 # List of untracked files to ignore
 *.mltbx
 *.asv
+resources/9*
+deploymentLog.html

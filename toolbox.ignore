@@ -31,3 +31,4 @@ resources/project
 **/*.asv
 *.mltbx
 .vscode
+resources/9*

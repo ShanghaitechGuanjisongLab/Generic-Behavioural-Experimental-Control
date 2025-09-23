@@ -231,10 +231,17 @@ classdef Formal<Gbec.Process
 			obj.LogPrint('会话继续');
 			obj.CountdownExempt=Gbec.CountdownExempt_(obj.Server);
 		end
-		function AbortSession(obj)
+		function AbortSession(obj,Confirm)
 			%放弃会话
+			arguments
+				obj
+				Confirm=true
+			end
 			if obj.State==Gbec.UID.State_Idle
 				Gbec.Exception.Process_not_running.Throw;
+			end
+			if Confirm&&questdlg('确定要放弃当前会话吗？','放弃会话','是','否','否')~="是"
+				return;
 			end
 			obj.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_AbortProcess,obj.Pointer));
 			obj.EventRecorder.LogEvent(Gbec.UID.Event_ProcessAborted);

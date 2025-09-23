@@ -115,6 +115,9 @@ AssignModuleID(TargetModule, TargetID);
 ```
 执行此模块时，将视为执行与TargetID所绑定的模块相同的模块。此模块的重启和终止操作也将传递给与TargetID所绑定的模块。此模块主要用于实现自我循环引用。
 
+## Async<Content>
+异步执行Content模块。执行此模块时，将立即返回并继续执行后续模块，而Content模块将在后台异步执行。此模块的Restart和Abort操作也将传递给Content模块。此模块主要用于实现后台任务。
+
 ——以下提供实际用例，用户可根据需要进行修改——
 */
 

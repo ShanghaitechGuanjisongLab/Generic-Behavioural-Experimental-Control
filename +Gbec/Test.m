@@ -117,5 +117,12 @@ classdef Test<Gbec.Process
 				fprintf('%s %s：%u\n',datetime,Gbec.LogTranslate(Message),Count);
 			end
 		end
+		function ConnectionReset_(obj)
+			%此方法由Server调用，派生类负责处理，用户不应使用
+			obj.Server.AllProcesses(obj.Pointer)=[];
+			AsyncStream=obj.Server.AsyncStream;
+			obj.Pointer=typecast(AsyncStream.SyncInvoke(Gbec.UID.PortA_CreateProcess),obj.Server.PointerType);
+			obj.Server.AllProcesses(obj.Pointer)=matlab.lang.WeakReference(obj);
+		end
 	end
 end

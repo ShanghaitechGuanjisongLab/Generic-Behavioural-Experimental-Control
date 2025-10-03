@@ -12,7 +12,7 @@ if questdlg('在 Arduino IDE 中尝试安装了Timers_one_for_all（v3.0.0+）�
 end
 %%
 %[text] 运行以下代码，选择一个工作目录用于存放这三个脚本。如果是升级安装，我们会尽可能为您保留原有的工作脚本和Arduino实验设计代码等用户配置文件。如果无法保留，将会提示确认；如果希望全新安装，请先执行下一节的清理再安装。
-Gbec.Setup; %[output:21bce9c1]
+Gbec.Setup; %[output:633aecf4]
 %[text] 一般来说，应先打开Development\_Client，配置Arduino端，然后SelfCheck\_Client检查设备，最后Experiment\_Client运行实验。
 %%
 %[text] 卸载本工具箱之前请执行清理
@@ -49,6 +49,6 @@ end
 %[metadata:view]
 %   data: {"layout":"inline","rightPanelPercent":40}
 %---
-%[output:21bce9c1]
-%   data: {"dataType":"text","outputData":{"text":"已放弃安装\n","truncated":false}}
+%[output:633aecf4]
+%   data: {"dataType":"text","outputData":{"text":"通用行为实验控制v6.5.0已发布，<a href=\"https:\/\/github.com\/ShanghaitechGuanjisongLab\/Generic-Behavioural-Experimental-Control\/releases\">立即更新<\/a>\n","truncated":false}}
 %---

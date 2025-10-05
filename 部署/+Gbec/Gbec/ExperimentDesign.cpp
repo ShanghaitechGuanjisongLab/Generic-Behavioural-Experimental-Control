@@ -1,7 +1,7 @@
 #pragma once
 #include "Predefined.hpp"
 // 快速切换BOX设定集
-#define BOX 1
+#define BOX 2
 
 // 引脚设定集，你可以为每套设备创建一个#if BOX块，记录不同设备的不同引脚信息，然后通过设定BOX宏进行快速切换。
 #if BOX == 1
@@ -24,6 +24,17 @@ Pin CD1 = 6;
 Pin ActiveBuzzer = 22;
 Pin AirPump = 12;
 Pin Laser = 53;
+Pin PassiveBuzzer = 3;
+#endif
+#if BOX == 3
+Pin BlueLed = 4;
+Pin WaterPump = 2;
+Pin CapacitorVdd = 6;
+Pin CapacitorOut = 18;
+Pin CD1 = 6;
+Pin ActiveBuzzer = 3;
+Pin AirPump = 12;
+Pin Laser = 7;
 Pin PassiveBuzzer = 3;
 #endif
 
@@ -73,10 +84,10 @@ Pin PassiveBuzzer = 3;
 执行此模块将导致指定引脚的输出电平被设置为高或低。
 
 ## DigitalToggle<Pin>
-执行此模块将导致指定引脚的输出电平被翻转。
+执行此模块将导致指定引脚的输出电平被翻转。此模块可配合RepeatEvery模块用于输出音频。
 
 ## MonitorPin<Pin, Monitor>
-对指定引脚注册一个中断监听器，当引脚电平RISING时执行Monitor模块。Monitor模块的执行不会打断中断触发时正在执行的模块，两者将同步执行。
+对指定引脚注册一个中断监听器，当引脚电平RISING时执行Monitor模块。Monitor模块的执行不会打断中断触发时正在执行的模块，两者将同步执行。对此模块使用ModuleAbort以停止监视引脚，但正在执行的Monitor模块不会中止。要中止Monitor模块，请对其直接使用ModuleAbort。
 
 ## SerialMessage<Message>
 向PC端发送一个预定义的Message。Message必须是UID枚举中的一个值。通常前缀Event_表示一个事件消息，将被PC端记录；Host_表示一个主机动作消息，令PC端执行相应的动作。
@@ -109,11 +120,13 @@ Pin PassiveBuzzer = 3;
 - DynamicSlot<UniqueID>::Clear：清除插槽内容。不会终止当前正在运行的内容模块，清除后仍继续执行。
 
 ## IDModule<TargetID>
-要使用此模块，必须先用AssignModuleID宏将某个模块绑定到TargetID上：
+使用此模块后，必须用AssignModuleID宏将某个模块绑定到TargetID上：
 ```
 AssignModuleID(TargetModule, TargetID);
 ```
-执行此模块时，将视为执行与TargetID所绑定的模块相同的模块。此模块的重启和终止操作也将传递给与TargetID所绑定的模块。此模块主要用于实现自我循环引用。
+这样执行此模块时，将视为执行与TargetID所绑定的模块TargetModule相同的模块。此模块的重启和终止操作也将传递给TargetModule。此模块主要用于实现自我循环引用。
+
+IDModule可以在TargetModule之前声明，但AssignModuleID必须在TargetModule定义之后。
 
 ## Async<Content>
 异步执行Content模块。执行此模块时，将立即返回并继续执行后续模块，而Content模块将在后台异步执行。此模块的Restart和Abort操作也将传递给Content模块。此模块主要用于实现后台任务。
@@ -149,21 +162,24 @@ using DelaySeconds = Delay<ConstantDuration<std::chrono::seconds, Seconds>>;
 template<DurationRep FrequencyHz, DurationRep Milliseconds>
 using Tone = typename RepeatEvery<ConstantDuration<std::chrono::microseconds, 1000000 / FrequencyHz>, DigitalToggle<PassiveBuzzer>>::template UntilDuration<ConstantDuration<std::chrono::microseconds, Milliseconds * 1000>>;
 
-using CalmDown = Sequential<DynamicSlot<>::Load<SerialMessage<UID::Event_MonitorMiss>>, MonitorRestart, Delay5To10, ModuleAbort<MonitorRestart>>;
+using ResponseWindow = MonitorPin<CapacitorOut, Sequential<DynamicSlot<>::Clear, ModuleAbort<IDModule<UID::Module_ResponseWindow>>, SerialMessage<UID::Event_MonitorHit>>>;
+AssignModuleID(ResponseWindow, UID::Module_ResponseWindow);
+
+using CalmDown = Sequential<DynamicSlot<>::Load<Sequential<ModuleAbort<ResponseWindow>, SerialMessage<UID::Event_MonitorMiss>>>, MonitorRestart, Delay5To10, ModuleAbort<MonitorRestart>>;
 
 using Settlement = Sequential<ModuleRandomize<Duration5To10>, DelaySeconds<20>>;
 
-using ResponseWindow = MonitorPin<CapacitorOut, Sequential<DynamicSlot<>::Clear, SerialMessage<UID::Event_MonitorHit>>>;
+using Delay800ms = DelayMilliseconds<800>;
 
 template<uint8_t CuePin, UID CueUp, UID CueDown>
-using AssociationTrial = Sequential<CalmDown, ResponseWindow, PinFlashUpDown<CuePin, 200, CueUp, CueDown>, DelayMilliseconds<800>, ModuleAbort<ResponseWindow>, DynamicSlot<>, PinFlashUp<WaterPump, 150, UID::Event_Water>, Settlement>;
+using AssociationTrial = Sequential<CalmDown, ResponseWindow, PinFlashUpDown<CuePin, 200, CueUp, CueDown>, Delay800ms, DynamicSlot<>, PinFlashUp<WaterPump, 150, UID::Event_Water>, Settlement>;
 
 template<typename Cue>
-using CueOnlyTrial = Sequential<CalmDown, ResponseWindow, Cue, DelayMilliseconds<800>, ModuleAbort<ResponseWindow>, DynamicSlot<>, Settlement>;
+using CueOnlyTrial = Sequential<CalmDown, ResponseWindow, Cue, Delay800ms, DynamicSlot<>, Settlement>;
 
 using CapacitorInitialize = Sequential<DigitalWrite<CapacitorVdd, HIGH>, DelaySeconds<1>, MonitorPin<CapacitorOut, SerialMessage<UID::Event_HitCount>>>;
 
-//点亮电容后等待1s，渡过刚启动的不稳定期
+// 点亮电容后等待1s，渡过刚启动的不稳定期
 template<typename TrialType>
 using AssociationSession = Sequential<CapacitorInitialize, Repeat<TrialType>::UntilTimes<30>>;
 
@@ -177,14 +193,14 @@ std::unordered_map<UID, uint16_t (*)(Process *)> SessionMap = {
   { UID::Test_ActiveBuzzer, Session<PinFlash<ActiveBuzzer, 200>> },
   { UID::Test_AirPump, Session<PinFlash<AirPump, 200>> },
   { UID::Test_HostAction, Session<SerialMessage<UID::Host_GratingImage>> },
-  { UID::Test_SquareWave, Session<DoubleRepeat<ConstantDuration<std::chrono::seconds, 1>, DigitalWrite<Laser, HIGH>, ConstantDuration<std::chrono::seconds, 2>, DigitalWrite<Laser, LOW>>::template UntilTimes<6>> },  //注意是6次变灯，不是6个周期
+  { UID::Test_SquareWave, Session<DoubleRepeat<ConstantDuration<std::chrono::seconds, 1>, DigitalWrite<Laser, HIGH>, ConstantDuration<std::chrono::seconds, 2>, DigitalWrite<Laser, LOW>>::template UntilTimes<6>> },  // 注意是6次变灯，不是6个周期
   { UID::Test_RandomFlash, Session<Sequential<Async<RandomFlash>, Delay<ConstantDuration<std::chrono::seconds, 10>>, ModuleAbort<RandomFlash>>> },
   { UID::Test_LowTone, Session<Tone<500, 1000>> },
   { UID::Test_HighTone, Session<Tone<5000, 1000>> },
   { UID::Session_AudioWater, Session<AssociationSession<Trial<UID::Trial_AudioWater, AssociationTrial<ActiveBuzzer, UID::Event_AudioUp, UID::Event_AudioDown>>>> },
   { UID::Session_LightWater, Session<AssociationSession<Trial<UID::Trial_LightWater, AssociationTrial<BlueLed, UID::Event_LightUp, UID::Event_LightDown>>>> },
-  { UID::Session_LAuW, Session< Sequential< DigitalWrite<CapacitorVdd, HIGH>, RandomSequential<
-                                                                                Trial<UID::Trial_LightOnly, CueOnlyTrial<PinFlashUpDown<BlueLed, 200, UID::Event_LightUp, UID::Event_LightDown>>>,
-                                                                                Trial<UID::Trial_AudioOnly, CueOnlyTrial<PinFlashUpDown<ActiveBuzzer, 200, UID::Event_AudioUp, UID::Event_AudioDown>>>,
-                                                                                Trial<UID::Trial_WaterOnly, CueOnlyTrial<PinFlashUp<WaterPump, 150, UID::Event_Water>>> >::WithRepeat< 20, 20, 20 >>> },
+  { UID::Session_LAuW, Session<Sequential<DigitalWrite<CapacitorVdd, HIGH>, RandomSequential<
+                                                                              Trial<UID::Trial_LightOnly, CueOnlyTrial<PinFlashUpDown<BlueLed, 200, UID::Event_LightUp, UID::Event_LightDown>>>,
+                                                                              Trial<UID::Trial_AudioOnly, CueOnlyTrial<PinFlashUpDown<ActiveBuzzer, 200, UID::Event_AudioUp, UID::Event_AudioDown>>>,
+                                                                              Trial<UID::Trial_WaterOnly, CueOnlyTrial<PinFlashUp<WaterPump, 150, UID::Event_Water>>>>::WithRepeat<20, 20, 20>>> },
 };

@@ -181,6 +181,7 @@ enum class UID : uint8_t {
 	Module_DynamicSlot,
 	Module_LoadSlot,
 	Module_ClearSlot,
+	Module_ResponseWindow,
 
 	// 主机动作
 

@@ -97,7 +97,7 @@ inline static void InfoWrite(std::ostringstream &InfoStream, T1 InfoValue1, T2 I
 extern Async_stream_IO::AsyncStream *SerialStream;
 
 template<typename Target>
-struct ModuleID {
+struct _ModuleID {
 	static UID const &ID;
 };
 struct Process;
@@ -128,6 +128,16 @@ protected:
 		}
 	};
 };
+
+// 仅在LoadModule时用作重载提示，无定义
+template<UID ID>
+struct IDModule;
+template<typename M>
+struct _IDModule {
+	using type = M;
+};
+template<typename M>
+using _IDModule_t = typename _IDModule<M>::type;
 
 struct Process {
 	void Pause() const {
@@ -172,25 +182,25 @@ struct Process {
 		Timer->Allocatable = true;
 	}
 	template<typename ModuleType>
-	ModuleType *LoadModule() {
-		auto Iter = Modules.find(&ModuleID<ModuleType>::ID);
-		if (Iter == Modules.end()) {
-			std::unique_ptr<ModuleType> NewModule = std::make_unique<ModuleType>(*this);
-			ModuleType *ModulePtr = NewModule.get();
-			Modules[&ModuleID<ModuleType>::ID] = std::move(NewModule);
-			return ModulePtr;
-		}
-		return reinterpret_cast<ModuleType *>(Iter->second.get());
+	_IDModule_t<ModuleType> *LoadModule() {
+		using _ModuleType = _IDModule_t<ModuleType>;
+		auto const Iter = Modules.find(&_ModuleID<_ModuleType>::ID);
+		if (Iter != Modules.end())
+			return reinterpret_cast<_ModuleType *>(Iter->second.get());
+		void *const RawMemory = ::operator new(sizeof(_ModuleType));
+		Modules.emplace(&_ModuleID<_ModuleType>::ID, std::unique_ptr<Module>(reinterpret_cast<Module *>(RawMemory)));
+		return new (RawMemory) _ModuleType(*this);
 	}
 
 	// 此方法会终止并清空当前执行的所有模块（通过清理资源的方法，不调用模块Abort，但会调用清理模块），然后再开始新的模块
 	template<typename Entry>
 	uint16_t LoadStartModule() {
+		using _Entry = _IDModule_t<Entry>;
 		Abort();
 		Modules.clear();
-		StartPointer = &ModuleID<Entry>::ID;
-		StartModule = LoadModule<Entry>();
-		return Entry::NumTrials;
+		StartPointer = &_ModuleID<_Entry>::ID;
+		StartModule = LoadModule<_Entry>();
+		return _Entry::NumTrials;
 	}
 
 	bool Start(uint16_t Times) {
@@ -289,7 +299,7 @@ struct RandomSequential : Module, IRandom {
 				    if ((*CurrentModule)->Start(NextBlock))
 					    return;
 			  } } {
-			Module **_[] = { (CurrentModule = std::fill_n(CurrentModule, Repeats, Module::Container.LoadModule<SubModules>()))... };
+			Module **_[] = { (CurrentModule = std::fill_n(CurrentModule, Repeats, Module::Container.LoadModule<_IDModule_t<SubModules>>()))... };
 			Randomize();
 		}
 		void Abort() override {
@@ -317,14 +327,14 @@ struct RandomSequential : Module, IRandom {
 			return false;
 		}
 		void WriteInfo(std::ostringstream &InfoStream) const override {
-			InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<WithRepeat>::ID, UID::Field_Modules, UID::Type_Table, static_cast<uint8_t>(sizeof...(SubModules)), static_cast<uint8_t>(2), UID::Column_Module, UID::Type_Pointer, &ModuleID<SubModules>::ID..., UID::Column_Repeats, UID::Type_UInt16, Repeats...);
+			InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, _ModuleID<WithRepeat>::ID, UID::Field_Modules, UID::Type_Table, static_cast<uint8_t>(sizeof...(SubModules)), static_cast<uint8_t>(2), UID::Column_Module, UID::Type_Pointer, &_ModuleID<_IDModule_t<SubModules>>::ID..., UID::Column_Repeats, UID::Type_UInt16, Repeats...);
 		}
-		static constexpr uint16_t NumTrials = _Sum<SubModules::NumTrials * Repeats...>::value;
+		static constexpr uint16_t NumTrials = _Sum<_IDModule_t<SubModules>::NumTrials * Repeats...>::value;
 
 	protected:
 		Module *SubPointers[_Sum<Repeats...>::value];
 		Module **CurrentModule = std::begin(SubPointers);
-		std::move_only_function<void()> NextBlock;  //不能在此处等号初始化，SAM会编译器错误
+		std::move_only_function<void()> NextBlock;  // 不能在此处等号初始化，SAM会编译器错误
 	};
 	static UID const ID;
 	void Randomize() override {
@@ -359,12 +369,12 @@ struct RandomSequential : Module, IRandom {
 		return false;
 	}
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<RandomSequential>::ID, UID::Field_Modules, UID::Type_Array, static_cast<uint8_t>(sizeof...(SubModules)), UID::Type_Pointer, &ModuleID<SubModules>::ID...);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, _ModuleID<RandomSequential>::ID, UID::Field_Modules, UID::Type_Array, static_cast<uint8_t>(sizeof...(SubModules)), UID::Type_Pointer, &_ModuleID<_IDModule_t<SubModules>>::ID...);
 	}
-	static constexpr uint16_t NumTrials = _Sum<SubModules::NumTrials...>::value;
+	static constexpr uint16_t NumTrials = _Sum<_IDModule_t<SubModules>::NumTrials...>::value;
 
 protected:
-	Module *SubPointers[sizeof...(SubModules)] = { Module::Container.LoadModule<SubModules>()... };  // SAM编译器不能自动推断数组长度，导致cend不可用
+	Module *SubPointers[sizeof...(SubModules)] = { Module::Container.LoadModule<_IDModule_t<SubModules>>()... };  // SAM编译器不能自动推断数组长度，导致cend不可用
 	Module *const *CurrentModule = std::cend(SubPointers);
 	std::move_only_function<void()> NextBlock = [this]() {
 		while (++CurrentModule < std::cend(SubPointers))
@@ -405,6 +415,7 @@ struct InfiniteDuration;
 // 无限重复模块，也可以额外指定UntilTimes重复次数。不能指定重复时间，请组合使用 Async Delay ModuleAbort 等模块实现。
 template<typename Content>
 struct Repeat : Module {
+	using _Content = _IDModule_t<Content>;
 	template<uint16_t Times>
 	struct UntilTimes : Repeat<Content> {
 		UntilTimes(Process &Container)
@@ -437,9 +448,9 @@ struct Repeat : Module {
 		}
 		static UID const ID;
 		void WriteInfo(std::ostringstream &InfoStream) const override {
-			InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ModuleID<UntilTimes>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID, UID::Field_Times, UID::Type_UInt16, Times);
+			InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, _ModuleID<UntilTimes>::ID, UID::Field_Content, UID::Type_Pointer, &_ModuleID<_Content>::ID, UID::Field_Times, UID::Type_UInt16, Times);
 		}
-		static constexpr uint16_t NumTrials = Content::NumTrials * Times;
+		static constexpr uint16_t NumTrials = _Content::NumTrials * Times;
 
 	protected:
 		uint16_t TimesLeft;
@@ -467,12 +478,12 @@ struct Repeat : Module {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<Repeat>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, _ModuleID<Repeat>::ID, UID::Field_Content, UID::Type_Pointer, &_ModuleID<_Content>::ID);
 	}
-	static constexpr uint16_t NumTrials = Content::NumTrials;
+	static constexpr uint16_t NumTrials = _Content::NumTrials;
 
 protected:
-	Content *const ContentPtr = Module::Container.LoadModule<Content>();
+	_Content *const ContentPtr = Module::Container.LoadModule<Content>();
 	std::move_only_function<void()> NextBlock;
 };
 template<typename Content>
@@ -517,9 +528,9 @@ struct _Sequential : Module {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<_Sequential>::ID, UID::Field_Modules, UID::Type_Array, static_cast<uint8_t>(sizeof...(SubModules)), UID::Type_Pointer, &ModuleID<SubModules>::ID...);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, _ModuleID<_Sequential>::ID, UID::Field_Modules, UID::Type_Array, static_cast<uint8_t>(sizeof...(SubModules)), UID::Type_Pointer, &_ModuleID<SubModules>::ID...);
 	}
-	static constexpr uint16_t NumTrials = _Sum<SubModules::NumTrials...>::value;
+	static constexpr uint16_t NumTrials = _Sum<_IDModule_t<SubModules>::NumTrials...>::value;
 
 protected:
 	Module *const SubPointers[sizeof...(SubModules)] = { Module::Container.LoadModule<SubModules>()... };
@@ -532,43 +543,53 @@ template<typename... SubModules>
 UID const _Sequential<SubModules...>::ID = UID::Module_Sequential;
 
 namespace detail {
-template<typename... Ts> struct type_list {};
+template<typename... Ts>
+struct type_list {
+};
 
-template<typename A, typename B> struct concat;
+template<typename A, typename B>
+struct concat;
 template<typename... A, typename... B>
 struct concat<type_list<A...>, type_list<B...>> {
 	using type = type_list<A..., B...>;
 };
 
-template<typename... Args> struct flatten_pack;
+template<typename... Args>
+struct flatten_pack;
 
 template<typename T>
-struct flatten_one { using type = type_list<T>; };
+struct flatten_one {
+	using type = type_list<T>;
+};
 
 template<typename... Inner>
 struct flatten_one<_Sequential<Inner...>> {
 	using type = typename flatten_pack<Inner...>::type;
 };
 
-template<> struct flatten_pack<> { using type = type_list<>; };
+template<>
+struct flatten_pack<> {
+	using type = type_list<>;
+};
 
 template<typename Head, typename... Tail>
 struct flatten_pack<Head, Tail...> {
 	using type = typename concat<
 	  typename flatten_one<Head>::type,
-	  typename flatten_pack<Tail...>::type >::type;
+	  typename flatten_pack<Tail...>::type>::type;
 };
 
-template<typename List> struct list_to_seq;
+template<typename List>
+struct list_to_seq;
 template<typename... Ts>
 struct list_to_seq<type_list<Ts...>> {
 	using type = _Sequential<Ts...>;
 };
 }
-//依次执行模块。嵌套的Sequential会被展开。
+// 依次执行模块。嵌套的Sequential会被展开。
 template<typename... Args>
 using Sequential = typename detail::list_to_seq<
-  typename detail::flatten_pack<Args...>::type >::type;
+  typename detail::flatten_pack<Args...>::type>::type;
 
 struct _TimedModule : Module {
 	_TimedModule(Process &Container)
@@ -628,7 +649,7 @@ struct Delay : _Delay {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<Delay>::ID, UID::Field_Duration, UID::Type_Pointer, &RandomDuration::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, _ModuleID<Delay>::ID, UID::Field_Duration, UID::Type_Pointer, &RandomDuration::ID);
 	}
 
 protected:
@@ -647,7 +668,7 @@ struct Delay<ConstantDuration<Unit, Value>> : _Delay {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<Delay>::ID, UID::Field_Duration, _TypeID<Unit>::value, Value);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, _ModuleID<Delay>::ID, UID::Field_Duration, _TypeID<Unit>::value, Value);
 	}
 };
 template<typename Unit, DurationRep Value>
@@ -663,7 +684,7 @@ struct Delay<InfiniteDuration> : Module {
 	// 全特化的ID定义不能放在头文件中，转而放在Gbec.ino中，否则违反ODR
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<Delay>::ID, UID::Field_Duration, UID::Type_UID, UID::Duration_Infinite);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, _ModuleID<Delay>::ID, UID::Field_Duration, UID::Type_UID, UID::Duration_Infinite);
 	}
 };
 template<typename Content>
@@ -688,7 +709,7 @@ struct _RepeatEvery : _TimedModule {
 	}
 
 protected:
-	Content *const ContentPtr = Module::Container.LoadModule<Content>();
+	Module *const ContentPtr = Module::Container.LoadModule<Content>();
 	std::move_only_function<void()> RepeatCallback{ _EmptyStart{ ContentPtr } };
 };
 template<typename Period, typename Content, typename Duration>
@@ -709,7 +730,7 @@ struct RepeatEvery : _RepeatEvery<Content> {
 			_TimedModule::Timer->RepeatEvery(PeriodPtr->Current, _RepeatEvery<Content>::RepeatCallback, Times, FinishCallback);
 		}
 		bool Start(std::move_only_function<void()> &FC) override {
-			if (!Times )
+			if (!Times)
 				return false;
 			FinishCallback = [this, &FC]() {
 				this->UnregisterTimer();
@@ -720,9 +741,9 @@ struct RepeatEvery : _RepeatEvery<Content> {
 		}
 		static UID const ID;
 		void WriteInfo(std::ostringstream &InfoStream) const override {
-			InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, ModuleID<UntilTimes>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID, UID::Field_Period, UID::Type_Pointer, &Period::ID, UID::Field_Times, UID::Type_UInt16, Times);
+			InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, _ModuleID<UntilTimes>::ID, UID::Field_Content, UID::Type_Pointer, &_ModuleID<Content>::ID, UID::Field_Period, UID::Type_Pointer, &Period::ID, UID::Field_Times, UID::Type_UInt16, Times);
 		}
-		static constexpr uint16_t NumTrials = Content::NumTrials * Times;
+		static constexpr uint16_t NumTrials = _IDModule_t<Content>::NumTrials * Times;
 
 	protected:
 		std::move_only_function<void()> FinishCallback{ _TimedModule::_UnregisterTimer{ this } };
@@ -737,7 +758,7 @@ struct RepeatEvery : _RepeatEvery<Content> {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ModuleID<RepeatEvery>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID, UID::Field_Duration, UID::Type_Pointer, &Period::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, _ModuleID<RepeatEvery>::ID, UID::Field_Content, UID::Type_Pointer, &_ModuleID<Content>::ID, UID::Field_Duration, UID::Type_Pointer, &Period::ID);
 	}
 
 protected:
@@ -767,7 +788,7 @@ struct _RepeatEvery_Random_UntilDuration : RepeatEvery<Period, Content> {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, ModuleID<_RepeatEvery_Random_UntilDuration>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID, UID::Field_Period, UID::Type_Pointer, &Period::ID, UID::Field_Duration, UID::Type_Pointer, &Duration::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, _ModuleID<_RepeatEvery_Random_UntilDuration>::ID, UID::Field_Content, UID::Type_Pointer, &_ModuleID<Content>::ID, UID::Field_Period, UID::Type_Pointer, &Period::ID, UID::Field_Duration, UID::Type_Pointer, &Duration::ID);
 	}
 
 protected:
@@ -795,7 +816,7 @@ struct _RepeatEvery_Random_UntilDuration<Period, Content, ConstantDuration<Unit,
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, ModuleID<_RepeatEvery_Random_UntilDuration>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID, UID::Field_Period, UID::Type_Pointer, &Period::ID, UID::Field_Duration, _TypeID<Unit>::value, Value);
+		InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, _ModuleID<_RepeatEvery_Random_UntilDuration>::ID, UID::Field_Content, UID::Type_Pointer, &_ModuleID<Content>::ID, UID::Field_Period, UID::Type_Pointer, &Period::ID, UID::Field_Duration, _TypeID<Unit>::value, Value);
 	}
 
 protected:
@@ -828,7 +849,7 @@ struct _RepeatEvery_Constant_UntilDuration : RepeatEvery<ConstantDuration<Unit, 
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, ModuleID<_RepeatEvery_Constant_UntilDuration>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID, UID::Field_Period, _TypeID<Unit>::value, Period, UID::Field_Duration, UID::Type_Pointer, &Duration::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, _ModuleID<_RepeatEvery_Constant_UntilDuration>::ID, UID::Field_Content, UID::Type_Pointer, &_ModuleID<Content>::ID, UID::Field_Period, _TypeID<Unit>::value, Period, UID::Field_Duration, UID::Type_Pointer, &Duration::ID);
 	}
 
 protected:
@@ -847,7 +868,7 @@ struct RepeatEvery<ConstantDuration<Unit, Period>, Content> : _RepeatEvery<Conte
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ModuleID<RepeatEvery>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID, UID::Field_Duration, _TypeID<Unit>::value, Period);
+		InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, _ModuleID<RepeatEvery>::ID, UID::Field_Content, UID::Type_Pointer, &_ModuleID<Content>::ID, UID::Field_Duration, _TypeID<Unit>::value, Period);
 	}
 	template<uint16_t Times>
 	struct UntilTimes : RepeatEvery<ConstantDuration<Unit, Period>, Content> {
@@ -859,7 +880,7 @@ struct RepeatEvery<ConstantDuration<Unit, Period>, Content> : _RepeatEvery<Conte
 			_TimedModule::Timer->RepeatEvery(Unit{ Period }, _RepeatEvery<Content>::RepeatCallback, Times, FinishCallback);
 		}
 		bool Start(std::move_only_function<void()> &FC) override {
-			if (!Times )
+			if (!Times)
 				return false;
 			FinishCallback = [this, &FC]() {
 				this->UnregisterTimer();
@@ -870,9 +891,9 @@ struct RepeatEvery<ConstantDuration<Unit, Period>, Content> : _RepeatEvery<Conte
 		}
 		static UID const ID;
 		void WriteInfo(std::ostringstream &InfoStream) const override {
-			InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, ModuleID<UntilTimes>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID, UID::Field_Period, _TypeID<Unit>::value, Period, UID::Field_Times, UID::Type_UInt16, Times);
+			InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, _ModuleID<UntilTimes>::ID, UID::Field_Content, UID::Type_Pointer, &_ModuleID<Content>::ID, UID::Field_Period, _TypeID<Unit>::value, Period, UID::Field_Times, UID::Type_UInt16, Times);
 		}
-		static constexpr uint16_t NumTrials = Content::NumTrials * Times;
+		static constexpr uint16_t NumTrials = _IDModule_t<Content>::NumTrials * Times;
 
 	protected:
 		std::move_only_function<void()> FinishCallback{ _TimedModule::_UnregisterTimer{ this } };
@@ -904,9 +925,9 @@ struct _RepeatEvery_Constant_UntilDuration<Unit, Period, Content, ConstantDurati
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, ModuleID<_RepeatEvery_Constant_UntilDuration>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID, UID::Field_Period, _TypeID<Unit>::value, Period, UID::Field_Duration, _TypeID<Unit>::value, Duration);
+		InfoWrite(InfoStream, static_cast<uint8_t>(4), UID::Field_ID, UID::Type_UID, _ModuleID<_RepeatEvery_Constant_UntilDuration>::ID, UID::Field_Content, UID::Type_Pointer, &_ModuleID<Content>::ID, UID::Field_Period, _TypeID<Unit>::value, Period, UID::Field_Duration, _TypeID<Unit>::value, Duration);
 	}
-	static constexpr uint16_t NumTrials = Duration / Period * Content::NumTrials;
+	static constexpr uint16_t NumTrials = Duration / Period * _IDModule_t<Content>::NumTrials;
 
 protected:
 	std::move_only_function<void()> FinishCallback{ _TimedModule::_UnregisterTimer{ this } };
@@ -943,9 +964,9 @@ struct _DoubleRepeat : _TimedModule {
 	}
 
 protected:
-	ContentA *const ContentAPtr = Module::Container.LoadModule<ContentA>();
+	Module *const ContentAPtr = Module::Container.LoadModule<ContentA>();
 	std::move_only_function<void()> RepeatCallbackA{ _EmptyStart{ ContentAPtr } };
-	ContentB *const ContentBPtr = Module::Container.LoadModule<ContentB>();
+	Module *const ContentBPtr = Module::Container.LoadModule<ContentB>();
 	std::move_only_function<void()> RepeatCallbackB{ _EmptyStart{ ContentBPtr } };
 };
 template<typename PeriodA, typename ContentA, typename PeriodB, typename ContentB, typename Duration>
@@ -978,9 +999,9 @@ struct DoubleRepeat : _DoubleRepeat<ContentA, ContentB> {
 		}
 		static UID const ID;
 		void WriteInfo(std::ostringstream &InfoStream) const override {
-			InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, ModuleID<UntilTimes>::ID, UID::Field_ContentA, UID::Type_Pointer, &ModuleID<ContentA>::ID, UID::Field_PeriodA, UID::Type_Pointer, &PeriodA::ID, UID::Field_ContentB, UID::Type_Pointer, &ModuleID<ContentB>::ID, UID::Field_PeriodB, UID::Type_Pointer, &PeriodB::ID, UID::Field_Times, UID::Type_UInt16, Times);
+			InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, _ModuleID<UntilTimes>::ID, UID::Field_ContentA, UID::Type_Pointer, &_ModuleID<ContentA>::ID, UID::Field_PeriodA, UID::Type_Pointer, &PeriodA::ID, UID::Field_ContentB, UID::Type_Pointer, &_ModuleID<ContentB>::ID, UID::Field_PeriodB, UID::Type_Pointer, &PeriodB::ID, UID::Field_Times, UID::Type_UInt16, Times);
 		}
-		static constexpr uint16_t NumTrials = (Times + 1) / 2 * ContentA::NumTrials + Times / 2 * ContentB::NumTrials;
+		static constexpr uint16_t NumTrials = (Times + 1) / 2 * _IDModule_t<ContentA>::NumTrials + Times / 2 * _IDModule_t<ContentB>::NumTrials;
 
 	protected:
 		std::move_only_function<void()> FinishCallback{ _TimedModule::_UnregisterTimer{ this } };
@@ -995,7 +1016,7 @@ struct DoubleRepeat : _DoubleRepeat<ContentA, ContentB> {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(5), UID::Field_ID, UID::Type_UID, ModuleID<DoubleRepeat>::ID, UID::Field_ContentA, UID::Type_Pointer, &ModuleID<ContentA>::ID, UID::Field_PeriodA, UID::Type_Pointer, &PeriodA::ID, UID::Field_ContentB, UID::Type_Pointer, &ModuleID<ContentB>::ID, UID::Field_PeriodB, UID::Type_Pointer, &PeriodB::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(5), UID::Field_ID, UID::Type_UID, _ModuleID<DoubleRepeat>::ID, UID::Field_ContentA, UID::Type_Pointer, &_ModuleID<ContentA>::ID, UID::Field_PeriodA, UID::Type_Pointer, &PeriodA::ID, UID::Field_ContentB, UID::Type_Pointer, &_ModuleID<ContentB>::ID, UID::Field_PeriodB, UID::Type_Pointer, &PeriodB::ID);
 	}
 
 protected:
@@ -1026,7 +1047,7 @@ struct _DoubleRepeat_Random_UntilDuration : DoubleRepeat<PeriodA, ContentA, Peri
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, ModuleID<_DoubleRepeat_Random_UntilDuration>::ID, UID::Field_ContentA, UID::Type_Pointer, &ModuleID<ContentA>::ID, UID::Field_PeriodA, UID::Type_Pointer, &PeriodA::ID, UID::Field_ContentB, UID::Type_Pointer, &ModuleID<ContentB>::ID, UID::Field_PeriodB, UID::Type_Pointer, &PeriodB::ID, UID::Field_Duration, UID::Type_Pointer, &Duration::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, _ModuleID<_DoubleRepeat_Random_UntilDuration>::ID, UID::Field_ContentA, UID::Type_Pointer, &_ModuleID<ContentA>::ID, UID::Field_PeriodA, UID::Type_Pointer, &PeriodA::ID, UID::Field_ContentB, UID::Type_Pointer, &_ModuleID<ContentB>::ID, UID::Field_PeriodB, UID::Type_Pointer, &PeriodB::ID, UID::Field_Duration, UID::Type_Pointer, &Duration::ID);
 	}
 
 protected:
@@ -1054,7 +1075,7 @@ struct _DoubleRepeat_Random_UntilDuration<PeriodA, ContentA, PeriodB, ContentB, 
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, ModuleID<_DoubleRepeat_Random_UntilDuration>::ID, UID::Field_ContentA, UID::Type_Pointer, &ModuleID<ContentA>::ID, UID::Field_PeriodA, UID::Type_Pointer, &PeriodA::ID, UID::Field_ContentB, UID::Type_Pointer, &ModuleID<ContentB>::ID, UID::Field_PeriodB, UID::Type_Pointer, &PeriodB::ID, UID::Field_Duration, _TypeID<Unit>::value, Duration);
+		InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, _ModuleID<_DoubleRepeat_Random_UntilDuration>::ID, UID::Field_ContentA, UID::Type_Pointer, &_ModuleID<ContentA>::ID, UID::Field_PeriodA, UID::Type_Pointer, &PeriodA::ID, UID::Field_ContentB, UID::Type_Pointer, &_ModuleID<ContentB>::ID, UID::Field_PeriodB, UID::Type_Pointer, &PeriodB::ID, UID::Field_Duration, _TypeID<Unit>::value, Duration);
 	}
 
 protected:
@@ -1087,7 +1108,7 @@ struct _DoubleRepeat_Constant_UntilDuration : DoubleRepeat<ConstantDuration<Unit
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, ModuleID<_DoubleRepeat_Constant_UntilDuration>::ID, UID::Field_ContentA, UID::Type_Pointer, &ModuleID<ContentA>::ID, UID::Field_PeriodA, _TypeID<Unit>::value, PeriodA, UID::Field_ContentB, UID::Type_Pointer, &ModuleID<ContentB>::ID, UID::Field_PeriodB, _TypeID<Unit>::value, PeriodB, UID::Field_Duration, UID::Type_Pointer, &Duration::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, _ModuleID<_DoubleRepeat_Constant_UntilDuration>::ID, UID::Field_ContentA, UID::Type_Pointer, &_ModuleID<ContentA>::ID, UID::Field_PeriodA, _TypeID<Unit>::value, PeriodA, UID::Field_ContentB, UID::Type_Pointer, &_ModuleID<ContentB>::ID, UID::Field_PeriodB, _TypeID<Unit>::value, PeriodB, UID::Field_Duration, UID::Type_Pointer, &Duration::ID);
 	}
 
 protected:
@@ -1106,7 +1127,7 @@ struct DoubleRepeat<ConstantDuration<Unit, PeriodA>, ContentA, ConstantDuration<
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(5), UID::Field_ID, UID::Type_UID, ModuleID<DoubleRepeat>::ID, UID::Field_ContentA, UID::Type_Pointer, &ModuleID<ContentA>::ID, UID::Field_PeriodA, _TypeID<Unit>::value, PeriodA, UID::Field_ContentB, UID::Type_Pointer, &ModuleID<ContentB>::ID, UID::Field_PeriodB, _TypeID<Unit>::value, PeriodB);
+		InfoWrite(InfoStream, static_cast<uint8_t>(5), UID::Field_ID, UID::Type_UID, _ModuleID<DoubleRepeat>::ID, UID::Field_ContentA, UID::Type_Pointer, &_ModuleID<ContentA>::ID, UID::Field_PeriodA, _TypeID<Unit>::value, PeriodA, UID::Field_ContentB, UID::Type_Pointer, &_ModuleID<ContentB>::ID, UID::Field_PeriodB, _TypeID<Unit>::value, PeriodB);
 	}
 	template<uint16_t Times>
 	struct UntilTimes : DoubleRepeat<ConstantDuration<Unit, PeriodA>, ContentA, ConstantDuration<Unit, PeriodB>, ContentB> {
@@ -1118,7 +1139,7 @@ struct DoubleRepeat<ConstantDuration<Unit, PeriodA>, ContentA, ConstantDuration<
 			_TimedModule::Timer->DoubleRepeat(Unit{ PeriodA }, _DoubleRepeat<ContentA, ContentB>::RepeatCallbackA, Unit{ PeriodB }, _DoubleRepeat<ContentA, ContentB>::RepeatCallbackB, Times, FinishCallback);
 		}
 		bool Start(std::move_only_function<void()> &FC) override {
-			if (!Times )
+			if (!Times)
 				return false;
 			FinishCallback = [this, &FC]() {
 				this->UnregisterTimer();
@@ -1129,9 +1150,9 @@ struct DoubleRepeat<ConstantDuration<Unit, PeriodA>, ContentA, ConstantDuration<
 		}
 		static UID const ID;
 		void WriteInfo(std::ostringstream &InfoStream) const override {
-			InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, ModuleID<UntilTimes>::ID, UID::Field_ContentA, UID::Type_Pointer, &ModuleID<ContentA>::ID, UID::Field_PeriodA, _TypeID<Unit>::value, PeriodA, UID::Field_ContentB, UID::Type_Pointer, &ModuleID<ContentB>::ID, UID::Field_PeriodB, _TypeID<Unit>::value, PeriodB, UID::Field_Times, UID::Type_UInt16, Times);
+			InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, _ModuleID<UntilTimes>::ID, UID::Field_ContentA, UID::Type_Pointer, &_ModuleID<ContentA>::ID, UID::Field_PeriodA, _TypeID<Unit>::value, PeriodA, UID::Field_ContentB, UID::Type_Pointer, &_ModuleID<ContentB>::ID, UID::Field_PeriodB, _TypeID<Unit>::value, PeriodB, UID::Field_Times, UID::Type_UInt16, Times);
 		}
-		static constexpr uint16_t NumTrials = (Times + 1) / 2 * ContentA::NumTrials + Times / 2 * ContentB::NumTrials;
+		static constexpr uint16_t NumTrials = (Times + 1) / 2 * _IDModule_t<ContentA>::NumTrials + Times / 2 * _IDModule_t<ContentB>::NumTrials;
 
 	protected:
 		std::move_only_function<void()> FinishCallback{ _TimedModule::_UnregisterTimer{ this } };
@@ -1168,9 +1189,9 @@ public:
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, ModuleID<_DoubleRepeat_Constant_UntilDuration>::ID, UID::Field_ContentA, UID::Type_Pointer, &ModuleID<ContentA>::ID, UID::Field_PeriodA, _TypeID<Unit>::value, PeriodA, UID::Field_ContentB, UID::Type_Pointer, &ModuleID<ContentB>::ID, UID::Field_PeriodB, _TypeID<Unit>::value, PeriodB, UID::Field_Duration, _TypeID<Unit>::value, Duration);
+		InfoWrite(InfoStream, static_cast<uint8_t>(6), UID::Field_ID, UID::Type_UID, _ModuleID<_DoubleRepeat_Constant_UntilDuration>::ID, UID::Field_ContentA, UID::Type_Pointer, &_ModuleID<ContentA>::ID, UID::Field_PeriodA, _TypeID<Unit>::value, PeriodA, UID::Field_ContentB, UID::Type_Pointer, &_ModuleID<ContentB>::ID, UID::Field_PeriodB, _TypeID<Unit>::value, PeriodB, UID::Field_Duration, _TypeID<Unit>::value, Duration);
 	}
-	static constexpr uint16_t NumTrials = ContentA::NumTrials * (NumFullCycles + (Duration % FullPeriod > PeriodA)) + ContentB::NumTrials * NumFullCycles;
+	static constexpr uint16_t NumTrials = _IDModule_t<ContentA>::NumTrials * (NumFullCycles + (Duration % FullPeriod > PeriodA)) + _IDModule_t<ContentB>::NumTrials * NumFullCycles;
 };
 template<typename Unit, DurationRep PeriodA, typename ContentA, DurationRep PeriodB, typename ContentB, DurationRep Duration>
 UID const _DoubleRepeat_Constant_UntilDuration<Unit, PeriodA, ContentA, PeriodB, ContentB, ConstantDuration<Unit, Duration>>::ID = UID::Module_DoubleRepeat;
@@ -1185,7 +1206,7 @@ struct _InstantaneousModule : Module {
 	  : Module(Container) {
 	}
 	bool Start(std::move_only_function<void()> &FC) override {
-			Restart();
+		Restart();
 		return false;
 	}
 };
@@ -1199,7 +1220,7 @@ struct ModuleAbort : _InstantaneousModule {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<ModuleAbort>::ID, UID::Field_Target, UID::Type_Pointer, &ModuleID<Target>::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, _ModuleID<ModuleAbort>::ID, UID::Field_Target, UID::Type_Pointer, &_ModuleID<Target>::ID);
 	}
 
 protected:
@@ -1217,7 +1238,7 @@ struct ModuleRestart : _InstantaneousModule {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<ModuleRestart>::ID, UID::Field_Target, UID::Type_Pointer, &ModuleID<Target>::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, _ModuleID<ModuleRestart>::ID, UID::Field_Target, UID::Type_Pointer, &_ModuleID<Target>::ID);
 	}
 
 protected:
@@ -1235,7 +1256,7 @@ struct ModuleRandomize : _InstantaneousModule {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<ModuleRandomize>::ID, UID::Field_Target, UID::Type_Pointer, &ModuleID<Target>::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, _ModuleID<ModuleRandomize>::ID, UID::Field_Target, UID::Type_Pointer, &_ModuleID<Target>::ID);
 	}
 
 protected:
@@ -1254,7 +1275,7 @@ struct DigitalWrite : _InstantaneousModule {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ModuleID<DigitalWrite>::ID, UID::Field_Pin, UID::Type_UInt8, Pin, UID::Field_HighOrLow, UID::Type_Bool, HighOrLow);
+		InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, _ModuleID<DigitalWrite>::ID, UID::Field_Pin, UID::Type_UInt8, Pin, UID::Field_HighOrLow, UID::Type_Bool, HighOrLow);
 	}
 };
 template<uint8_t Pin, bool HighOrLow>
@@ -1270,7 +1291,7 @@ struct DigitalToggle : _InstantaneousModule {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<DigitalToggle>::ID, UID::Field_Pin, UID::Type_UInt8, Pin);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, _ModuleID<DigitalToggle>::ID, UID::Field_Pin, UID::Type_UInt8, Pin);
 	}
 };
 template<uint8_t Pin>
@@ -1297,12 +1318,11 @@ struct MonitorPin : _InstantaneousModule {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ModuleID<MonitorPin>::ID, UID::Field_Pin, UID::Type_UInt8, Pin, UID::Field_Monitor, UID::Type_Pointer, &ModuleID<Monitor>::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, _ModuleID<MonitorPin>::ID, UID::Field_Pin, UID::Type_UInt8, Pin, UID::Field_Monitor, UID::Type_Pointer, &_ModuleID<Monitor>::ID);
 	}
-	static constexpr uint16_t NumTrials = Monitor::NumTrials;
 
 protected:
-	Monitor *const MonitorPtr = Module::Container.LoadModule<Monitor>();
+	Module *const MonitorPtr = Module::Container.LoadModule<Monitor>();
 };
 template<uint8_t Pin, typename Monitor>
 UID const MonitorPin<Pin, Monitor>::ID = UID::Module_MonitorPin;
@@ -1316,7 +1336,7 @@ struct SerialMessage : _InstantaneousModule {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<SerialMessage>::ID, UID::Field_Message, UID::Type_UID, Message);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, _ModuleID<SerialMessage>::ID, UID::Field_Message, UID::Type_UID, Message);
 	}
 };
 template<UID Message>
@@ -1336,12 +1356,12 @@ struct Async : _InstantaneousModule {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<Async>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, _ModuleID<Async>::ID, UID::Field_Content, UID::Type_Pointer, &_ModuleID<Content>::ID);
 	}
-	static constexpr uint16_t NumTrials = Content::NumTrials;
+	static constexpr uint16_t NumTrials = _IDModule_t<Content>::NumTrials;
 
 protected:
-	Content *const ContentPtr = Module::Container.LoadModule<Content>();
+	Module *const ContentPtr = Module::Container.LoadModule<Content>();
 };
 template<typename Content>
 UID const Async<Content>::ID = UID::Module_Async;
@@ -1376,13 +1396,12 @@ struct Trial : Module {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, TrialID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, TrialID, UID::Field_Content, UID::Type_Pointer, &_ModuleID<Content>::ID);
 	}
-	static_assert(Content::NumTrials == 0, "Trial不允许嵌套");
 	static constexpr uint16_t NumTrials = 1;
 
 protected:
-	Content *const ContentPtr = Module::Container.LoadModule<Content>();
+	Module *const ContentPtr = Module::Container.LoadModule<Content>();
 	std::move_only_function<void()> *FinishCallback = &_EmptyCallback;
 	void _Restart() {
 		Abort();
@@ -1417,17 +1436,16 @@ struct CleanWhenAbort : Module {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ModuleID<CleanWhenAbort>::ID, UID::Field_Target, UID::Type_Pointer, &ModuleID<Target>::ID, UID::Field_Cleaner, UID::Type_Pointer, &ModuleID<Cleaner>::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, _ModuleID<CleanWhenAbort>::ID, UID::Field_Target, UID::Type_Pointer, &_ModuleID<Target>::ID, UID::Field_Cleaner, UID::Type_Pointer, &_ModuleID<Cleaner>::ID);
 	}
 	~CleanWhenAbort() {
 		StartCleaner();
 		Module::Container.ExtraCleaners.erase(&StartCleaner);
 	}
-	static_assert(Cleaner::NumTrials == 0, "清理模块不允许包含Trial");
-	static constexpr uint16_t NumTrials = Target::NumTrials;
+	static constexpr uint16_t NumTrials = _IDModule_t<Target>::NumTrials;
 
 protected:
-	Target *const TargetPtr = Module::Container.LoadModule<Target>();
+	Module *const TargetPtr = Module::Container.LoadModule<Target>();
 	std::move_only_function<void()> *FinishCallback = &_EmptyCallback;
 	std::move_only_function<void()> TargetCallback = [this]() {
 		Module::Container.ExtraCleaners.erase(&StartCleaner);
@@ -1461,7 +1479,7 @@ struct DynamicSlot : Module {
 	}
 	static UID const ID;
 	void WriteInfo(std::ostringstream &InfoStream) const override {
-		InfoWrite(InfoStream, static_cast<uint8_t>(1), UID::Field_ID, UID::Type_UID, ModuleID<DynamicSlot>::ID);
+		InfoWrite(InfoStream, static_cast<uint8_t>(1), UID::Field_ID, UID::Type_UID, _ModuleID<DynamicSlot>::ID);
 	}
 	Module *ContentPtr = nullptr;
 	template<typename Content>
@@ -1474,12 +1492,12 @@ struct DynamicSlot : Module {
 		}
 		static UID const ID;
 		void WriteInfo(std::ostringstream &InfoStream) const override {
-			InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, ModuleID<Load>::ID, UID::Field_Slot, UID::Type_Pointer, &ModuleID<DynamicSlot>::ID, UID::Field_Content, UID::Type_Pointer, &ModuleID<Content>::ID);
+			InfoWrite(InfoStream, static_cast<uint8_t>(3), UID::Field_ID, UID::Type_UID, _ModuleID<Load>::ID, UID::Field_Slot, UID::Type_Pointer, &_ModuleID<DynamicSlot>::ID, UID::Field_Content, UID::Type_Pointer, &_ModuleID<Content>::ID);
 		}
 
 	protected:
 		DynamicSlot *const SlotPtr = Module::Container.LoadModule<DynamicSlot>();
-		Content *const ContentPtr;  //SAM编译器bug：只能在构造函数中初始化
+		Module *const ContentPtr;  // SAM编译器bug：只能在构造函数中初始化
 	};
 	struct Clear : _InstantaneousModule {
 		Clear(Process &Container)
@@ -1490,7 +1508,7 @@ struct DynamicSlot : Module {
 		}
 		static UID const ID;
 		void WriteInfo(std::ostringstream &InfoStream) const override {
-			InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, ModuleID<Clear>::ID, UID::Field_Slot, UID::Type_Pointer, &ModuleID<DynamicSlot>::ID);
+			InfoWrite(InfoStream, static_cast<uint8_t>(2), UID::Field_ID, UID::Type_UID, _ModuleID<Clear>::ID, UID::Field_Slot, UID::Type_Pointer, &_ModuleID<DynamicSlot>::ID);
 		}
 
 	protected:
@@ -1504,8 +1522,6 @@ template<typename Content>
 UID const DynamicSlot<UniqueID>::Load<Content>::ID = UID::Module_LoadSlot;
 template<UID UniqueID>
 UID const DynamicSlot<UniqueID>::Clear::ID = UID::Module_ClearSlot;
-template<UID ID>
-struct IDModule;
 
 template<typename TModule>
 uint16_t Session(Process *P) {
@@ -1513,18 +1529,19 @@ uint16_t Session(Process *P) {
 };
 #define Pin static constexpr uint8_t
 template<typename Target>
-UID const &ModuleID<Target>::ID = Target::ID;
+UID const &_ModuleID<Target>::ID = Target::ID;
 
 // 将模块绑定到指定UID，方便循环引用，并在返回信息中显示自定义名称
 #define AssignModuleID(TargetModule, TargetID) \
 	template<> \
-	struct ModuleID<TargetModule> { \
+	struct _ModuleID<TargetModule> { \
 		static UID const ID; \
 	}; \
-	UID const ModuleID<TargetModule>::ID = TargetID; \
+	UID const _ModuleID<TargetModule>::ID = TargetID; \
 	template<> \
-	struct IDModule<TargetID> : TargetModule /*跟基类ID完全相同，因此会被视为同一模块*/ \
-	\ 
-{ \
-		using TargetModule::TargetModule; \
+	struct _IDModule<IDModule<TargetID>> { \
+		using type = TargetModule; \
+	}; \
+	template<> \
+	struct _ModuleID<IDModule<TargetID>> : _ModuleID<TargetModule> { \
 	};

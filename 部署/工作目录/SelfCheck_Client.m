@@ -1,9 +1,9 @@
 %[text] # 此脚本用于在实验前检查硬件设备是否正常工作
 %[text] 所有检查之前先初始化
-if~(exist('BOX1','var')&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid)
-	BOX1=Gbec.Server;
-end
-BOX1.Initialize('COM11',9600);
+if~(exist('BOX1','var')&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid) %[output:group:0a348389]
+	BOX1=Gbec.Server; %[output:296e83dd]
+end %[output:group:0a348389]
+BOX1.Initialize('COM13',9600);
 if~(exist('Test1','var')&&isa(Test1,'Gbec.Test')&&Test1.IsValid&&Test1.Server==BOX1)
 	Test1=Gbec.Test(BOX1);
 end
@@ -63,6 +63,9 @@ clearvars BOX1;
 %---
 %[metadata:view]
 %   data: {"layout":"inline","rightPanelPercent":40}
+%---
+%[output:296e83dd]
+%   data: {"dataType":"text","outputData":{"text":"通用行为实验控制v6.5.0已发布，<a href=\"https:\/\/github.com\/ShanghaitechGuanjisongLab\/Generic-Behavioural-Experimental-Control\/releases\">立即更新<\/a>\n通用行为实验控制器v7.0.0 by 张天夫\n","truncated":false}}
 %---
 %[output:92e16717]
 %   data: {"dataType":"text","outputData":{"text":"Test_WaterPump×3……\n","truncated":false}}

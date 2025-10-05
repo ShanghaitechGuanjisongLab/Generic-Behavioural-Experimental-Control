@@ -45,7 +45,7 @@ classdef Server<handle
 		end
 		function ReleaseStream(obj)
 			delete(obj.AsyncStream);
-			disp(obj.Name + "：已释放关联的流");
+			disp(newline+obj.Name + "：已释放关联的流");
 		end
 		function ConnectionInterruptedHandler(obj,EventData)
 			Gbec.Exception.Server_connection_interrupted.Throw(sprintf('%s %s',obj.Name,formattedDisplayText(EventData)));

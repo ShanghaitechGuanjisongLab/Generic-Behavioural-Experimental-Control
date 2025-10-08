@@ -62,6 +62,8 @@ classdef Server<handle
 		function FeedDogIfActive(obj)
 			if obj.SerialCountdown.Running=="on"
 				obj.SerialCountdown.stop;
+			end
+			if~obj.CountdownExemptLeft
 				obj.SerialCountdown.start;
 			end
 		end

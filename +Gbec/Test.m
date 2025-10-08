@@ -64,7 +64,7 @@ classdef Test<Gbec.Process
 				NumTimes(1,1)uint16=str2double(inputdlg('检查几次？','检查几次？'))
 			end
 			fprintf('%s×%u……\n',TestID,NumTimes);
-			[Port,OCU]=GetPortOcu;
+			[Port,OCU]=obj.GetPortOcu;
 			obj.TestCycle(Port,TestID,NumTimes);
 		end
 		function OneEnterOneCheck(obj,TestID,Prompt)
@@ -81,7 +81,7 @@ classdef Test<Gbec.Process
 				TestID(1,1)Gbec.UID
 				Prompt
 			end
-			[Port,OCU]=GetPortOcu;
+			[Port,OCU]=obj.GetPortOcu;
 			while input(Prompt,"s")==""
 				obj.TestCycle(Port,TestID);
 			end
@@ -99,7 +99,7 @@ classdef Test<Gbec.Process
 				TestID(1,1)Gbec.UID
 			end
 			fprintf('%s……\n',TestID);
-			[Port,OCU]=GetPortOcu;
+			[Port,OCU]=obj.GetPortOcu;
 			obj.TestCycle(Port,TestID);
 		end
 		function StopCheck(obj)

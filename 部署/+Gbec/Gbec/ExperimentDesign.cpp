@@ -181,7 +181,7 @@ using CapacitorInitialize = Sequential<DigitalWrite<CapacitorVdd, HIGH>, DelaySe
 
 // 点亮电容后等待1s，渡过刚启动的不稳定期
 template<typename TrialType>
-using AssociationSession = Sequential<CapacitorInitialize, Repeat<TrialType>::UntilTimes<30>>;
+using AssociationSession = Sequential<CapacitorInitialize, typename Repeat<TrialType>::template UntilTimes<30>>;
 
 // ——以下列出所有公开模块，均绑定到ID，允许PC端调用——
 std::unordered_map<UID, uint16_t (*)(Process *)> SessionMap = {
@@ -203,4 +203,5 @@ std::unordered_map<UID, uint16_t (*)(Process *)> SessionMap = {
                                                                               Trial<UID::Trial_LightOnly, CueOnlyTrial<PinFlashUpDown<BlueLed, 200, UID::Event_LightUp, UID::Event_LightDown>>>,
                                                                               Trial<UID::Trial_AudioOnly, CueOnlyTrial<PinFlashUpDown<ActiveBuzzer, 200, UID::Event_AudioUp, UID::Event_AudioDown>>>,
                                                                               Trial<UID::Trial_WaterOnly, CueOnlyTrial<PinFlashUp<WaterPump, 150, UID::Event_Water>>>>::WithRepeat<20, 20, 20>>> },
+
 };

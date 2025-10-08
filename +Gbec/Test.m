@@ -25,6 +25,15 @@ classdef Test<Gbec.Process
 				Gbec.Exception.StartModule_no_return.Throw;
 			end
 		end
+		function [Port,OCU]=GetPortOcu(obj)
+			AsyncStream=obj.Server.AsyncStream;
+			if~isvalid(AsyncStream)
+				obj.delete;
+				Gbec.Exception.Server_abandoned.Throw('请重新连接Server');
+			end
+			Port=AsyncStream.AllocatePort;
+			OCU=onCleanup(@()AsyncStream.ReleasePort(Port));
+		end
 	end
 	methods
 		function obj = Test(Server)
@@ -55,7 +64,7 @@ classdef Test<Gbec.Process
 				NumTimes(1,1)uint16=str2double(inputdlg('检查几次？','检查几次？'))
 			end
 			fprintf('%s×%u……\n',TestID,NumTimes);
-			[Port,OCU]=GetPortOcu(obj.Server.AsyncStream);
+			[Port,OCU]=GetPortOcu;
 			obj.TestCycle(Port,TestID,NumTimes);
 		end
 		function OneEnterOneCheck(obj,TestID,Prompt)
@@ -72,7 +81,7 @@ classdef Test<Gbec.Process
 				TestID(1,1)Gbec.UID
 				Prompt
 			end
-			[Port,OCU]=GetPortOcu(obj.Server.AsyncStream);
+			[Port,OCU]=GetPortOcu;
 			while input(Prompt,"s")==""
 				obj.TestCycle(Port,TestID);
 			end
@@ -90,7 +99,7 @@ classdef Test<Gbec.Process
 				TestID(1,1)Gbec.UID
 			end
 			fprintf('%s……\n',TestID);
-			[Port,OCU]=GetPortOcu(obj.Server.AsyncStream);
+			[Port,OCU]=GetPortOcu;
 			obj.TestCycle(Port,TestID);
 		end
 		function StopCheck(obj)
@@ -122,12 +131,4 @@ classdef Test<Gbec.Process
 			obj.Server.AllProcesses(obj.Pointer)=matlab.lang.WeakReference(obj);
 		end
 	end
-end
-function [Port,OCU]=GetPortOcu(AsyncStream)
-if~isvalid(AsyncStream)
-	obj.delete;
-	Gbec.Exception.Server_abandoned.Throw('请重新连接Server');
-end
-Port=AsyncStream.AllocatePort;
-OCU=onCleanup(@()AsyncStream.ReleasePort(Port));
 end

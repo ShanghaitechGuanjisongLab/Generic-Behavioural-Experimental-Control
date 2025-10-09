@@ -45,6 +45,7 @@ classdef Server<handle
 		end
 		function ReleaseStream(obj)
 			delete(obj.AsyncStream);
+			obj.AllProcesses=dictionary;
 			disp(newline+obj.Name + "：已释放关联的流");
 		end
 		function ConnectionInterruptedHandler(obj,EventData)

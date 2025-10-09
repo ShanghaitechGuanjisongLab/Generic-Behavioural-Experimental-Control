@@ -4,7 +4,15 @@ obj.Server.FeedDogIfActive;
 DateTimes=table;
 DateTimes.DateTime=obj.DateTime;
 DateTimes.Mouse=categorical(obj.Mouse);
-DateTimes.Metadata={obj.GetInformation};
+try
+    DateTimes.Metadata={obj.GetInformation};
+catch ME
+    if ME.identifier=="Async_stream_IO:Exception:Serial_not_respond_in_time"
+        warning(ME.identifier,'%s',ME.message);
+    else
+        ME.rethrow;
+    end
+end
 Design=char(obj.SessionID);
 Blocks=table;
 Blocks.DateTime=obj.DateTime;

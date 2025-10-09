@@ -144,6 +144,7 @@ enum class UID : uint8_t {
 	Test_RandomFlash,
 	Test_LowTone,
 	Test_HighTone,
+	Test_Optogenetic,
 
 	// 回合
 

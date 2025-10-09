@@ -1,19 +1,19 @@
 #pragma once
 #include "Predefined.hpp"
 // 快速切换BOX设定集
-#define BOX 2
+#define BOX 1
 
 // 引脚设定集，你可以为每套设备创建一个#if BOX块，记录不同设备的不同引脚信息，然后通过设定BOX宏进行快速切换。
 #if BOX == 1
-Pin BlueLed = 11;
-Pin WaterPump = 2;
-Pin CapacitorVdd = 7;
-Pin CapacitorOut = 18;
-Pin CD1 = 6;
-Pin ActiveBuzzer = 52;
-Pin AirPump = 12;
-Pin Laser = 49;
-Pin PassiveBuzzer = 25;
+Pin BlueLed = 2;
+Pin WaterPump = 9;
+Pin CapacitorVdd = 12;
+Pin CapacitorOut = 13;
+Pin CD1 = 10;
+Pin ActiveBuzzer = 5;
+Pin AirPump = 8;
+Pin PassiveBuzzer = 6;
+Pin Optogenetic = 7;
 #endif
 #if BOX == 2
 Pin BlueLed = 8;
@@ -23,7 +23,7 @@ Pin CapacitorOut = 18;
 Pin CD1 = 6;
 Pin ActiveBuzzer = 22;
 Pin AirPump = 12;
-Pin Laser = 53;
+Pin Optogenetic = 53;
 Pin PassiveBuzzer = 3;
 #endif
 #if BOX == 3
@@ -34,7 +34,7 @@ Pin CapacitorOut = 18;
 Pin CD1 = 6;
 Pin ActiveBuzzer = 3;
 Pin AirPump = 12;
-Pin Laser = 7;
+Pin Optogenetic = 7;
 Pin PassiveBuzzer = 3;
 #endif
 
@@ -145,7 +145,7 @@ using PinFlashUpDown = Sequential<DigitalWrite<PinIndex, HIGH>, SerialMessage<Up
 
 using Duration100To1000 = RandomDuration<std::chrono::milliseconds, 100, 1000>;
 
-using RandomFlash = Repeat<Sequential<DigitalToggle<Laser>, Delay<Duration100To1000>, ModuleRandomize<Duration100To1000>>>;
+using RandomFlash = Repeat<Sequential<DigitalToggle<Optogenetic>, Delay<Duration100To1000>, ModuleRandomize<Duration100To1000>>>;
 
 using Duration5To10 = RandomDuration<std::chrono::seconds, 5, 10>;
 
@@ -177,7 +177,7 @@ using AssociationTrial = Sequential<CalmDown, ResponseWindow, PinFlashUpDown<Cue
 template<typename Cue>
 using CueOnlyTrial = Sequential<CalmDown, ResponseWindow, Cue, Delay800ms, DynamicSlot<>, Settlement>;
 
-using CapacitorInitialize = Sequential<DigitalWrite<CapacitorVdd, HIGH>, DelaySeconds<1>, MonitorPin<CapacitorOut, SerialMessage<UID::Event_HitCount>>>;
+using CapacitorInitialize = Sequential<DigitalWrite<CapacitorVdd, HIGH>, DelaySeconds<1>>;
 
 // 点亮电容后等待1s，渡过刚启动的不稳定期
 template<typename TrialType>
@@ -192,8 +192,9 @@ std::unordered_map<UID, uint16_t (*)(Process *)> SessionMap = {
   { UID::Test_CD1, Session<PinFlash<CD1, 200>> },
   { UID::Test_ActiveBuzzer, Session<PinFlash<ActiveBuzzer, 200>> },
   { UID::Test_AirPump, Session<PinFlash<AirPump, 200>> },
+  { UID::Test_Optogenetic, Session<PinFlash<Optogenetic, 200>> },
   { UID::Test_HostAction, Session<SerialMessage<UID::Host_GratingImage>> },
-  { UID::Test_SquareWave, Session<DoubleRepeat<ConstantDuration<std::chrono::seconds, 1>, DigitalWrite<Laser, HIGH>, ConstantDuration<std::chrono::seconds, 2>, DigitalWrite<Laser, LOW>>::template UntilTimes<6>> },  // 注意是6次变灯，不是6个周期
+  { UID::Test_SquareWave, Session<DoubleRepeat<ConstantDuration<std::chrono::seconds, 1>, DigitalWrite<Optogenetic, HIGH>, ConstantDuration<std::chrono::seconds, 2>, DigitalWrite<Optogenetic, LOW>>::template UntilTimes<6>> },  // 注意是6次变灯，不是6个周期
   { UID::Test_RandomFlash, Session<Sequential<Async<RandomFlash>, Delay<ConstantDuration<std::chrono::seconds, 10>>, ModuleAbort<RandomFlash>>> },
   { UID::Test_LowTone, Session<Tone<500, 1000>> },
   { UID::Test_HighTone, Session<Tone<5000, 1000>> },
@@ -203,5 +204,4 @@ std::unordered_map<UID, uint16_t (*)(Process *)> SessionMap = {
                                                                               Trial<UID::Trial_LightOnly, CueOnlyTrial<PinFlashUpDown<BlueLed, 200, UID::Event_LightUp, UID::Event_LightDown>>>,
                                                                               Trial<UID::Trial_AudioOnly, CueOnlyTrial<PinFlashUpDown<ActiveBuzzer, 200, UID::Event_AudioUp, UID::Event_AudioDown>>>,
                                                                               Trial<UID::Trial_WaterOnly, CueOnlyTrial<PinFlashUp<WaterPump, 150, UID::Event_Water>>>>::WithRepeat<20, 20, 20>>> },
-
 };

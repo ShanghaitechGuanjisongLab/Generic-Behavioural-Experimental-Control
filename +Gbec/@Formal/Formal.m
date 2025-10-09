@@ -156,7 +156,7 @@ classdef Formal<Gbec.Process
 			if TrialMod==1&&obj.TrialIndex>1
 				cprintf([1,0,1],'\n已过%u回合，请检查实验状态',obj.TrialIndex-1);
 			end
-			FprintfInCommandWindow('\n回合%u-%s：',obj.TrialIndex,TrialID);
+			FprintfInCommandWindow('\n%s 回合%u-%s：',obj.Mouse,obj.TrialIndex,TrialID);
 		end
 		function Signal_(obj,S)
 			%此方法由Server调用，派生类负责处理，用户不应使用

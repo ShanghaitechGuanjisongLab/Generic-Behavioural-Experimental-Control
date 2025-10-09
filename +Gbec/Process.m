@@ -97,6 +97,10 @@ classdef Process<handle
 				return;
 			end
 			V=obj.Server.AllProcesses.isKey(obj.Pointer);
+			if~V
+				return;
+			end
+			V=obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_ProcessValid,obj.Pointer);
 		end
 	end
 end

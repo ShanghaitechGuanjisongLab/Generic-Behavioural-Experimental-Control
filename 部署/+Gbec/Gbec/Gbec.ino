@@ -168,6 +168,10 @@ void setup() {
 			*SerialStream << P;
 	},
 	             UID::PortA_AllProcesses);
+	BindFunctionToPort([](Process *P) {
+		return ExistingProcesses.contains(P);
+	},
+	                   UID::PortA_ProcessValid);
 	SerialStream->Send(nullptr, 0, static_cast<Async_stream_IO::Port>(UID::PortC_ImReady));
 }
 void loop() {

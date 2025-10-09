@@ -18,6 +18,7 @@ enum class UID : uint8_t {
 	PortA_AllProcesses,
 	PortA_RandomSeed,
 	PortA_IsReady,
+	PortA_ProcessValid,
 
 	// Computer提供的服务端口
 

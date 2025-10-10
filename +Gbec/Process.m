@@ -49,6 +49,9 @@ classdef Process<handle
 			else
 				obj.Pointer=typecast(Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_CreateProcess),Server.PointerType);
 			end
+			if Server.AllProcesses.isConfigured&&Server.AllProcesses.isKey(obj.Pointer)
+				Server.AllProcesses(obj.Pointer).Handle.delete;
+			end
 			Server.AllProcesses(obj.Pointer)=matlab.lang.WeakReference(obj);
 		end
 		function ProcessFinished_(~)

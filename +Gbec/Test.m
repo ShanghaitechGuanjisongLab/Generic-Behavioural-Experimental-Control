@@ -120,7 +120,7 @@ classdef Test<Gbec.Process
 				obj.HostAction(Message);
 			else
 				Count = Count + 1;
-				fprintf('%s %s：%u\n',datetime,Gbec.LogTranslate(Message),Count);
+				fprintf('\n%s %s：%u\n',datetime,Gbec.LogTranslate(Message),Count);
 			end
 		end
 		function ConnectionReset_(obj)

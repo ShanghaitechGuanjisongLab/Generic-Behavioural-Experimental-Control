@@ -49,10 +49,12 @@ classdef Process<handle
 			else
 				obj.Pointer=typecast(Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_CreateProcess),Server.PointerType);
 			end
-			if Server.AllProcesses.isConfigured&&Server.AllProcesses.isKey(obj.Pointer)
-				Server.AllProcesses(obj.Pointer).Handle.delete;
-			end
+			DeleteOld=Server.AllProcesses.isConfigured&&Server.AllProcesses.isKey(obj.Pointer);
 			Server.AllProcesses(obj.Pointer)=matlab.lang.WeakReference(obj);
+			if DeleteOld
+				Server.AllProcesses(obj.Pointer).Handle.delete;
+				%必须先替换AllProcesses条目后再删除旧进程，这样旧进程的delete发现AllProcesses中的条目已被新进程替代，就不会联络Arduino释放指针。否则会误删新进程
+			end
 		end
 		function ProcessFinished_(~)
 			%此方法由Server调用，派生类负责处理，用户不应使用
@@ -69,18 +71,22 @@ classdef Process<handle
 		function delete(obj)
 			if obj.Server.isvalid
 				obj.Server.FeedDogIfActive();
-				try
-					obj.Server.AllProcesses.remove(obj.Pointer);
-				catch ME
-					if ME.identifier~="MATLAB:dictionary:UnconfiguredRemovalNotSupported"
-						ME.rethrow;
+				AllProcesses=obj.Server.AllProcesses;
+				if AllProcesses.isConfigured&&AllProcesses.isKey(obj.Pointer)&&AllProcesses(obj.Pointer).Handle==obj
+					%如果所有进程中不存在本指针，或者指向的不是本对象，说明可能存在新的服务器，包含一个和本对象指针相同的新进程。此时不应删除，以免误删新进程
+					try
+						obj.Server.AllProcesses.remove(obj.Pointer);
+					catch ME
+						if ME.identifier~="MATLAB:dictionary:UnconfiguredRemovalNotSupported"
+							ME.rethrow;
+						end
 					end
-				end
-				try
-					obj.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_DeleteProcess,obj.Pointer));
-				catch ME
-					if all(ME.identifier~=["Async_stream_IO:Exception:Serial_not_respond_in_time","Gbec:UID:Exception_InvalidProcess","MATLAB:class:InvalidHandle"])
-						ME.rethrow;
+					try
+						obj.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_DeleteProcess,obj.Pointer));
+					catch ME
+						if all(ME.identifier~=["Async_stream_IO:Exception:Serial_not_respond_in_time","Gbec:UID:Exception_InvalidProcess","MATLAB:class:InvalidHandle"])
+							ME.rethrow;
+						end
 					end
 				end
 			end
@@ -95,15 +101,16 @@ classdef Process<handle
 			if~V
 				return;
 			end
-			V=obj.Server.AllProcesses.numEntries;
+			AllProcesses=obj.Server.AllProcesses;
+			V=AllProcesses.isConfigured;
 			if~V
 				return;
 			end
-			V=obj.Server.AllProcesses.isKey(obj.Pointer);
+			V=AllProcesses.isKey(obj.Pointer);
 			if~V
 				return;
 			end
-			V=obj.Server.AllProcesses(obj.Pointer).Handle==obj;
+			V=AllProcesses(obj.Pointer).Handle==obj;
 			if~V
 				return;
 			end

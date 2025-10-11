@@ -32,7 +32,7 @@ classdef Server<handle
 		%串口读写超时时间，默认为1秒
 		SerialTimeout(1,1)duration
 	end
-	methods(Access=protected)
+	methods
 		function ProcessForward(obj,Arguments,Method)
 			Process=obj.AllProcesses(typecast(Arguments(1:obj.PointerSize),obj.PointerType)).Handle;
 			if isvalid(Process)

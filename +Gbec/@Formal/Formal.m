@@ -185,6 +185,9 @@ classdef Formal<Gbec.Process
 			AsyncStream=obj.Server.AsyncStream;
 			obj.Pointer=typecast(AsyncStream.SyncInvoke(Gbec.UID.PortA_CreateProcess),obj.Server.PointerType);
 			obj.Server.AllProcesses(obj.Pointer)=matlab.lang.WeakReference(obj);
+			if obj.State==Gbec.UID.State_Idle
+				return;
+			end
 			TrialsDone=obj.TrialRecorder.GetTimeTable();
 			if ~isempty(TrialsDone)
 				TrialsDone(end,:)=[];

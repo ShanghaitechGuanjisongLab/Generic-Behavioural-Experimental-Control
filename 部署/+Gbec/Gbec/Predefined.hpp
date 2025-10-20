@@ -1166,7 +1166,7 @@ template<typename Unit, DurationRep PeriodA, typename ContentA, DurationRep Peri
 template<uint16_t Times>
 UID const DoubleRepeat<ConstantDuration<Unit, PeriodA>, ContentA, ConstantDuration<Unit, PeriodB>, ContentB>::UntilTimes<Times>::ID = UID::Module_DoubleRepeat;
 template<typename Unit, DurationRep PeriodA, typename ContentA, DurationRep PeriodB, typename ContentB, DurationRep Duration>
-class _DoubleRepeat_Constant_UntilDuration<Unit, PeriodA, ContentA, PeriodB, ContentB, ConstantDuration<Unit, Duration>> : DoubleRepeat<ConstantDuration<Unit, PeriodA>, ContentA, ConstantDuration<Unit, PeriodB>, ContentB> {
+class _DoubleRepeat_Constant_UntilDuration<Unit, PeriodA, ContentA, PeriodB, ContentB, ConstantDuration<Unit, Duration>> :public DoubleRepeat<ConstantDuration<Unit, PeriodA>, ContentA, ConstantDuration<Unit, PeriodB>, ContentB> {
 	std::move_only_function<void()> FinishCallback{ _TimedModule::_UnregisterTimer{ this } };
 	static constexpr DurationRep FullPeriod = PeriodA + PeriodB;
 	static constexpr DurationRep NumFullCycles = Duration / FullPeriod;

@@ -53,7 +53,7 @@ Pin PassiveBuzzer = 3;
 ## DoubleRepeat<PeriodA,ContentA,PeriodB,ContentB>
 表示交替执行两个内容模块ContentA和ContentB。先等待PeriodA时间后执行ContentA，再等待PeriodB时间后执行ContentB，然后循环。PeriodA和PeriodB必须是时间类模块。此模块还支持以下扩展：
 - DoubleRepeat<PeriodA,ContentA,PeriodB,ContentB>::template UntilDuration<Duration>：表示持续执行指定的Duration时间后结束。Duration必须是一个时间类模块。
-- DoubleRepeat<PeriodA,ContentA,PeriodB,ContentB>::templateUntilTimes<Times>：表示执行指定的Times次ContentA后结束。这个Times是两个内容模块执行的次数之和，而非循环周期次数。因此设为奇数时，ContentA将比ContentB多执行一次。
+- DoubleRepeat<PeriodA,ContentA,PeriodB,ContentB>::template UntilTimes<Times>：表示执行指定的Times次ContentA后结束。这个Times是两个内容模块执行的次数之和，而非循环周期次数。因此设为奇数时，ContentA将比ContentB多执行一次。
 
 # ——时间类模块——
 时间类模块不能直接执行，需要配合延时类模块使用

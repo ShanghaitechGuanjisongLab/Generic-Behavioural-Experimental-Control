@@ -181,36 +181,7 @@ classdef Formal<Gbec.Process
 		end
 		function ConnectionReset_(obj)
 			%此方法由Server调用，派生类负责处理，用户不应使用
-			obj.Server.AllProcesses(obj.Pointer)=[];
-			AsyncStream=obj.Server.AsyncStream;
-			obj.Pointer=typecast(AsyncStream.SyncInvoke(Gbec.UID.PortA_CreateProcess),obj.Server.PointerType);
-			obj.Server.AllProcesses(obj.Pointer)=matlab.lang.WeakReference(obj);
-			if obj.State==Gbec.UID.State_Idle
-				return;
-			end
-			TrialsDone=obj.TrialRecorder.GetTimeTable();
-			if ~isempty(TrialsDone)
-				TrialsDone(end,:)=[];
-				obj.TrialIndex=obj.TrialIndex-1;
-			end
-			TrialsDone=groupsummary(TrialsDone,'Event');
-			NumDistinctTrials=height(TrialsDone);
-			obj.EventRecorder.LogEvent(Gbec.UID.Event_ConnectionReset);
-			LocalPort=AsyncStream.AllocatePort;
-			OCU=onCleanup(@()AsyncStream.ReleasePort(LocalPort));
-			TCO=Async_stream_IO.TemporaryCallbackOff(AsyncStream);
-			AsyncStream.BeginSend(Gbec.UID.PortA_RestoreModule,NumDistinctTrials*3+2+obj.Server.PointerSize);
-			AsyncStream<=LocalPort<=obj.Pointer<=obj.SessionID;
-			for T=1:NumDistinctTrials
-				AsyncStream<=TrialsDone.Event(T)<=uint16(TrialsDone.GroupCount(T));
-			end
-			NumBytes=AsyncStream.Listen(LocalPort);
-			if NumBytes==1
-				obj.ThrowResult(AsyncStream.Read);
-			else
-				AsyncStream.Read(NumBytes);%清除多余的字节
-				Gbec.Exception.Unexpected_response_from_Arduino.Throw;
-			end
+			obj.RestoreSession;
 		end
 		function PauseSession(obj)
 			%暂停会话

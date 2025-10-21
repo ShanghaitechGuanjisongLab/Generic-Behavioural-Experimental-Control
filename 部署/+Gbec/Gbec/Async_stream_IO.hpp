@@ -257,7 +257,6 @@ public:
 					*/
 	AsyncStream(Stream &BaseStream = Serial)
 	  : BaseStream(BaseStream) {
-		BaseStream.setTimeout(-1);
 	}
 
 	/*

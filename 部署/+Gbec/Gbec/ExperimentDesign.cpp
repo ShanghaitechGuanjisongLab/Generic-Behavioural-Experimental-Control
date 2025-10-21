@@ -134,74 +134,74 @@ IDModule可以在TargetModule之前声明，但AssignModuleID必须在TargetModu
 ——以下提供实际用例，用户可根据需要进行修改——
 */
 
-template<uint8_t PinIndex, DurationRep Milliseconds>
-using PinFlash = Sequential<DigitalWrite<PinIndex, HIGH>, Delay<ConstantDuration<std::chrono::milliseconds, Milliseconds>>, DigitalWrite<PinIndex, LOW>>;
+template <DurationRep Milliseconds>
+using DelayMilliseconds = Delay<std::chrono::milliseconds, ConstantInteger<Milliseconds>>;
 
-template<uint8_t PinIndex, DurationRep Milliseconds, UID Up>
-using PinFlashUp = Sequential<DigitalWrite<PinIndex, HIGH>, SerialMessage<Up>, Delay<ConstantDuration<std::chrono::milliseconds, Milliseconds>>, DigitalWrite<PinIndex, LOW>>;
+template <uint8_t PinIndex, DurationRep Milliseconds>
+using PinFlash = Sequential<DigitalWrite<PinIndex, HIGH>, DelayMilliseconds<Milliseconds>, DigitalWrite<PinIndex, LOW>>;
 
-template<uint8_t PinIndex, DurationRep Milliseconds, UID Up, UID Down>
-using PinFlashUpDown = Sequential<DigitalWrite<PinIndex, HIGH>, SerialMessage<Up>, Delay<ConstantDuration<std::chrono::milliseconds, Milliseconds>>, DigitalWrite<PinIndex, LOW>, SerialMessage<Down>>;
+template <uint8_t PinIndex, DurationRep Milliseconds, UID Up>
+using PinFlashUp = Sequential<DigitalWrite<PinIndex, HIGH>, SerialMessage<Up>, DelayMilliseconds<Milliseconds>, DigitalWrite<PinIndex, LOW>>;
 
-using Duration100To1000 = RandomDuration<std::chrono::milliseconds, 100, 1000>;
+template <uint8_t PinIndex, DurationRep Milliseconds, UID Up, UID Down>
+using PinFlashUpDown = Sequential<DigitalWrite<PinIndex, HIGH>, SerialMessage<Up>, DelayMilliseconds<Milliseconds>, DigitalWrite<PinIndex, LOW>, SerialMessage<Down>>;
 
-using RandomFlash = Repeat<Sequential<DigitalToggle<Optogenetic>, Delay<Duration100To1000>, ModuleRandomize<Duration100To1000>>>;
+using Random100To1000 = RandomInteger<100, 1000>;
 
-using Duration5To10 = RandomDuration<std::chrono::seconds, 5, 10>;
+using RandomFlash = Repeat<Sequential<DigitalToggle<Optogenetic>, Delay<std::chrono::milliseconds, Random100To1000>, ModuleRandomize<Random100To1000>>>;
 
-using Delay5To10 = Delay<Duration5To10>;
+using Random5To10 = RandomInteger<5, 10>;
+
+using Delay5To10 = Delay<std::chrono::seconds, Random5To10>;
 
 using MonitorRestart = MonitorPin<CapacitorOut, ModuleRestart<Delay5To10>>;
 
-template<DurationRep Milliseconds>
-using DelayMilliseconds = Delay<ConstantDuration<std::chrono::milliseconds, Milliseconds>>;
+template <DurationRep Seconds>
+using DelaySeconds = Delay<std::chrono::seconds, ConstantInteger<Seconds>>;
 
-template<DurationRep Seconds>
-using DelaySeconds = Delay<ConstantDuration<std::chrono::seconds, Seconds>>;
-
-template<DurationRep FrequencyHz, DurationRep Milliseconds>
-using Tone = typename RepeatEvery<ConstantDuration<std::chrono::microseconds, 1000000 / FrequencyHz>, DigitalToggle<PassiveBuzzer>>::template UntilDuration<ConstantDuration<std::chrono::microseconds, Milliseconds * 1000>>;
+template <DurationRep FrequencyHz, DurationRep Milliseconds>
+using Tone = RepeatEvery<DigitalToggle<PassiveBuzzer>, std::chrono::microseconds, ConstantInteger<500000 / FrequencyHz>, Milliseconds * FrequencyHz / 500>;
 
 using ResponseWindow = MonitorPin<CapacitorOut, Sequential<DynamicSlot<>::Clear, ModuleAbort<IDModule<UID::Module_ResponseWindow>>, SerialMessage<UID::Event_MonitorHit>>>;
 AssignModuleID(ResponseWindow, UID::Module_ResponseWindow);
 
 using CalmDown = Sequential<DynamicSlot<>::Load<Sequential<ModuleAbort<ResponseWindow>, SerialMessage<UID::Event_MonitorMiss>>>, MonitorRestart, Delay5To10, ModuleAbort<MonitorRestart>>;
 
-using Settlement = Sequential<ModuleRandomize<Duration5To10>, DelaySeconds<20>>;
+using Settlement = Sequential<ModuleRandomize<Random5To10>, DelaySeconds<20>>;
 
 using Delay800ms = DelayMilliseconds<800>;
 
-template<uint8_t CuePin, UID CueUp, UID CueDown>
+template <uint8_t CuePin, UID CueUp, UID CueDown>
 using AssociationTrial = Sequential<CalmDown, ResponseWindow, PinFlashUpDown<CuePin, 200, CueUp, CueDown>, Delay800ms, DynamicSlot<>, PinFlashUp<WaterPump, 150, UID::Event_Water>, Settlement>;
 
-template<typename Cue>
+template <typename Cue>
 using CueOnlyTrial = Sequential<CalmDown, ResponseWindow, Cue, Delay800ms, DynamicSlot<>, Settlement>;
 
 using CapacitorInitialize = Sequential<DigitalWrite<CapacitorVdd, HIGH>, DelaySeconds<1>>;
 
 // 点亮电容后等待1s，渡过刚启动的不稳定期
-template<typename TrialType>
-using AssociationSession = Sequential<CapacitorInitialize, typename Repeat<TrialType>::template UntilTimes<30>>;
+template <typename TrialType>
+using AssociationSession = Sequential<CapacitorInitialize, Repeat<TrialType, 30>>;
 
 // ——以下列出所有公开模块，均绑定到ID，允许PC端调用——
 std::unordered_map<UID, uint16_t (*)(Process *)> SessionMap = {
-  { UID::Test_BlueLed, Session<PinFlash<BlueLed, 200>> },
-  { UID::Test_WaterPump, Session<PinFlash<WaterPump, 150>> },
-  { UID::Test_CapacitorReset, Session<Sequential<DigitalWrite<CapacitorVdd, LOW>, Delay<ConstantDuration<std::chrono::milliseconds, 100>>, DigitalWrite<CapacitorVdd, HIGH>>> },
-  { UID::Test_CapacitorMonitor, Session<Sequential<DigitalWrite<CapacitorVdd, HIGH>, MonitorPin<CapacitorOut, SerialMessage<UID::Event_MonitorHit>>>> },
-  { UID::Test_CD1, Session<PinFlash<CD1, 200>> },
-  { UID::Test_ActiveBuzzer, Session<PinFlash<ActiveBuzzer, 200>> },
-  { UID::Test_AirPump, Session<PinFlash<AirPump, 200>> },
-  { UID::Test_Optogenetic, Session<PinFlash<Optogenetic, 200>> },
-  { UID::Test_HostAction, Session<SerialMessage<UID::Host_GratingImage>> },
-  { UID::Test_SquareWave, Session<DoubleRepeat<ConstantDuration<std::chrono::seconds, 1>, DigitalWrite<Optogenetic, HIGH>, ConstantDuration<std::chrono::seconds, 2>, DigitalWrite<Optogenetic, LOW>>::template UntilTimes<6>> },  // 注意是6次变灯，不是6个周期
-  { UID::Test_RandomFlash, Session<Sequential<Async<RandomFlash>, Delay<ConstantDuration<std::chrono::seconds, 10>>, ModuleAbort<RandomFlash>>> },
-  { UID::Test_LowTone, Session<Tone<500, 1000>> },
-  { UID::Test_HighTone, Session<Tone<5000, 1000>> },
-  { UID::Session_AudioWater, Session<AssociationSession<Trial<UID::Trial_AudioWater, AssociationTrial<ActiveBuzzer, UID::Event_AudioUp, UID::Event_AudioDown>>>> },
-  { UID::Session_LightWater, Session<AssociationSession<Trial<UID::Trial_LightWater, AssociationTrial<BlueLed, UID::Event_LightUp, UID::Event_LightDown>>>> },
-  { UID::Session_LAuW, Session<Sequential<DigitalWrite<CapacitorVdd, HIGH>, RandomSequential<
-                                                                              Trial<UID::Trial_LightOnly, CueOnlyTrial<PinFlashUpDown<BlueLed, 200, UID::Event_LightUp, UID::Event_LightDown>>>,
-                                                                              Trial<UID::Trial_AudioOnly, CueOnlyTrial<PinFlashUpDown<ActiveBuzzer, 200, UID::Event_AudioUp, UID::Event_AudioDown>>>,
-                                                                              Trial<UID::Trial_WaterOnly, CueOnlyTrial<PinFlashUp<WaterPump, 150, UID::Event_Water>>>>::WithRepeat<20, 20, 20>>> },
+    {UID::Test_BlueLed, Session<PinFlash<BlueLed, 200>>},
+    {UID::Test_WaterPump, Session<PinFlash<WaterPump, 150>>},
+    {UID::Test_CapacitorReset, Session<Sequential<DigitalWrite<CapacitorVdd, LOW>, DelayMilliseconds<100>, DigitalWrite<CapacitorVdd, HIGH>>>},
+    {UID::Test_CapacitorMonitor, Session<Sequential<DigitalWrite<CapacitorVdd, HIGH>, MonitorPin<CapacitorOut, SerialMessage<UID::Event_MonitorHit>>>>},
+    {UID::Test_CD1, Session<PinFlash<CD1, 200>>},
+    {UID::Test_ActiveBuzzer, Session<PinFlash<ActiveBuzzer, 200>>},
+    {UID::Test_AirPump, Session<PinFlash<AirPump, 200>>},
+    {UID::Test_Optogenetic, Session<PinFlash<Optogenetic, 200>>},
+    {UID::Test_HostAction, Session<SerialMessage<UID::Host_GratingImage>>},
+    {UID::Test_SquareWave, Session<DoubleRepeat<DigitalWrite<Optogenetic, HIGH>, DigitalWrite<Optogenetic, LOW>, std::chrono::seconds, ConstantInteger<1>, ConstantInteger<2>, ConstantInteger<6>>>}, // 注意是6次变灯，不是6个周期
+    {UID::Test_RandomFlash, Session<Sequential<Async<RandomFlash>, DelaySeconds<10>, ModuleAbort<RandomFlash>>>},
+    {UID::Test_LowTone, Session<Tone<500, 1000>>},
+    {UID::Test_HighTone, Session<Tone<5000, 1000>>},
+    {UID::Session_AudioWater, Session<AssociationSession<Trial<UID::Trial_AudioWater, AssociationTrial<ActiveBuzzer, UID::Event_AudioUp, UID::Event_AudioDown>>>>},
+    {UID::Session_LightWater, Session<AssociationSession<Trial<UID::Trial_LightWater, AssociationTrial<BlueLed, UID::Event_LightUp, UID::Event_LightDown>>>>},
+    {UID::Session_LAuW, Session<Sequential<DigitalWrite<CapacitorVdd, HIGH>, RandomSequential<
+                                                                                 Trial<UID::Trial_LightOnly, CueOnlyTrial<PinFlashUpDown<BlueLed, 200, UID::Event_LightUp, UID::Event_LightDown>>>,
+                                                                                 Trial<UID::Trial_AudioOnly, CueOnlyTrial<PinFlashUpDown<ActiveBuzzer, 200, UID::Event_AudioUp, UID::Event_AudioDown>>>,
+                                                                                 Trial<UID::Trial_WaterOnly, CueOnlyTrial<PinFlashUp<WaterPump, 150, UID::Event_Water>>>>::WithRepeat<20, 20, 20>>>},
 };

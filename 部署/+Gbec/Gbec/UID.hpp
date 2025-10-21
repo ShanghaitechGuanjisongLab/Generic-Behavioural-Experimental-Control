@@ -70,6 +70,8 @@ enum class UID : uint8_t {
 	Field_ContentB,
 	Field_TargetID,
 	Field_Slot,
+	Field_Value,
+	Field_Unit,
 
 	// 表列
 
@@ -158,7 +160,7 @@ enum class UID : uint8_t {
 	
 	// 持续时间类型
 
-	Duration_Random,
+	Integer_Random,
 	Duration_Infinite,
 
 	// 基础模块
@@ -184,6 +186,8 @@ enum class UID : uint8_t {
 	Module_LoadSlot,
 	Module_ClearSlot,
 	Module_ResponseWindow,
+	Module_RandomInteger,
+	Module_ConstantInteger,
 
 	// 主机动作
 

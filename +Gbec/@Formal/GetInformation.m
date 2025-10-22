@@ -50,7 +50,8 @@ for F=1:NumFields
 		case UID.Type_Milliseconds
 			Value=milliseconds(AsyncStream.Read(Gbec.Formal.DurationRep));
 		case UID.Type_Microseconds
-			Value=microseconds(AsyncStream.Read(Gbec.Formal.DurationRep));
+            %MATLAB不支持微秒
+			Value=milliseconds(AsyncStream.Read(Gbec.Formal.DurationRep))/1000;
 		case UID.Type_Infinite
 			Value=Inf;
 		case UID.Type_Table
@@ -83,7 +84,7 @@ switch UID(AsyncStream.Read)
 	case UID.Type_Milliseconds
 		Array=milliseconds(AsyncStream.Read(NumElements,Gbec.Formal.DurationRep));
 	case UID.Type_Microseconds
-		Array=microseconds(AsyncStream.Read(NumElements,Gbec.Formal.DurationRep));
+		Array=milliseconds(AsyncStream.Read(NumElements,Gbec.Formal.DurationRep))/1000;
 	case UID.Type_Pointer
 		Array=AsyncStream.Read(NumElements,Server.PointerType);
 	otherwise
@@ -112,7 +113,7 @@ for C=1:NumCols
 		case UID.Type_Milliseconds
 			Value=milliseconds(AsyncStream.Read(NumRows,Gbec.Formal.DurationRep));
 		case UID.Type_Microseconds
-			Value=microseconds(AsyncStream.Read(NumRows,Gbec.Formal.DurationRep));
+			Value=milliseconds(AsyncStream.Read(NumRows,Gbec.Formal.DurationRep))/1000;
 		case UID.Type_Pointer
 			Value=AsyncStream.Read(NumRows,Server.PointerType);
 		otherwise
@@ -139,7 +140,7 @@ switch UID(AsyncStream.Read)
 	case UID.Type_Milliseconds
 		KeyReader=@(AsyncStream)milliseconds(AsyncStream.Read(Gbec.Formal.DurationRep));
 	case UID.Type_Microseconds
-		KeyReader=@(AsyncStream)microseconds(AsyncStream.Read(Gbec.Formal.DurationRep));
+		KeyReader=@(AsyncStream)milliseconds(AsyncStream.Read(Gbec.Formal.DurationRep))/1000;
 	case UID.Type_Pointer
 		KeyReader=@(AsyncStream)AsyncStream.Read(Server.PointerType);
 	otherwise
@@ -159,7 +160,7 @@ switch UID(AsyncStream.Read)
 	case UID.Type_Milliseconds
 		ValueReader=@(Server)milliseconds(Server.AsyncStream.Read(Gbec.Formal.DurationRep));
 	case UID.Type_Microseconds
-		ValueReader=@(Server)microseconds(Server.AsyncStream.Read(Gbec.Formal.DurationRep));
+		ValueReader=@(Server)milliseconds(Server.AsyncStream.Read(Gbec.Formal.DurationRep))/1000;
 	case UID.Type_Pointer
 		ValueReader=@(Server)Server.AsyncStream.Read(Server.PointerType);
 	case UID.Type_Struct

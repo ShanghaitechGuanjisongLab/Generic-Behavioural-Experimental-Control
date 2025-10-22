@@ -173,7 +173,7 @@ using Settlement = Sequential<ModuleRandomize<Random5To10>, DelaySeconds<20>>;
 using Delay800ms = DelayMilliseconds<800>;
 
 template<uint8_t CuePin, UID CueUp, UID CueDown>
-using AssociationTrial = Sequential<CalmDown, ResponseWindow, PinFlashUpDown<CuePin, 200, CueUp, CueDown>, Delay800ms, DynamicSlot<>, PinFlashUp<WaterPump, 150, UID::Event_Water>, Settlement>;
+using AssociationTrial = Sequential<CalmDown, ResponseWindow, PinFlashUpDown<CuePin, 200, CueUp, CueDown>, Delay800ms, DynamicSlot<>, DigitalWrite<WaterPump, HIGH>, DelayMilliseconds<150>, DigitalWrite<WaterPump, LOW>, Settlement>;
 
 template<typename Cue>
 using CueOnlyTrial = Sequential<CalmDown, ResponseWindow, Cue, Delay800ms, DynamicSlot<>, Settlement>;

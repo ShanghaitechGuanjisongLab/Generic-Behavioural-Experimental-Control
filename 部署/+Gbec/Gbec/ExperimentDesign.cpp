@@ -1,18 +1,18 @@
 #pragma once
 #include "Predefined.hpp"
 // 快速切换BOX设定集
-#define BOX 1
+#define BOX 3
 
 // 引脚设定集，你可以为每套设备创建一个#if BOX块，记录不同设备的不同引脚信息，然后通过设定BOX宏进行快速切换。
 #if BOX == 1
-Pin BlueLed = 2;
-Pin WaterPump = 9;
-Pin CapacitorVdd = 12;
-Pin CapacitorOut = 13;
+Pin BlueLed = 11;
+Pin WaterPump = 2;
+Pin CapacitorVdd = 7;
+Pin CapacitorOut = 18;
 Pin CD1 = 10;
-Pin ActiveBuzzer = 5;
+Pin ActiveBuzzer = 52;
 Pin AirPump = 8;
-Pin PassiveBuzzer = 6;
+Pin PassiveBuzzer = 25;
 Pin Optogenetic = 7;
 #endif
 #if BOX == 2
@@ -35,7 +35,7 @@ Pin CD1 = 6;
 Pin ActiveBuzzer = 3;
 Pin AirPump = 12;
 Pin Optogenetic = 7;
-Pin PassiveBuzzer = 3;
+Pin PassiveBuzzer = 32;
 #endif
 
 /* 可以将基础模块using组合成自定义的复杂模块，可以是有参数的模板或无参数的实例。语法中的参数前缀提示参数类型，使用时不用写。例如DurationRep前缀表示模板参数是uint32_t类型，typename前缀表示参数是其它模块或类型等。基础模块介绍如下：
@@ -173,7 +173,7 @@ using Settlement = Sequential<ModuleRandomize<Random5To10>, DelaySeconds<20>>;
 using Delay800ms = DelayMilliseconds<800>;
 
 template<uint8_t CuePin, UID CueUp, UID CueDown>
-using AssociationTrial = Sequential<CalmDown, ResponseWindow, PinFlashUpDown<CuePin, 200, CueUp, CueDown>, Delay800ms, DynamicSlot<>, DigitalWrite<WaterPump, HIGH>, DelayMilliseconds<150>, DigitalWrite<WaterPump, LOW>, Settlement>;
+using AssociationTrial = Sequential<CalmDown, ResponseWindow, PinFlashUpDown<CuePin, 200, CueUp, CueDown>, Delay800ms, DynamicSlot<>, DigitalWrite<WaterPump, HIGH>, SerialMessage<UID::Event_Water>, DelayMilliseconds<150>, DigitalWrite<WaterPump, LOW>, Settlement>;
 
 template<typename Cue>
 using CueOnlyTrial = Sequential<CalmDown, ResponseWindow, Cue, Delay800ms, DynamicSlot<>, Settlement>;

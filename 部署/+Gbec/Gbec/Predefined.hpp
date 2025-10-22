@@ -159,6 +159,27 @@ template<>
 struct _TypeID<std::chrono::microseconds> {
 	static constexpr UID value = UID::Type_Microseconds;
 };
+template<>
+struct _TypeID<UID> {
+	static constexpr UID value = UID::Type_UID;
+};
+template<>
+struct _TypeID<uint8_t> {
+	static constexpr UID value = UID::Type_UInt8;
+};
+template<>
+struct _TypeID<uint16_t> {
+	static constexpr UID value = UID::Type_UInt16;
+};
+template<>
+struct _TypeID<uint32_t> {
+	static constexpr UID value = UID::Type_UInt32;
+};
+template<>
+struct _TypeID<bool> {
+	static constexpr UID value = UID::Type_Bool;
+};
+#pragma pack(push, 1)
 template<typename T>
 struct PodField {
 	UID const FieldName;
@@ -171,6 +192,7 @@ struct PodField {
 	  : FieldName(FieldName), FieldType(FieldType), FieldValue(FieldValue) {
 	}
 };
+#pragma pack(pop)
 class Process {
 	Async_stream_IO::MessageSize InfoSize;
 	std::set<PinListener *> ActiveInterrupts;

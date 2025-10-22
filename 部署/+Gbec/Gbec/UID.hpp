@@ -84,6 +84,7 @@ enum class UID : uint8_t {
 	Type_Bool,
 	Type_UInt8,
 	Type_UInt16,
+	Type_UInt32,
 	Type_UID,
 	Type_Array,
 	Type_Struct,

@@ -41,6 +41,8 @@ for F=1:NumFields
 			Value=AsyncStream.Read;
 		case UID.Type_UInt16
 			Value=AsyncStream.Read('uint16');
+		case UID.Type_UInt32
+			Value=AsyncStream.Read('uint32');
 		case UID.Type_Array
 			Value=CollectArray(Server);
 		case UID.Type_Struct
@@ -61,7 +63,7 @@ for F=1:NumFields
 		case UID.Type_Map
 			Value=CollectMap(Server);
 		otherwise
-			Gbec.Exceptions.Unexpected_response_from_Arduino.Throw;
+			Gbec.Exception.Unexpected_response_from_Arduino.Throw;
 	end
 	Struct.(Name(strlength('Field_')+1:end))=Value;
 end
@@ -79,6 +81,8 @@ switch UID(AsyncStream.Read)
 		Array=AsyncStream.Read(NumElements,'uint8');
 	case UID.Type_UInt16
 		Array=AsyncStream.Read(NumElements,'uint16');
+	case UID.Type_UInt32
+		Array=AsyncStream.Read(NumElements,'uint32');
 	case UID.Type_Seconds
 		Array=seconds(AsyncStream.Read(NumElements,Gbec.Formal.DurationRep));
 	case UID.Type_Milliseconds
@@ -108,6 +112,8 @@ for C=1:NumCols
 			Value=AsyncStream.Read(NumRows);
 		case UID.Type_UInt16
 			Value=AsyncStream.Read(NumRows,'uint16');
+		case UID.Type_UInt32
+			Value=AsyncStream.Read(NumRows,'uint32');
 		case UID.Type_Seconds
 			Value=seconds(AsyncStream.Read(NumRows,Gbec.Formal.DurationRep));
 		case UID.Type_Milliseconds
@@ -135,6 +141,8 @@ switch UID(AsyncStream.Read)
 		KeyReader=@(AsyncStream)AsyncStream.Read;
 	case UID.Type_UInt16
 		KeyReader=@(AsyncStream)AsyncStream.Read('uint16');
+	case UID.Type_UInt32
+		KeyReader=@(AsyncStream)AsyncStream.Read('uint32');
 	case UID.Type_Seconds
 		KeyReader=@(AsyncStream)seconds(AsyncStream.Read(Gbec.Formal.DurationRep));
 	case UID.Type_Milliseconds
@@ -155,6 +163,8 @@ switch UID(AsyncStream.Read)
 		ValueReader=@(Server)Server.AsyncStream.Read;
 	case UID.Type_UInt16
 		ValueReader=@(Server)Server.AsyncStream.Read('uint16');
+	case UID.Type_UInt32
+		ValueReader=@(Server)Server.AsyncStream.Read('uint32');
 	case UID.Type_Seconds
 		ValueReader=@(Server)seconds(Server.AsyncStream.Read(Gbec.Formal.DurationRep));
 	case UID.Type_Milliseconds

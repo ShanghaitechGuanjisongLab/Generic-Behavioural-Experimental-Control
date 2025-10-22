@@ -43,11 +43,6 @@ classdef Server<handle
 				end
 			end
 		end
-		function ReleaseStream(obj)
-			delete(obj.AsyncStream);
-			obj.AllProcesses=dictionary;
-			disp(newline+obj.Name + "：已释放关联的流");
-		end
 		function ConnectionInterruptedHandler(obj,EventData)
 			Gbec.Exception.Server_connection_interrupted.Throw(sprintf('%s %s',obj.Name,formattedDisplayText(EventData)));
 		end
@@ -70,6 +65,12 @@ classdef Server<handle
 		end
 	end
 	methods
+		function ReleaseStream(obj)
+			%手动释放关联的流
+			delete(obj.AsyncStream);
+			obj.AllProcesses=dictionary;
+			disp(newline+obj.Name + "：已释放关联的流");
+		end
 		function obj=Server(SerialCountdown)
 			%# 语法
 			% ```

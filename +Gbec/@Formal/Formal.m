@@ -170,6 +170,10 @@ classdef Formal<Gbec.Process
 		end
 		function ProcessFinished_(obj)
 			%此方法由Server调用，派生类负责处理，用户不应使用
+
+			%在会话完成后，如需手动RestoreSession，需要加一回合以免最后一回合被重复
+			obj.TrialIndex=obj.TrialIndex+1;
+
 			obj.LogPrint('会话完成');
 			if obj.SaveFile
 				obj.SaveInformation;

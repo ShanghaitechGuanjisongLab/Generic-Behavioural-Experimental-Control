@@ -178,11 +178,11 @@ using AssociationTrial = Sequential<CalmDown, ResponseWindow, PinFlashUpDown<Cue
 template<typename Cue>
 using CueOnlyTrial = Sequential<CalmDown, ResponseWindow, Cue, Delay800ms, DynamicSlot<>, Settlement>;
 
-// 点亮电容后等待1s，渡过刚启动的不稳定期
-using CapacitorInitialize = Sequential<DigitalWrite<CapacitorVdd, HIGH>, DelaySeconds<1>>;
+using BackgroundMonitor = MonitorPin<CapacitorOut, SerialMessage<UID::Event_HitCount>>;
 
+// 点亮电容后等待1s，渡过刚启动的不稳定期
 template<typename TrialType>
-using AssociationSession = Sequential<CapacitorInitialize, Repeat<TrialType, ConstantInteger<30>>>;
+using AssociationSession = Sequential<DigitalWrite<CapacitorVdd, HIGH>, DelaySeconds<1>, BackgroundMonitor, Repeat<TrialType, ConstantInteger<30>>, ModuleAbort<BackgroundMonitor>>;
 
 // ——以下列出所有公开模块，均绑定到ID，允许PC端调用——
 std::unordered_map<UID, uint16_t (*)(Process *)> SessionMap = {

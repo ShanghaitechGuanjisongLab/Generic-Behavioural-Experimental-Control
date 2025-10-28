@@ -44,5 +44,6 @@ classdef Exception<MATLAB.Lang.IEnumerableException
 		Session_has_no_trials
 		UniExp_toolbox_not_found
 		Server_abandoned
+		Generated_UID_not_on_path
 	end
 end

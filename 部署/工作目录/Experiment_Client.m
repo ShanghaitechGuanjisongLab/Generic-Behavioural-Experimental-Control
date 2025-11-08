@@ -17,7 +17,9 @@ Formal1.Mouse='假🐀';
 %[text] 是否要在每次实验（第一次除外）后监控行为曲线；若无需监控可设为false。若设为true，必须安装[统一实验分析作图](https://github.com/ShanghaitechGuanjisongLab/Unified-Experimental-Analysis-and-Figuring/releases)工具箱。
 if false
 	Filename=sprintf('D:\\张天夫\\%s.%s',Formal1.Mouse,SessionName(9:end));
+    Formal1.DateTime=missing;
 else
+    Formal1.DateTime=datetime;
 	Filename=sprintf('D:\\张天夫\\%s.%s.%s',Formal1.Mouse,char(Formal1.DateTime,'yyyyMMddHHmm'),SessionName(9:end));
 end
 Formal1.SavePath=strcat(Filename,'.行为.UniExp.mat');
@@ -61,7 +63,9 @@ end
 %[text] 此例中，在Arduino端向串口发送UID.Host\_GratingImage即可显示图像。参见[Gbec.GratingImage](<matlab:edit Gbec.GratingImage>)
 %[text] # 然后运行脚本，在命令行窗口中执行交互
 Formal1.StartSession; %[output:96e45c03] %[output:04e537ca]
-Formal1.DateTime=datetime;
+if ismissing(Formal1.DateTime)
+    Formal1.DateTime=datetime;
+end
 return;
 %%
 %[text] # 实时控制命令

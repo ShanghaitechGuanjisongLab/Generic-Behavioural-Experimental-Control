@@ -84,9 +84,6 @@ Formal1Info=Formal1.GetInformation
 %%
 %[text] 查询状态
 Formal1.State
-%%
-%[text] 关闭串口
-clearvars BOX1 Formal1;
 
 %[appendix]{"version":"1.0"}
 %---

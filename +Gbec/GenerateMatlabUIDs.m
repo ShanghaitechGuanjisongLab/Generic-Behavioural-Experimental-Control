@@ -23,8 +23,8 @@ end
 if ~isfile(ArduinoUidPath)
 	ArduinoUidPath=MATLAB.UITools.OpenFileDialog(Filter='Arduino UID|UID.hpp',Title='选择 Arduino UID.hpp 头文件');
 end
-if System.IO.Path.GetFullPath(System.Environment.ExpandEnvironmentVariables(ArduinoUidPath))~=which('Gbec.UID')
-	Gbec.Exception.Generated_UID_not_on_path.Warn('当前实际可用的UID未更新');
+if isfile(MatlabUidPath)&&System.IO.Path.GetFullPath(System.Environment.ExpandEnvironmentVariables(MatlabUidPath))~=which('Gbec.UID')
+	Gbec.Exception.Generated_UID_not_on_path.Warn;
 end
 Enumerations=replace(split(extractBetween(fileread(ArduinoUidPath),"{","}"),[",",newline]),whitespacePattern,'');
 Enumerations=Enumerations(contains(Enumerations,textBoundary('start')+lettersPattern));

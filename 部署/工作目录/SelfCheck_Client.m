@@ -57,10 +57,7 @@ Test1.OneEnterOneCheck(Gbec.UID.Test_RandomFlash,"按一次回车一个随机闪
 Test1.OneEnterOneCheck(Gbec.UID.Test_LowTone,"按一次回车一个低音，输入任意字符结束检查：");
 %%
 %[text] 检查高音
-Test1.OneEnterOneCheck(Gbec.UID.Test_HighTone,"按一次回车一个高音，输入任意字符结束检查：");
-%%
-%[text] ## 断开连接
-clearvars BOX1; %[output:296e83dd] %[output:92e16717] %[output:4656371b] %[output:641688bd] %[output:815a477f] %[output:6153ec73] %[output:5f15b136]
+Test1.OneEnterOneCheck(Gbec.UID.Test_HighTone,"按一次回车一个高音，输入任意字符结束检查："); %[output:296e83dd] %[output:92e16717] %[output:4656371b] %[output:641688bd] %[output:815a477f] %[output:6153ec73] %[output:5f15b136]
 
 %[appendix]{"version":"1.0"}
 %---

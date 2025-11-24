@@ -1,16 +1,16 @@
 %[text] 将本文件中的“BOX1”替换成任何自定义名称，可以同时在工作区中存在多个Server和Formal对象，以在本MATLAB会话中同时执行多个实验会话，甚至从同一个COM口（开发板）同时运行多个实验
-if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid) %[output:group:41733fcb]
-	BOX1=Gbec.Server; %[output:71ff517e]
-end %[output:group:41733fcb]
+if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid)
+	BOX1=Gbec.Server;
+end
 %[text] # 在下方输入会话设置
 %[text] 串口号
-BOX1.Initialize('COM13',9600);
+BOX1.Initialize('COM6',9600);
 if~(exist('Formal1','var')&&Formal1.IsValid&&Formal1.Server==BOX1)
 	Formal1=Gbec.Formal(BOX1);
 	Formal1.LogName='BOX1';
 end
 %[text] 选择要运行的会话
-Formal1.SessionID=Gbec.UID.Session_AudioWater;
+Formal1.SessionID=Gbec.UID.Session_SingleAudioShaping;
 SessionName=char(Formal1.SessionID);
 %[text] 设置实验基本信息
 Formal1.Mouse='假🐀';
@@ -62,7 +62,7 @@ if false
 end
 %[text] 此例中，在Arduino端向串口发送UID.Host\_GratingImage即可显示图像。参见[Gbec.GratingImage](<matlab:edit Gbec.GratingImage>)
 %[text] # 然后运行脚本，在命令行窗口中执行交互
-Formal1.StartSession; %[output:96e45c03] %[output:04e537ca]
+Formal1.StartSession; %[output:8e27c876]
 if ismissing(Formal1.DateTime)
     Formal1.DateTime=datetime;
 end
@@ -77,7 +77,7 @@ Formal1.PauseSession;
 Formal1.ContinueSession;
 %%
 %[text] 放弃会话
-Formal1.AbortSession;
+Formal1.AbortSession; %[output:9f607f90] %[output:226de0ef]
 %%
 %[text] 获取信息
 Formal1Info=Formal1.GetInformation
@@ -90,12 +90,12 @@ Formal1.State
 %[metadata:view]
 %   data: {"layout":"inline","rightPanelPercent":40}
 %---
-%[output:71ff517e]
-%   data: {"dataType":"text","outputData":{"text":"通用行为实验控制器v7.0.0 by 张天夫\n","truncated":false}}
+%[output:8e27c876]
+%   data: {"dataType":"text","outputData":{"text":"\nBOX1：会话开始，回合总数：51，将保存为：D:\\张天夫\\假🐀.202511241820.SingleAudioShaping.行为.UniExp.mat\n","truncated":false}}
 %---
-%[output:96e45c03]
-%   data: {"dataType":"warning","outputData":{"text":"警告: 在 'read' 的超时期限内未返回指定的数据量。\n'serialport' unable to read any data. For more information on possible reasons, see <a href=\"matlab: helpview('matlab', 'serialport_nodata')\"'>serialport 读取警告<\/a>."}}
+%[output:9f607f90]
+%   data: {"dataType":"text","outputData":{"text":"\nBOX1：会话已放弃","truncated":false}}
 %---
-%[output:04e537ca]
-%   data: {"dataType":"error","outputData":{"errorType":"runtime","text":"错误使用 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Async_stream_IO.AsyncSerialStream\/Read', 'D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m', 492)\" style=\"font-weight:bold\">Async_stream_IO.AsyncSerialStream\/Read<\/a> (<a href=\"matlab: opentoline('D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m',492,0)\">第 492 行<\/a>)\nAsync_stream_IO:Exception:Serial_not_respond_in_time\n\n出错 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Async_stream_IO.AsyncSerialStream\/Listen', 'D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m', 346)\" style=\"font-weight:bold\">Async_stream_IO.AsyncSerialStream\/Listen<\/a> (<a href=\"matlab: opentoline('D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m',346,0)\">第 346 行<\/a>)\n\t\t\t\t\tif obj.Read==Async_stream_IO.IAsyncStream.MagicByte\n     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n出错 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Gbec.Formal\/StartSession', 'D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\@Formal\\StartSession.m', 27)\" style=\"font-weight:bold\">Gbec.Formal\/StartSession<\/a> (<a href=\"matlab: opentoline('D:\\Users\\Administrator\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\@Formal\\StartSession.m',27,0)\">第 27 行<\/a>)\nNumBytes=AsyncStream.Listen(Port);\n^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"}}
+%[output:226de0ef]
+%   data: {"dataType":"warning","outputData":{"text":"警告: 数据未保存"}}
 %---

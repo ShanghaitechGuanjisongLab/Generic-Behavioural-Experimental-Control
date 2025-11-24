@@ -1,8 +1,8 @@
 %[text] # 此脚本用于在实验前检查硬件设备是否正常工作
 %[text] 所有检查之前先初始化
-if~(exist('BOX1','var')&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid)
-	BOX1=Gbec.Server;
-end
+if~(exist('BOX1','var')&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid) %[output:group:3b877071]
+	BOX1=Gbec.Server; %[output:723cbcc2]
+end %[output:group:3b877071]
 BOX1.Initialize('COM6',9600);
 if~(exist('Test1','var')&&isa(Test1,'Gbec.Test')&&Test1.IsValid&&Test1.Server==BOX1)
 	Test1=Gbec.Test(BOX1);
@@ -19,10 +19,10 @@ Test1.OneEnterOneCheck(Gbec.UID.Test_WaterPump,"按一次回车喷一次水，�
 Test1.RepeatCheck(Gbec.UID.Test_CapacitorReset,1);
 %%
 %[text] 开始检查电容
-Test1.StartCheck(Gbec.UID.Test_CapacitorMonitor);
+Test1.StartCheck(Gbec.UID.Test_CapacitorMonitor); %[output:599ca1f3]
 %%
 %[text] 停止检查电容
-Test1.StopCheck;
+Test1.StopCheck; %[output:55383149]
 %%
 %[text] 检查蓝光
 Test1.OneEnterOneCheck(Gbec.UID.Test_BlueLed,"按一次回车闪一次光，输入任意字符结束检查：");
@@ -63,6 +63,15 @@ Test1.OneEnterOneCheck(Gbec.UID.Test_HighTone,"按一次回车一个高音，输
 %---
 %[metadata:view]
 %   data: {"layout":"inline","rightPanelPercent":40}
+%---
+%[output:723cbcc2]
+%   data: {"dataType":"text","outputData":{"text":"通用行为实验控制器v8.0.1 by 张天夫\n","truncated":false}}
+%---
+%[output:599ca1f3]
+%   data: {"dataType":"text","outputData":{"text":"Test_CapacitorMonitor……\n","truncated":false}}
+%---
+%[output:55383149]
+%   data: {"dataType":"text","outputData":{"text":"测试结束\n","truncated":false}}
 %---
 %[output:296e83dd]
 %   data: {"dataType":"text","outputData":{"text":"通用行为实验控制v6.5.0已发布，<a href=\"https:\/\/github.com\/ShanghaitechGuanjisongLab\/Generic-Behavioural-Experimental-Control\/releases\">立即更新<\/a>\n通用行为实验控制器v7.0.0 by 张天夫\n","truncated":false}}

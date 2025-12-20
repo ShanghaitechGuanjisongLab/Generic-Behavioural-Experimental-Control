@@ -1,6 +1,6 @@
 function V=Version
 V.Me='v8.0.1';
-V.MatlabExtension='19.11.0';
+V.MatlabExtension='19.12.0';
 V.MATLAB='R2025a';
 V.Deploy=12;
 persistent NewVersion

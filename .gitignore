@@ -3,3 +3,8 @@
 *.asv
 resources/9*
 deploymentLog.html
+.micromamba/
+tools/
+.arduino-data/
+.arduino-downloads/
+micromamba-create.log

@@ -1,0 +1,5 @@
+board_manager:
+    additional_urls: []
+directories:
+    data: D:\Users\Administrator\Documents\MATLAB\Generic-Behavioural-Experimental-Control\.arduino-data
+    downloads: D:\Users\Administrator\Documents\MATLAB\Generic-Behavioural-Experimental-Control\.arduino-downloads

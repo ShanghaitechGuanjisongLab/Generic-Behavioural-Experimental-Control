@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "arduino": {
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\run-arduino-mcp.ps1",
+        "-SetupIfMissing"
+      ]
+    }
+  }
+}

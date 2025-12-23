@@ -70,7 +70,13 @@ classdef Process<handle
 		end
 		function delete(obj)
 			if obj.Server.isvalid
-				obj.Server.FeedDogIfActive();
+				try
+					obj.Server.FeedDogIfActive();
+				catch ME
+					if ME.identifier~="MATLAB:class:InvalidHandle"
+						ME.rethrow;
+					end
+				end
 				AllProcesses=obj.Server.AllProcesses;
 				if AllProcesses.isConfigured&&AllProcesses.isKey(obj.Pointer)&&AllProcesses(obj.Pointer).Handle==obj
 					%如果所有进程中不存在本指针，或者指向的不是本对象，说明可能存在新的服务器，包含一个和本对象指针相同的新进程。此时不应删除，以免误删新进程

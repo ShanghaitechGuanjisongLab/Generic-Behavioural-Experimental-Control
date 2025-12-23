@@ -24,6 +24,17 @@
 本项目是行为实验通用控制程序，因此针对不同的实验设计，你需要自行编写一些自定义Arduino代码（在Development_Client.mlx中有入口）。最常用的就是ExperimentDesign.cpp，各种实验参数都需要在这里设置好然后上传到Arduino。对于较大的改动，如硬件、回合、实验方案等的增删，可能还需要修改UID.h。
 
 ExperimentDesign.cpp的具体配置语法，在文件中有详细的注释说明。但在那之前，建议先浏览一遍本自述文件。
+# MCP 服务集成（Arduino MCP Server）
+为了方便 AI 代理或具备 Model Context Protocol (MCP) 能力的 IDE 与实验系统联动，仓库已经按照 [arduino-mcp-server-simple](https://github.com/amahpour/arduino-mcp-server-simple) 官方指引完成部署。关键入口：
+
+- `scripts/setup-arduino-mcp.ps1`：一键安装/更新依赖（micromamba Python 3.11 环境、`arduino-mcp-tool` 包以及 Arduino CLI）。
+- `scripts/run-arduino-mcp.ps1`：启动 MCP 服务，自动将 `tools/` 加入 `PATH` 并设置 `WORKSPACE`、`ARDUINO_CLI_CONFIG_FILE`。
+- `mcp/arduino-mcp.config.json`：可直接嵌入 Cursor、Claude Desktop 等 MCP 客户端的配置片段。
+- 详细步骤与注意事项见 `doc/ArduinoMCPSetup.md`。
+
+> FastMCP 2.10.6 与最新版 pydantic 存在兼容性问题，安装脚本会自动将 pydantic 固定为 2.11.7，避免出现 `TypeError: cannot specify both default and default_factory`。
+> 首次执行 `scripts/setup-arduino-mcp.ps1` 会把 `tools/`、`tools/Library/bin` 与 `.micromamba/Scripts` 写入当前用户 PATH，记得重新打开终端以载入新环境变量。
+
 # 基本概念
 使用本项目之前，你需要理解本项目的概念层级。从顶层到底层依次是：
 

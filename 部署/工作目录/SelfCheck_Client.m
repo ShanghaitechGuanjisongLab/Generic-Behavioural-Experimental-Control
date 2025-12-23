@@ -58,6 +58,9 @@ Test1.OneEnterOneCheck(Gbec.UID.Test_LowTone,"按一次回车一个低音，输�
 %%
 %[text] 检查高音
 Test1.OneEnterOneCheck(Gbec.UID.Test_HighTone,"按一次回车一个高音，输入任意字符结束检查："); %[output:296e83dd] %[output:92e16717] %[output:4656371b] %[output:641688bd] %[output:815a477f] %[output:6153ec73] %[output:5f15b136]
+%%
+%[text] 检查喵提醒
+Gbec.SendMiao('tu9ijL8');
 
 %[appendix]{"version":"1.0"}
 %---

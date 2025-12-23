@@ -148,9 +148,9 @@ classdef Formal<Gbec.Process
 			TrialMod=mod(obj.TrialIndex,obj.CheckCycle);
 			if obj.MiaoCode~=""
 				if obj.TrialIndex==obj.DesignedNumTrials
-					SendMiao('实验结束',obj.HttpRetryTimes,obj.MiaoCode);
+					Gbec.SendMiao('实验结束',obj.HttpRetryTimes,obj.MiaoCode);
 				elseif TrialMod==0
-					SendMiao(sprintf('已到%u回合，请检查实验状态',obj.TrialIndex),obj.HttpRetryTimes,obj.MiaoCode);
+					Gbec.SendMiao(sprintf('已到%u回合，请检查实验状态',obj.TrialIndex),obj.HttpRetryTimes,obj.MiaoCode);
 				end
 			end
 			if TrialMod==1&&obj.TrialIndex>1
@@ -242,21 +242,5 @@ if feature('SuppressCommandLineOutput')
 	timer(StartDelay=0.1,TimerFcn=@(~,~)fprintf(varargin{:})).start;
 else
 	fprintf(varargin{:});
-end
-end
-function SendMiao(Note,HttpRetryTimes,MiaoCode)
-for a=0:HttpRetryTimes
-	try
-		%HttpRequest不支持中文，必须用webread
-		webread(sprintf('http://miaotixing.com/trigger?id=%s&text=%s',MiaoCode,Note));
-	catch ME
-		if strcmp(ME.identifier,'MATLAB:webservices:UnknownHost')
-			continue;
-		else
-			warning(ME.identifier,'%s',ME.message);
-			break;
-		end
-	end
-	break;
 end
 end

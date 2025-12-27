@@ -18,6 +18,7 @@ Async_stream_IO::AsyncStream SerialStream;
 extern std::unordered_map<UID, uint16_t (*)(Process *)> SessionMap;
 static std::set<Process *> ExistingProcesses;
 UID const Delay<Infinite, Infinite>::ID = UID::Module_Delay;
+UID const _Sequential<>::ID = UID::Module_Sequential;
 
 template<typename T>
 inline void BindFunctionToPort(T &&Function, UID Port) {

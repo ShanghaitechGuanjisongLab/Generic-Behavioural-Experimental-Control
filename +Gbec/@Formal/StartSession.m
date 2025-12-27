@@ -38,7 +38,7 @@ obj.ThrowResult(AsyncStream.Read);
 obj.DesignedNumTrials=AsyncStream.Read('uint16');
 switch obj.DesignedNumTrials
 	case 0
-		Gbec.Exception.Session_has_no_trials.Throw;
+		Gbec.Exception.Session_has_no_trials.Warn;
 	case intmax('uint16')
 		obj.LogPrint('会话开始，回合总数：不确定，将保存为：%s\n',obj.SavePath);
 	otherwise

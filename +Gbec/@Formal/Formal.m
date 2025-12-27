@@ -147,10 +147,10 @@ classdef Formal<Gbec.Process
 			obj.TrialIndex=obj.TrialIndex+1;
 			TrialMod=mod(obj.TrialIndex,obj.CheckCycle);
 			if obj.MiaoCode~=""
-				if obj.TrialIndex==obj.DesignedNumTrials
-					Gbec.SendMiao('实验结束',obj.HttpRetryTimes,obj.MiaoCode);
+				if obj.TrialIndex+obj.TrialsBeforeEndRemind==obj.DesignedNumTrials
+					Gbec.SendMiao(obj.MiaoCode,'实验结束',obj.HttpRetryTimes);
 				elseif TrialMod==0
-					Gbec.SendMiao(sprintf('已到%u回合，请检查实验状态',obj.TrialIndex),obj.HttpRetryTimes,obj.MiaoCode);
+					Gbec.SendMiao(obj.MiaoCode,sprintf('已到%u回合，请检查实验状态',obj.TrialIndex),obj.HttpRetryTimes);
 				end
 			end
 			if TrialMod==1&&obj.TrialIndex>1

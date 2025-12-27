@@ -61,6 +61,9 @@ Test1.OneEnterOneCheck(Gbec.UID.Test_HighTone,"按一次回车一个高音，输
 %%
 %[text] 检查喵提醒
 Gbec.SendMiao('tu9ijL8');
+%%
+%[text] 关闭串口
+delete(BOX1);
 
 %[appendix]{"version":"1.0"}
 %---

@@ -114,7 +114,9 @@ struct Module : IInformative {
 	  : Container(Container) {
 	}
 	// 返回是否需要等待回调，并提供回调函数。返回true表示模块还在执行中，将在执行完毕后调用回调函数；返回false表示模块已执行完毕，不会调用回调函数。
-	virtual bool Start(std::move_only_function<void()> &FinishCallback) {}
+	virtual bool Start(std::move_only_function<void()> &FinishCallback) {
+		return false;
+	}
 	// 放弃该步骤。未在执行的步骤放弃也不会出错。
 	virtual void Abort() {}
 	// 重新开始当前执行中的步骤，不改变下一步。不应试图重启当前未在执行中的步骤。
@@ -333,14 +335,15 @@ struct IRandom {
 	virtual void Randomize() = 0;
 };
 
-template<uint16_t First, uint16_t... Rest>
+template<uint16_t...>
 struct _Sum {
+	static constexpr uint16_t value = 0;
+};
+template<uint16_t First, uint16_t... Rest>
+struct _Sum<First, Rest...> {
 	static constexpr uint16_t value = First + _Sum<Rest...>::value;
 };
-template<uint16_t Only>
-struct _Sum<Only> {
-	static constexpr uint16_t value = Only;
-};
+
 #define InfoImplement \
 	static UID const ID; \
 	void WriteInfo() const override { \
@@ -683,6 +686,21 @@ public:
 	static constexpr uint16_t NumTrials = _Sum<_IDModule_t<SubModules>::NumTrials...>::value;
 	InfoImplement;
 };
+template<>
+struct _Sequential<> : Module {
+protected:
+#pragma pack(push, 1)
+	struct InfoStruct {
+		uint8_t const NumFields = 0;
+	};
+#pragma pack(pop)
+public:
+	_Sequential(Process &Container)
+	  : Module(Container) {
+	}
+	static constexpr uint16_t NumTrials = 0;
+	InfoImplement;
+};
 template<typename... SubModules>
 UID const _Sequential<SubModules...>::ID = UID::Module_Sequential;
 
@@ -910,7 +928,7 @@ public:
 	InfoImplement;
 };
 template<typename Content, typename Unit, typename Period>
-UID const RepeatEvery<Content, Unit, Period, Infinite>::ID=UID::Module_RepeatEvery;
+UID const RepeatEvery<Content, Unit, Period, Infinite>::ID = UID::Module_RepeatEvery;
 template<typename ContentA, typename ContentB, typename PeriodA, typename PeriodB>
 struct _DoubleRepeat : _TimedModule {
 	using _TimedModule::_TimedModule;
@@ -1011,7 +1029,7 @@ public:
 	InfoImplement;
 };
 template<typename ContentA, typename ContentB, typename Unit, typename PeriodA, typename PeriodB>
-UID const DoubleRepeat<ContentA, ContentB, Unit, PeriodA, PeriodB, Infinite>::ID=UID::Module_DoubleRepeat;
+UID const DoubleRepeat<ContentA, ContentB, Unit, PeriodA, PeriodB, Infinite>::ID = UID::Module_DoubleRepeat;
 struct _InstantaneousModule : Module {
 	using Module::Module;
 	bool Start(std::move_only_function<void()> &FC) override {

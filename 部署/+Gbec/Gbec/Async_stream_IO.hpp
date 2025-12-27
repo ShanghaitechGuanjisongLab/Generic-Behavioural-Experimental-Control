@@ -275,14 +275,8 @@ public:
 	InterruptGuard BeginSend(MessageSize Length, Port ToPort);
 	//向报文中填入一个平凡对象。此方法只能在BeginSend返回的InterruptGuard对象的生命周期内使用。
 	template<typename T>
-	std::enable_if_t<(sizeof(T) > 1), AsyncStream> &operator<<(const T &Value) {
+	AsyncStream &operator<<(const T &Value) {
 		InputBuffer.insert(InputBuffer.end(), reinterpret_cast<const char *>(&Value), reinterpret_cast<const char *>(&Value + 1));
-		return *this;
-	}
-	//向报文中填入一个平凡对象。此方法只能在BeginSend返回的InterruptGuard对象的生命周期内使用。
-	template<typename T>
-	std::enable_if_t<sizeof(T) == 1, AsyncStream> &operator<<(const T &Value) {
-		InputBuffer.push_back(static_cast<byte>(Value));
 		return *this;
 	}
 	//将一段字节缓冲拷入报文。此方法只能在BeginSend返回的InterruptGuard对象的生命周期内使用。

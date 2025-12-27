@@ -14,6 +14,7 @@ Pin ActiveBuzzer = 52;
 Pin AirPump = 8;
 Pin PassiveBuzzer = 25;
 Pin Optogenetic = 7;
+Pin Flare = 5;
 #endif
 #if BOX == 2
 Pin BlueLed = 8;
@@ -25,6 +26,7 @@ Pin ActiveBuzzer = 22;
 Pin AirPump = 12;
 Pin Optogenetic = 53;
 Pin PassiveBuzzer = 3;
+Pin Flare = 5;
 #endif
 #if BOX == 3
 Pin BlueLed = 4;
@@ -36,6 +38,7 @@ Pin ActiveBuzzer = 3;
 Pin AirPump = 12;
 Pin Optogenetic = 7;
 Pin PassiveBuzzer = 32;
+Pin Flare = 5;
 #endif
 
 /* 可以将基础模块using组合成自定义的复杂模块，可以是有参数的模板或无参数的实例。语法中的参数前缀提示参数类型，使用时不用写。例如DurationRep前缀表示模板参数是uint32_t类型，typename前缀表示参数是其它模块或类型等。基础模块介绍如下：
@@ -205,4 +208,6 @@ std::unordered_map<UID, uint16_t (*)(Process *)> SessionMap = {
                                                                               Trial<UID::Trial_LightOnly, CueOnlyTrial<PinFlashUpDown<BlueLed, 200, UID::Event_LightUp, UID::Event_LightDown>>>,
                                                                               Trial<UID::Trial_AudioOnly, CueOnlyTrial<PinFlashUpDown<ActiveBuzzer, 200, UID::Event_AudioUp, UID::Event_AudioDown>>>,
                                                                               Trial<UID::Trial_WaterOnly, CueOnlyTrial<PinFlashUp<WaterPump, 150, UID::Event_Water>>>>::WithRepeat<20, 20, 20>>> },
+  { UID::Session_AudioWaterFlare, Session<AssociationSession<Trial<UID::Trial_AudioWaterFlare, Sequential<CalmDown, ResponseWindow, DigitalWrite<Flare, HIGH>, SerialMessage<UID::Event_FlareUp>, PinFlashUpDown<ActiveBuzzer, 200, UID::Event_AudioUp, UID::Event_AudioDown>, Delay800ms, DynamicSlot<>, DigitalWrite<WaterPump, HIGH>, SerialMessage<UID::Event_Water>, DigitalWrite<CapacitorVdd, LOW>, DelayMilliseconds<150>, DigitalWrite<CapacitorVdd, HIGH>, DigitalWrite<WaterPump, LOW>, DelayMilliseconds<1850>, DigitalWrite<Flare, LOW>, SerialMessage<UID::Event_FlareDown>, Settlement>>>> },
+  { UID::Session_Empty, Session<Trial<UID::Trial_Empty,Sequential<>>> },
 };

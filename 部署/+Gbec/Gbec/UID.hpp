@@ -133,6 +133,8 @@ enum class UID : uint8_t {
 	Event_HighUp,
 	Event_HighDown,
 	Event_Debug,
+	Event_FlareUp,
+	Event_FlareDown,
 
 	// 测试
 
@@ -149,6 +151,7 @@ enum class UID : uint8_t {
 	Test_LowTone,
 	Test_HighTone,
 	Test_Optogenetic,
+	Test_Flare,
 
 	// 回合
 
@@ -158,6 +161,8 @@ enum class UID : uint8_t {
 	Trial_AudioOnly,
 	Trial_LightOnly,
 	Trial_WaterOnly,
+	Trial_AudioWaterFlare,
+	Trial_Empty,
 	
 	// 持续时间类型
 
@@ -200,5 +205,6 @@ enum class UID : uint8_t {
 	Session_AudioWater,
 	Session_LightWater,
 	Session_LAuW,
-
+	Session_AudioWaterFlare,
+	Session_Empty,
 };

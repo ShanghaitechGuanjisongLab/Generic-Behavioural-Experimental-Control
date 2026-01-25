@@ -82,6 +82,9 @@ Formal1.AbortSession; %[output:9f607f90] %[output:226de0ef]
 %[text] 获取信息
 Formal1Info=Formal1.GetInformation
 %%
+%[text] 如果自动保存信息失败，可以再次尝试手动保存
+Formal1.SaveInformation;
+%%
 %[text] 查询状态
 Formal1.State
 %%

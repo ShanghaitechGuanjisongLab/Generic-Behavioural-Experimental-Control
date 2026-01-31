@@ -473,7 +473,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			for V=1:numel(varargin)
 				Arg=varargin{V};
 				if isnumeric(Arg)
-					Number=Arg;
+					Number=uint16(Arg);
 				else
 					Type=Arg;
 				end

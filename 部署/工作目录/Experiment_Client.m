@@ -1,4 +1,4 @@
-%[text] 将本文件中的“BOX1”替换成任何自定义名称，可以同时在工作区中存在多个Server和Formal对象，以在本MATLAB会话中同时执行多个实验会话，甚至从同一个COM口（开发板）同时运行多个实验
+%[text] 将本文件中的“BOX1”和“Formal1”替换成任何自定义名称，可以同时在工作区中存在多个Server和Formal对象，以在本MATLAB会话中同时执行多个实验会话，甚至从同一个COM口（开发板）同时运行多个实验
 if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid)
 	BOX1=Gbec.Server;
 end

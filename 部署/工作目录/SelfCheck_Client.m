@@ -1,5 +1,5 @@
 %[text] # 此脚本用于在实验前检查硬件设备是否正常工作
-%[text] 所有检查之前先初始化
+%[text] 此脚本可以与Formal实验并行运行，互不干扰。所有检查之前先初始化
 if~(exist('BOX1','var')&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid) %[output:group:3b877071]
 	BOX1=Gbec.Server; %[output:723cbcc2]
 end %[output:group:3b877071]

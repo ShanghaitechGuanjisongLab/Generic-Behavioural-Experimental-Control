@@ -117,8 +117,9 @@ struct Module : IInformative {
 	virtual bool Start(std::move_only_function<void()> &FinishCallback) {
 		return false;
 	}
-	// 放弃该步骤。未在执行的步骤放弃也不会出错。
+	// 放弃该步骤。未在执行的步骤放弃也不会出错。但不会调用FinishCallback。
 	virtual void Abort() {}
+
 	// 重新开始当前执行中的步骤，不改变下一步。不应试图重启当前未在执行中的步骤。
 	virtual void Restart() {}
 
@@ -295,8 +296,11 @@ public:
 		if (Iter != Modules.end())
 			return static_cast<_ModuleType *>(Iter->second.get());
 		_ModuleType *const RawMemory = static_cast<_ModuleType *>(operator new(sizeof(_ModuleType)));
+
 		Modules.emplace(&_ModuleID<_ModuleType>::ID, std::unique_ptr<IInformative>(RawMemory));
+		//必须先占位后构造，以免递归构造自身
 		Construct(RawMemory);
+
 		InfoSize += RawMemory->InfoSize() + sizeof(decltype(Modules)::key_type);
 		return RawMemory;
 	}
@@ -403,6 +407,7 @@ public:
 		Module *SubPointers[_Sum<Repeats...>::value];
 		Module **CurrentModule = std::begin(SubPointers);
 		std::move_only_function<void()> NextBlock;  // 不能在此处等号初始化，SAM会编译器错误
+		std::move_only_function<void()>*FinishCallback
 	public:
 		void Randomize() override {
 			std::shuffle(std::begin(SubPointers), std::end(SubPointers), Urng);
@@ -417,6 +422,10 @@ public:
 			Randomize();
 		}
 		void Abort() override {
+			if (CurrentModule < std::end(SubPointers))
+				(*CurrentModule)->Abort();
+		}
+		void Skip(){
 			if (CurrentModule < std::end(SubPointers))
 				(*CurrentModule)->Abort();
 		}

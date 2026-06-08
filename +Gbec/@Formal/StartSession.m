@@ -49,6 +49,11 @@ obj.EventRecorder.Reset;
 obj.TrialRecorder.Reset;
 obj.TrialIndex=0;
 obj.State=Gbec.UID.State_Running;
+if~isempty(obj.oTrialwiseSave)
+	[obj.oTrialwiseSave.DateTimes,obj.oTrialwiseSave.Blocks]=obj.SessionMeta;
+	obj.oTrialwiseSave.Trials=table;
+	obj.oTrialwiseSave.Version=Gbec.Version;
+end
 end
 
 %[appendix]{"version":"1.0"}

@@ -9,6 +9,9 @@ if~(exist('Formal1','var')&&Formal1.IsValid&&Formal1.Server==BOX1)
 	Formal1=Gbec.Formal(BOX1);
 	Formal1.LogName='BOX1';
 end
+if Formal1.State~=Gbec.UID.State_Idle
+	Gbec.Exception.Process_not_idle.Throw;
+end
 %[text] 选择要运行的会话
 Formal1.SessionID=Gbec.UID.Session_SingleAudioShaping;
 SessionName=char(Formal1.SessionID);
@@ -22,7 +25,9 @@ else
     Formal1.DateTime=datetime;
 	Filename=sprintf('D:\\张天夫\\%s.%s.%s',Formal1.Mouse,char(Formal1.DateTime,'yyyyMMddHHmm'),SessionName(9:end));
 end
-Formal1.SavePath=strcat(Filename,'.行为.UniExp.mat');
+Formal1.SavePath=strcat(Filename,'.行为.mat');
+%[text] 实验性功能，是否每个回合自动保存一次。此方法可以缓解意外崩溃的数据损失，但有一定性能代价。如果不使用此功能，设为空。
+Formal1.TrialwiseSave=strcat(Filename,'.回合备份.mat');
 %[text] 是否要在每次会话结束后展示事件记录图，如不设置则将此属性设为空；如设置，必须安装[统一实验分析作图](https://github.com/ShanghaitechGuanjisongLab/Unified-Experimental-Analysis-and-Figuring/releases)工具箱。
 %[text] 此属性是一个元胞数组，分别代表要用于标志回合的事件、每个回合相对于标志事件的时间范围、要排除不作图的事件
 % Formal1.TepArguments={["灯光亮","声音响"],seconds([-5,20]),'ExcludedEvents',["灯光灭","错失","命中","回合开始","声音停"]};

@@ -60,14 +60,19 @@ classdef Formal<Gbec.Process
 	properties(Access=protected)
 		MergeData
 		oSavePath
+		oTrialwiseSave
 		OverwriteExisting=true
 		ConnectionResetListener
 		CountdownExempt
+		TrialwiseMatfile
 	end
 	properties(Dependent)
 		%数据保存路径
 		% 如果那个路径已经有数据库文件，将尝试合并。文件存在性和可写性将会在设置该属性时立即检查，如果失败则此属性值不变。
 		SavePath
+
+		%每个回合自动保存一次的路径。此方法可以缓解意外崩溃的数据损失，但有一定性能代价
+		TrialwiseSave
 	end
 	properties(SetAccess=immutable)
 		%事件记录器，可以查看当前已记录的事件
@@ -79,6 +84,26 @@ classdef Formal<Gbec.Process
 	methods(Access=protected)
 		function LogPrint(obj,Formatter,varargin)
 			fprintf("\n%s："+Formatter,obj.LogName,varargin{:});
+		end
+		function [DateTimes,Blocks]=SessionMeta(obj)
+			DateTimes=table;
+			DateTimes.DateTime=obj.DateTime;
+			DateTimes.Mouse=categorical(obj.Mouse);
+			try
+				DateTimes.Metadata={obj.GetInformation};
+			catch ME
+				if ME.identifier=="Async_stream_IO:Exception:Serial_not_respond_in_time"
+					warning(ME.identifier,'%s',ME.message);
+				else
+					ME.rethrow;
+				end
+			end
+			Design=char(obj.SessionID);
+			Blocks=table;
+			Blocks.DateTime=obj.DateTime;
+			Blocks.Design=categorical(string(Design(strlength('Session_')+1:end)));
+			Blocks.BlockIndex=0x1;
+			Blocks.BlockUID=0x001;
 		end
 	end
 	methods
@@ -96,6 +121,19 @@ classdef Formal<Gbec.Process
 		end
 		function SP=get.SavePath(obj)
 			SP=obj.oSavePath;
+		end
+		function TS=get.TrialwiseSave(obj)
+			if isempty(obj.oTrialwiseSave)
+				TS=obj.oTrialwiseSave;
+			else
+				TS=obj.oTrialwiseSave.Properties.Source;
+			end
+		end
+		function EL=EventLog(obj)
+			EL=obj.EventRecorder.GetTimeTable;
+			if ~isempty(EL)
+				EL.Event=categorical(Gbec.LogTranslate(EL.Event));
+			end
 		end
 		function set.SavePath(obj, SP)
 			FileExists=isfile(SP);
@@ -138,12 +176,23 @@ classdef Formal<Gbec.Process
 			end
 			obj.oSavePath=SP;
 		end
+		function set.TrialwiseSave(obj,TS)
+			obj.Server.FeedDogIfActive;
+			if isempty(TS)
+				obj.oTrialwiseSave=TS;
+				return;
+			end
+			if isfile(TS)&&questdlg('回合备份文件已存在','是否覆盖？','是','否','否')~="是"
+				Gbec.Exception.User_canceled_operation.Throw;
+			end
+			obj.oTrialwiseSave=matfile(TS,Writable=true);
+		end
 		function TrialStart_(obj,TrialID)
 			%此方法由Server调用，派生类负责处理，用户不应使用
 			TrialID=Gbec.UID(TrialID);
 			%这里必须记录UID而不是字符串，因为还要用于断线重连
 			obj.TrialRecorder.LogEvent(TrialID);
-			obj.EventRecorder.LogEvent(Gbec.UID.Event_TrialStart)
+			Time=obj.EventRecorder.LogEvent(Gbec.UID.Event_TrialStart);
 			obj.TrialIndex=obj.TrialIndex+1;
 			TrialMod=mod(obj.TrialIndex,obj.CheckCycle);
 			if obj.MiaoCode~=""
@@ -157,6 +206,15 @@ classdef Formal<Gbec.Process
 				cprintf([1,0,1],'\n已过%u回合，请检查实验状态',obj.TrialIndex-1);
 			end
 			FprintfInCommandWindow('\n%s 回合%u-%s：',obj.Mouse,obj.TrialIndex,TrialID);
+			persis
+			if~isempty(obj.oTrialwiseSave)
+				Blocks=obj.oTrialwiseSave.Blocks;
+				Blocks.EventLog=obj.EventLog;
+				obj.oTrialwiseSave.Blocks=Blocks;
+				Trials=obj.oTrialwiseSave.Trials;
+				Trials(end+1,["TrialUID","BlockUID","TrialIndex","Time","Stimulus"])={obj.TrialIndex,1,obj.TrialIndex,Time,categorical(extractAfter(string(TrialID),textBoundary('start')+"Trial_"))};
+				obj.oTrialwiseSave.Trials=Trials;
+			end
 		end
 		function Signal_(obj,S)
 			%此方法由Server调用，派生类负责处理，用户不应使用

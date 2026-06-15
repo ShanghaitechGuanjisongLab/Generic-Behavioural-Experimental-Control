@@ -17,7 +17,7 @@ struct PinListener {
 	std::move_only_function<void()> Callback;
 	// 中断不安全
 	void Pause() {
-		std::set<std::move_only_function<void()> *> *CallbackSet = &Listening[Pin];
+		std::set<std::move_only_function<void()>*>* CallbackSet = &Listening[Pin];
 		CallbackSet->erase(&Callback);
 		if (CallbackSet->empty())
 			Quick_digital_IO_interrupt::DetachInterrupt(Pin);
@@ -28,14 +28,14 @@ struct PinListener {
 	}
 	// 中断不安全
 	void Continue() {
-		std::set<std::move_only_function<void()> *> &CallbackSet = Listening[Pin];
+		std::set<std::move_only_function<void()>*>& CallbackSet = Listening[Pin];
 		if (CallbackSet.empty())
 			Quick_digital_IO_interrupt::AttachInterrupt<RISING>(Pin, PinInterrupt{ Pin });
 		CallbackSet.insert(&Callback);
 	}
 	// 中断不安全
-	PinListener(uint8_t Pin, std::move_only_function<void()> &&Callback)
-	  : Pin(Pin), Callback(std::move(Callback)) {
+	PinListener(uint8_t Pin, std::move_only_function<void()>&& Callback)
+		: Pin(Pin), Callback(std::move(Callback)) {
 		Continue();
 	}
 	// 中断不安全
@@ -44,12 +44,12 @@ struct PinListener {
 	}
 	// 中断安全
 	static void ClearPending() {
-		static std::queue<std::move_only_function<void()> *> LocalSwap;
+		static std::queue<std::move_only_function<void()>*> LocalSwap;
 		{
 			Quick_digital_IO_interrupt::InterruptGuard const _;
 			std::swap(LocalSwap, PendingCallbacks);
-			for (auto &Iterator : Resting) {
-				std::set<std::move_only_function<void()> *> &ListeningSet = Listening[Iterator.first];
+			for (auto& Iterator : Resting) {
+				std::set<std::move_only_function<void()>*>& ListeningSet = Listening[Iterator.first];
 				ListeningSet.merge(Iterator.second);
 				if (ListeningSet.size())
 					Quick_digital_IO_interrupt::AttachInterrupt<RISING>(Iterator.first, PinInterrupt{ Iterator.first });
@@ -63,13 +63,13 @@ struct PinListener {
 	}
 
 protected:
-	static std::queue<std::move_only_function<void()> *> PendingCallbacks;
-	static std::unordered_map<uint8_t, std::set<std::move_only_function<void()> *>> Listening;
-	static std::unordered_map<uint8_t, std::set<std::move_only_function<void()> *>> Resting;
+	static std::queue<std::move_only_function<void()>*> PendingCallbacks;
+	static std::unordered_map<uint8_t, std::set<std::move_only_function<void()>*>> Listening;
+	static std::unordered_map<uint8_t, std::set<std::move_only_function<void()>*>> Resting;
 	struct PinInterrupt {
 		uint8_t const Pin;
 		void operator()() const {
-			std::set<std::move_only_function<void()> *> &Listenings = Listening[Pin];
+			std::set<std::move_only_function<void()>*>& Listenings = Listening[Pin];
 			for (auto H : Listenings)
 				PendingCallbacks.push(H);
 			Resting[Pin].merge(Listenings);
@@ -79,26 +79,26 @@ protected:
 	};
 };
 
-inline static void InfoWrite(std::ostringstream &InfoStream, UID InfoValue) {
+inline static void InfoWrite(std::ostringstream& InfoStream, UID InfoValue) {
 	InfoStream.put(static_cast<char>(InfoValue));
 }
-inline static void InfoWrite(std::ostringstream &InfoStream, uint8_t InfoValue) {
+inline static void InfoWrite(std::ostringstream& InfoStream, uint8_t InfoValue) {
 	InfoStream.put(static_cast<char>(InfoValue));
 }
 template<typename T>
-inline static void InfoWrite(std::ostringstream &InfoStream, T InfoValue) {
-	InfoStream.write(reinterpret_cast<const char *>(&InfoValue), sizeof(InfoValue));
+inline static void InfoWrite(std::ostringstream& InfoStream, T InfoValue) {
+	InfoStream.write(reinterpret_cast<const char*>(&InfoValue), sizeof(InfoValue));
 }
 // 强制要求2个以上输入，以免递归
 template<typename T1, typename T2, typename... T>
-inline static void InfoWrite(std::ostringstream &InfoStream, T1 InfoValue1, T2 InfoValue2, T... InfoValues) {
+inline static void InfoWrite(std::ostringstream& InfoStream, T1 InfoValue1, T2 InfoValue2, T... InfoValues) {
 	int _[] = { (InfoWrite(InfoStream, InfoValue1), 0), (InfoWrite(InfoStream, InfoValue2), 0), (InfoWrite(InfoStream, InfoValues), 0)... };
 }
 extern Async_stream_IO::AsyncStream SerialStream;
 
 template<typename Target>
 struct _ModuleID {
-	static UID const &ID;
+	static UID const& ID;
 };
 struct Process;
 struct IInformative {
@@ -109,18 +109,18 @@ struct IInformative {
 };
 // 所有模块的基类，本身可以当作一个什么都不做的空模块使用
 struct Module : IInformative {
-	Process &Container;
-	constexpr Module(Process &Container)
-	  : Container(Container) {
+	Process& Container;
+	constexpr Module(Process& Container)
+		: Container(Container) {
 	}
 	// 返回是否需要等待回调，并提供回调函数。返回true表示模块还在执行中，将在执行完毕后调用回调函数；返回false表示模块已执行完毕，不会调用回调函数。
-	virtual bool Start(std::move_only_function<void()> &FinishCallback) {
+	virtual bool Start(std::move_only_function<void()>& FinishCallback) {
 		return false;
 	}
-	// 放弃该步骤。未在执行的步骤放弃也不会出错。但不会调用FinishCallback。
+	// 放弃该模块。未在执行的步骤放弃也不会出错。但不会调用FinishCallback。
 	virtual void Abort() {}
 
-	// 重新开始当前执行中的步骤，不改变下一步。不应试图重启当前未在执行中的步骤。
+	// 重新开始当前执行中的步骤，不改变下一步。重启已结束的模块，本次执行结束后也会继续调用上次Start设置的下一步。
 	virtual void Restart() {}
 
 	// 注意模块析构时不Abort。模块的Abort只由ModuleAbort步骤负责调用。
@@ -129,7 +129,7 @@ struct Module : IInformative {
 protected:
 	static std::move_only_function<void()> _EmptyCallback;
 	struct _EmptyStart {
-		Module *const ContentModule;
+		Module* const ContentModule;
 		void operator()() const {
 			ContentModule->Start(_EmptyCallback);
 		}
@@ -189,31 +189,31 @@ struct PodField {
 	UID const FieldType;
 	T FieldValue;
 	constexpr PodField(UID FieldName, T FieldValue)
-	  : FieldName(FieldName), FieldType(_TypeID<T>::value), FieldValue(FieldValue) {
+		: FieldName(FieldName), FieldType(_TypeID<T>::value), FieldValue(FieldValue) {
 	}
 	constexpr PodField(UID FieldName, UID FieldType, T FieldValue)
-	  : FieldName(FieldName), FieldType(FieldType), FieldValue(FieldValue) {
+		: FieldName(FieldName), FieldType(FieldType), FieldValue(FieldValue) {
 	}
 };
 #pragma pack(pop)
 class Process {
 	Async_stream_IO::MessageSize InfoSize;
-	std::set<PinListener *> ActiveInterrupts;
-	std::set<Timers_one_for_all::TimerClass *> ActiveTimers;
-	std::map<UID const *, std::unique_ptr<IInformative>> Modules;
+	std::set<PinListener*> ActiveInterrupts;
+	std::set<Timers_one_for_all::TimerClass*> ActiveTimers;
+	std::map<UID const*, std::unique_ptr<IInformative>> Modules;
 	uint16_t TimesLeft;
-	UID const *StartPointer;
+	UID const* StartPointer;
 #pragma pack(push, 1)
 	struct InfoHeader {
 		uint8_t const NumFields = 2;
-		PodField<UID const *> StartModule;
+		PodField<UID const*> StartModule;
 		UID const Field2Name = UID::Field_Modules;
 		UID const Field2Type = UID::Type_Map;
 		uint8_t NumModules;
 		UID const ModuleKeyType = UID::Type_Pointer;
 		UID const ModuleValueType = UID::Type_Struct;
-		constexpr InfoHeader(UID const *StartPointer, uint8_t NumModules)
-		  : StartModule{ UID::Field_StartModule, StartPointer }, NumModules(NumModules) {
+		constexpr InfoHeader(UID const* StartPointer, uint8_t NumModules)
+			: StartModule{ UID::Field_StartModule, StartPointer }, NumModules(NumModules) {
 		}
 	};
 #pragma pack(pop)
@@ -221,7 +221,7 @@ class Process {
 		[this]() {
 		  while (--TimesLeft)
 			  // 基类指针转派生，不能用reinterpret_cast
-			  if (static_cast<Module *>(Modules[StartPointer].get())->Start(FinishCallback))
+			  if (static_cast<Module*>(Modules[StartPointer].get())->Start(FinishCallback))
 				  return;
 		  SerialStream.AsyncInvoke(static_cast<Async_stream_IO::Port>(UID::PortC_ProcessFinished), this);
 		}
@@ -229,35 +229,35 @@ class Process {
 
 	// 中断不安全
 	void _Abort() {
-		for (PinListener *H : ActiveInterrupts)
+		for (PinListener* H : ActiveInterrupts)
 			delete H;
-		for (Timers_one_for_all::TimerClass *T : ActiveTimers) {
+		for (Timers_one_for_all::TimerClass* T : ActiveTimers) {
 			T->Stop();
 			T->Allocatable = true;  // 使其可以被重新分配
 		}
-		for (std::move_only_function<void()> *Cleaner : ExtraCleaners)
+		for (std::move_only_function<void()>* Cleaner : ExtraCleaners)
 			(*Cleaner)();
 	}
 	template<typename T>
-	auto Construct(T *At) -> decltype(new (At) T(*this)) {
+	auto Construct(T* At) -> decltype(new (At) T(*this)) {
 		new (At) T(*this);
 	}
 	template<typename T>
-	static auto Construct(T *At) -> decltype(new (At) T()) {
+	static auto Construct(T* At) -> decltype(new (At) T()) {
 		new (At) T;
 	}
 
 public:
 	void Pause() const {
-		for (PinListener *H : ActiveInterrupts)
+		for (PinListener* H : ActiveInterrupts)
 			H->Pause();
-		for (Timers_one_for_all::TimerClass *T : ActiveTimers)
+		for (Timers_one_for_all::TimerClass* T : ActiveTimers)
 			T->Pause();
 	}
 	void Continue() const {
-		for (PinListener *H : ActiveInterrupts)
+		for (PinListener* H : ActiveInterrupts)
 			H->Continue();
-		for (Timers_one_for_all::TimerClass *T : ActiveTimers)
+		for (Timers_one_for_all::TimerClass* T : ActiveTimers)
 			T->Continue();
 	}
 	void Abort() {
@@ -270,32 +270,32 @@ public:
 	virtual ~Process() {
 		_Abort();
 	}
-	PinListener *RegisterInterrupt(uint8_t Pin, std::move_only_function<void()> &&Callback) {
-		PinListener *Listener = new PinListener(Pin, std::move(Callback));
+	PinListener* RegisterInterrupt(uint8_t Pin, std::move_only_function<void()>&& Callback) {
+		PinListener* Listener = new PinListener(Pin, std::move(Callback));
 		ActiveInterrupts.insert(Listener);
 		return Listener;
 	}
-	void UnregisterInterrupt(PinListener *Handle) {
+	void UnregisterInterrupt(PinListener* Handle) {
 		delete Handle;
 		ActiveInterrupts.erase(Handle);
 	}
-	Timers_one_for_all::TimerClass *AllocateTimer() {
-		Timers_one_for_all::TimerClass *Timer = Timers_one_for_all::AllocateTimer();
+	Timers_one_for_all::TimerClass* AllocateTimer() {
+		Timers_one_for_all::TimerClass* Timer = Timers_one_for_all::AllocateTimer();
 		ActiveTimers.insert(Timer);
 		return Timer;
 	}
 	// 此操作不负责停止计时器，仅使其可以被再分配
-	void UnregisterTimer(Timers_one_for_all::TimerClass *Timer) {
+	void UnregisterTimer(Timers_one_for_all::TimerClass* Timer) {
 		ActiveTimers.erase(Timer);
 		Timer->Allocatable = true;
 	}
 	template<typename ModuleType>
-	_IDModule_t<ModuleType> *LoadModule() {
+	_IDModule_t<ModuleType>* LoadModule() {
 		using _ModuleType = _IDModule_t<ModuleType>;
 		auto const Iter = Modules.find(&_ModuleID<_ModuleType>::ID);
 		if (Iter != Modules.end())
-			return static_cast<_ModuleType *>(Iter->second.get());
-		_ModuleType *const RawMemory = static_cast<_ModuleType *>(operator new(sizeof(_ModuleType)));
+			return static_cast<_ModuleType*>(Iter->second.get());
+		_ModuleType* const RawMemory = static_cast<_ModuleType*>(operator new(sizeof(_ModuleType)));
 
 		Modules.emplace(&_ModuleID<_ModuleType>::ID, std::unique_ptr<IInformative>(RawMemory));
 		//必须先占位后构造，以免递归构造自身
@@ -319,7 +319,7 @@ public:
 
 	bool Start(uint16_t Times) {
 		for (TimesLeft = Times; TimesLeft > 0; --TimesLeft)
-			if (static_cast<Module *>(Modules[StartPointer].get())->Start(FinishCallback))
+			if (static_cast<Module*>(Modules[StartPointer].get())->Start(FinishCallback))
 				return true;
 		return false;
 	}
@@ -327,13 +327,13 @@ public:
 	void SendInfo(Async_stream_IO::Port Port) const {
 		Async_stream_IO::InterruptGuard const _ = SerialStream.BeginSend(InfoSize, Port);
 		SerialStream << InfoHeader(StartPointer, Modules.size());
-		for (auto const &Iterator : Modules) {
+		for (auto const& Iterator : Modules) {
 			SerialStream << Iterator.first;
 			Iterator.second->WriteInfo();
 		}
 	}
 	std::unordered_map<UID, uint16_t> TrialsDone;
-	std::set<std::move_only_function<void()> *> ExtraCleaners;
+	std::set<std::move_only_function<void()>*> ExtraCleaners;
 };
 struct IRandom {
 	virtual void Randomize() = 0;
@@ -356,17 +356,27 @@ struct _Sum<First, Rest...> {
 	Async_stream_IO::MessageSize InfoSize() const override { \
 		return sizeof(InfoStruct); \
 	}
+struct OneTimeFC {
+protected:
+	std::move_only_function<void()>* FinishCallback;
+	//防止Skip重复调用或未运行就Skip，FinishCallback必须调完即弃。FinishCallback的可用性必须由调用方负责检查。
+	void FcAndDiscard() {
+		std::move_only_function<void()>& FC = *FinishCallback;
+		FinishCallback = nullptr;
+		FC();
+	}
+};
 template<typename... SubModules>
-struct RandomSequential : Module, IRandom {
+struct RandomSequential : Module, IRandom, OneTimeFC {
 protected:
 	static constexpr
 #ifdef ARDUINO_ARCH_AVR
-	  std::ArduinoUrng
+		std::ArduinoUrng
 #endif
 #ifdef ARDUINO_ARCH_SAM
-	    std::TrueUrng
+		std::TrueUrng
 #endif
-	      Urng{};
+		Urng{};
 #pragma pack(push, 1)
 	struct InfoStruct {
 		uint8_t const NumFields = 2;
@@ -375,16 +385,16 @@ protected:
 		UID const Field2Type = UID::Type_Array;
 		uint8_t const NumModules{ sizeof...(SubModules) };
 		UID const ModuleType = UID::Type_Pointer;
-		UID const *const ModuleValues[sizeof...(SubModules)] = { &_ModuleID<_IDModule_t<SubModules>>::ID... };
+		UID const* const ModuleValues[sizeof...(SubModules)] = { &_ModuleID<_IDModule_t<SubModules>>::ID... };
 	};
 #pragma pack(pop)
-	Module *SubPointers[sizeof...(SubModules)] = { Module::Container.LoadModule<_IDModule_t<SubModules>>()... };  // SAM编译器不能自动推断数组长度，导致cend不可用
-	Module *const *CurrentModule = std::cend(SubPointers);
+	Module* SubPointers[sizeof...(SubModules)] = { Module::Container.LoadModule<_IDModule_t<SubModules>>()... };  // SAM编译器不能自动推断数组长度，导致cend不可用
+	Module* const* CurrentModule = std::cend(SubPointers);
 	std::move_only_function<void()> NextBlock;
 
 public:
 	template<uint16_t... Repeats>
-	struct WithRepeat : Module, IRandom {
+	struct WithRepeat : Module, IRandom, OneTimeFC {
 	protected:
 #pragma pack(push, 1)
 		struct InfoStruct {
@@ -396,38 +406,43 @@ public:
 			uint8_t const NumColumns = 2;
 			UID const Column1Name = UID::Column_Module;
 			UID const Column1Type = UID::Type_Pointer;
-			UID const *const Column1Values[sizeof...(SubModules)] = { &_ModuleID<_IDModule_t<SubModules>>::ID... };
+			UID const* const Column1Values[sizeof...(SubModules)] = { &_ModuleID<_IDModule_t<SubModules>>::ID... };
 			UID const Column2Name = UID::Column_Repeats;
 			UID const Column2Type = UID::Type_UInt16;
 			uint16_t const Column2Values[sizeof...(SubModules)];
 			constexpr InfoStruct()
-			  : Column2Values{ Repeats... } {}
+				: Column2Values{ Repeats... } {
+			}
 		};
 #pragma pack(pop)
-		Module *SubPointers[_Sum<Repeats...>::value];
-		Module **CurrentModule = std::begin(SubPointers);
-		std::move_only_function<void()> NextBlock;  // 不能在此处等号初始化，SAM会编译器错误
-		std::move_only_function<void()>*FinishCallback
+		Module* SubPointers[_Sum<Repeats...>::value];
+		Module** CurrentModule = std::end(SubPointers);  //初始化为end表示当前未在运行，<end表示正在运行
+		std::move_only_function<void()> NextBlock;       // 不能在此处等号初始化，SAM会编译器错误
 	public:
 		void Randomize() override {
 			std::shuffle(std::begin(SubPointers), std::end(SubPointers), Urng);
 		}
-		WithRepeat(Process &Container)
-		  : Module(Container), NextBlock{ [this]() {
-			    while (++CurrentModule < std::end(SubPointers))
-				    if ((*CurrentModule)->Start(NextBlock))
-					    return;
-			  } } {
-			Module **_[] = { (CurrentModule = std::fill_n(CurrentModule, Repeats, Module::Container.LoadModule<_IDModule_t<SubModules>>()))... };
+		WithRepeat(Process& Container)
+			: Module(Container), NextBlock{ [this]() {  //初始化NextBlock，主要是为了防止直接Restart时NextBlock未定义。
+				  while (++CurrentModule < std::end(SubPointers))
+					  if ((*CurrentModule)->Start(NextBlock))
+						  return;
+				} } {
+			Module** _[] = { (CurrentModule = std::fill_n(CurrentModule, Repeats, Module::Container.LoadModule<_IDModule_t<SubModules>>()))... };
 			Randomize();
 		}
 		void Abort() override {
-			if (CurrentModule < std::end(SubPointers))
+			if (CurrentModule < std::end(SubPointers)) {
 				(*CurrentModule)->Abort();
+				FinishCallback = nullptr;
+			}
 		}
-		void Skip(){
-			if (CurrentModule < std::end(SubPointers))
+		void Skip() {
+			if (CurrentModule < std::end(SubPointers)) {
 				(*CurrentModule)->Abort();
+				if (FinishCallback)//被Restart启动的运行状态，FinishCallback可能为空
+					FcAndDiscard();
+			}
 		}
 		void Restart() override {
 			Abort();
@@ -435,16 +450,17 @@ public:
 				if ((*CurrentModule)->Start(NextBlock))
 					return;
 		}
-		bool Start(std::move_only_function<void()> &FC) override {
+		bool Start(std::move_only_function<void()>& FC) override {
 			Abort();
+			FinishCallback = &FC;
 			for (CurrentModule = std::begin(SubPointers); CurrentModule < std::end(SubPointers); ++CurrentModule)
 				if ((*CurrentModule)->Start(NextBlock)) {
-					NextBlock = [this, &FC]() {
+					NextBlock = [this]() {
 						while (++CurrentModule < std::end(SubPointers))
 							if ((*CurrentModule)->Start(NextBlock))
 								return;
-						FC();
-					};
+						FcAndDiscard();
+						};
 					return true;
 				}
 			return false;
@@ -455,17 +471,20 @@ public:
 	void Randomize() override {
 		std::shuffle(std::begin(SubPointers), std::end(SubPointers), Urng);
 	}
-	RandomSequential(Process &Container)
-	  : Module(Container), NextBlock{ [this]() {
-		    while (++CurrentModule < std::cend(SubPointers))
-			    if ((*CurrentModule)->Start(NextBlock))
-				    return;
-		  } } {
+	RandomSequential(Process& Container)
+		: Module(Container), NextBlock{ [this]() {
+			  while (++CurrentModule < std::cend(SubPointers))
+				  if ((*CurrentModule)->Start(NextBlock))
+					  return;
+			} } {
 		Randomize();
 	}
 	void Abort() override {
 		if (CurrentModule < std::cend(SubPointers))
+		{
 			(*CurrentModule)->Abort();
+			FinishCallback = nullptr;
+		}
 	}
 	void Restart() override {
 		Abort();
@@ -473,16 +492,17 @@ public:
 			if ((*CurrentModule)->Start(NextBlock))
 				return;
 	}
-	bool Start(std::move_only_function<void()> &FC) override {
+	bool Start(std::move_only_function<void()>& FC) override {
 		Abort();
+		FinishCallback = &FC;
 		for (CurrentModule = std::cbegin(SubPointers); CurrentModule < std::cend(SubPointers); ++CurrentModule)
 			if ((*CurrentModule)->Start(NextBlock)) {
 				NextBlock = [this, &FC]() {
 					while (++CurrentModule < std::cend(SubPointers))
 						if ((*CurrentModule)->Start(NextBlock))
 							return;
-					FC();
-				};
+					FcAndDiscard();
+					};
 				return true;
 			}
 		return false;
@@ -555,26 +575,26 @@ template<typename Content, typename Times = Infinite>
 struct Repeat : Module {
 protected:
 	uint16_t TimesLeft;
-	Times const *const T;
+	Times const* const T;
 #pragma pack(push, 1)
 	struct InfoStruct {
 		uint8_t const NumFields = 3;
 		PodField<UID> const ID{ UID::Field_ID, _ModuleID<Repeat>::ID };
-		PodField<UID const *> const ContentField{ UID::Field_Content, &_ModuleID<_IDModule_t<Content>>::ID };
-		PodField<UID const *> const TimesField{ UID::Field_Times, &_ModuleID<Times>::ID };
+		PodField<UID const*> const ContentField{ UID::Field_Content, &_ModuleID<_IDModule_t<Content>>::ID };
+		PodField<UID const*> const TimesField{ UID::Field_Times, &_ModuleID<Times>::ID };
 	};
 #pragma pack(pop)
-	_IDModule_t<Content> *const ContentPtr = Module::Container.LoadModule<Content>();
+	_IDModule_t<Content>* const ContentPtr = Module::Container.LoadModule<Content>();
 	std::move_only_function<void()> NextBlock;
 
 public:
-	Repeat(Process &Container)
-	  : Module(Container), NextBlock{ [this]() {
-		    while (--TimesLeft)
-			    if (ContentPtr->Start(NextBlock))
-				    return;
-		  } },
-	    T{ Module::Container.LoadModule<Times>() } {
+	Repeat(Process& Container)
+		: Module(Container), NextBlock{ [this]() {
+			  while (--TimesLeft)
+				  if (ContentPtr->Start(NextBlock))
+					  return;
+			} },
+		T{ Module::Container.LoadModule<Times>() } {
 	}
 	void Restart() override {
 		Abort();
@@ -582,7 +602,7 @@ public:
 			if (ContentPtr->Start(NextBlock))
 				return;
 	}
-	bool Start(std::move_only_function<void()> &FC) override {
+	bool Start(std::move_only_function<void()>& FC) override {
 		Abort();
 		for (TimesLeft = T->Current(); TimesLeft; --TimesLeft)
 			if (ContentPtr->Start(NextBlock)) {
@@ -591,7 +611,7 @@ public:
 						if (ContentPtr->Start(NextBlock))
 							return;
 					FC();
-				};
+					};
 				return true;
 			}
 		return false;
@@ -608,18 +628,18 @@ protected:
 	struct InfoStruct {
 		uint8_t const NumFields = 2;
 		PodField<UID> const ID{ UID::Field_ID, _ModuleID<Repeat>::ID };
-		PodField<UID const *> const ContentField{ UID::Field_Content, &_ModuleID<_IDModule_t<Content>>::ID };
+		PodField<UID const*> const ContentField{ UID::Field_Content, &_ModuleID<_IDModule_t<Content>>::ID };
 	};
 #pragma pack(pop)
-	_IDModule_t<Content> *const ContentPtr = Module::Container.LoadModule<Content>();
+	_IDModule_t<Content>* const ContentPtr = Module::Container.LoadModule<Content>();
 	std::move_only_function<void()> NextBlock;
 public:
-	Repeat(Process &Container)
-	  : Module(Container), NextBlock{ [this]() {
-		    for (;;)
-			    if (ContentPtr->Start(NextBlock))
-				    return;
-		  } } {
+	Repeat(Process& Container)
+		: Module(Container), NextBlock{ [this]() {
+			  for (;;)
+				  if (ContentPtr->Start(NextBlock))
+					  return;
+			} } {
 	}
 	void Abort() override {
 		ContentPtr->Abort();
@@ -628,7 +648,7 @@ public:
 		ContentPtr->Abort();
 		NextBlock();
 	}
-	bool Start(std::move_only_function<void()> &FC) override {
+	bool Start(std::move_only_function<void()>& FC) override {
 		Abort();
 		for (;;)
 			if (ContentPtr->Start(NextBlock))
@@ -643,8 +663,8 @@ UID const Repeat<Content, Infinite>::ID = UID::Module_Repeat;
 template<typename... SubModules>
 struct _Sequential : Module {
 protected:
-	Module *const SubPointers[sizeof...(SubModules)] = { Module::Container.LoadModule<SubModules>()... };
-	Module *const *CurrentModule = std::cend(SubPointers);
+	Module* const SubPointers[sizeof...(SubModules)] = { Module::Container.LoadModule<SubModules>()... };
+	Module* const* CurrentModule = std::cend(SubPointers);
 
 	// 必须预设NextBlock，这样即使没有Start直接Restart也能执行完整个模块
 	std::move_only_function<void()> NextBlock;
@@ -656,16 +676,16 @@ protected:
 		UID const Field2Type = UID::Type_Array;
 		uint8_t const NumModules{ sizeof...(SubModules) };
 		UID const ModuleType = UID::Type_Pointer;
-		UID const *const ModuleValues[sizeof...(SubModules)] = { &_ModuleID<_IDModule_t<SubModules>>::ID... };
+		UID const* const ModuleValues[sizeof...(SubModules)] = { &_ModuleID<_IDModule_t<SubModules>>::ID... };
 	};
 #pragma pack(pop)
 public:
-	_Sequential(Process &Container)
-	  : Module(Container), NextBlock{ [this]() {
-		    while (++CurrentModule < std::cend(SubPointers))
-			    if ((*CurrentModule)->Start(NextBlock))
-				    return;
-		  } } {
+	_Sequential(Process& Container)
+		: Module(Container), NextBlock{ [this]() {
+			  while (++CurrentModule < std::cend(SubPointers))
+				  if ((*CurrentModule)->Start(NextBlock))
+					  return;
+			} } {
 	}
 	void Abort() override {
 		if (CurrentModule < std::cend(SubPointers))
@@ -677,7 +697,7 @@ public:
 			if ((*CurrentModule)->Start(NextBlock))
 				return;
 	}
-	bool Start(std::move_only_function<void()> &FC) override {
+	bool Start(std::move_only_function<void()>& FC) override {
 		Abort();
 		for (CurrentModule = std::cbegin(SubPointers); CurrentModule < std::cend(SubPointers); ++CurrentModule) {
 			if ((*CurrentModule)->Start(NextBlock)) {
@@ -686,7 +706,7 @@ public:
 						if ((*CurrentModule)->Start(NextBlock))
 							return;
 					FC();
-				};
+					};
 				return true;
 			}
 		}
@@ -704,8 +724,8 @@ protected:
 	};
 #pragma pack(pop)
 public:
-	_Sequential(Process &Container)
-	  : Module(Container) {
+	_Sequential(Process& Container)
+		: Module(Container) {
 	}
 	static constexpr uint16_t NumTrials = 0;
 	InfoImplement;
@@ -714,53 +734,53 @@ template<typename... SubModules>
 UID const _Sequential<SubModules...>::ID = UID::Module_Sequential;
 
 namespace detail {
-template<typename... Ts>
-struct type_list {
-};
+	template<typename... Ts>
+	struct type_list {
+	};
 
-template<typename A, typename B>
-struct concat;
-template<typename... A, typename... B>
-struct concat<type_list<A...>, type_list<B...>> {
-	using type = type_list<A..., B...>;
-};
+	template<typename A, typename B>
+	struct concat;
+	template<typename... A, typename... B>
+	struct concat<type_list<A...>, type_list<B...>> {
+		using type = type_list<A..., B...>;
+	};
 
-template<typename... Args>
-struct flatten_pack;
+	template<typename... Args>
+	struct flatten_pack;
 
-template<typename T>
-struct flatten_one {
-	using type = type_list<T>;
-};
+	template<typename T>
+	struct flatten_one {
+		using type = type_list<T>;
+	};
 
-template<typename... Inner>
-struct flatten_one<_Sequential<Inner...>> {
-	using type = typename flatten_pack<Inner...>::type;
-};
+	template<typename... Inner>
+	struct flatten_one<_Sequential<Inner...>> {
+		using type = typename flatten_pack<Inner...>::type;
+	};
 
-template<>
-struct flatten_pack<> {
-	using type = type_list<>;
-};
+	template<>
+	struct flatten_pack<> {
+		using type = type_list<>;
+	};
 
-template<typename Head, typename... Tail>
-struct flatten_pack<Head, Tail...> {
-	using type = typename concat<
-	  typename flatten_one<Head>::type,
-	  typename flatten_pack<Tail...>::type>::type;
-};
+	template<typename Head, typename... Tail>
+	struct flatten_pack<Head, Tail...> {
+		using type = typename concat<
+			typename flatten_one<Head>::type,
+			typename flatten_pack<Tail...>::type>::type;
+	};
 
-template<typename List>
-struct list_to_seq;
-template<typename... Ts>
-struct list_to_seq<type_list<Ts...>> {
-	using type = _Sequential<Ts...>;
-};
+	template<typename List>
+	struct list_to_seq;
+	template<typename... Ts>
+	struct list_to_seq<type_list<Ts...>> {
+		using type = _Sequential<Ts...>;
+	};
 }
 // 依次执行模块。嵌套的Sequential会被展开。
 template<typename... Args>
 using Sequential = typename detail::list_to_seq<
-  typename detail::flatten_pack<Args...>::type>::type;
+	typename detail::flatten_pack<Args...>::type>::type;
 
 struct _TimedModule : Module {
 	using Module::Module;
@@ -772,14 +792,14 @@ struct _TimedModule : Module {
 	}
 
 protected:
-	Timers_one_for_all::TimerClass *Timer = nullptr;
+	Timers_one_for_all::TimerClass* Timer = nullptr;
 	// 不检查当前Timer是否有效
 	void UnregisterTimer() {
 		Module::Container.UnregisterTimer(Timer);
 		Timer = nullptr;
 	}
 	struct _UnregisterTimer {
-		_TimedModule *const ContentModule;
+		_TimedModule* const ContentModule;
 		void operator()() const {
 			ContentModule->UnregisterTimer();
 		}
@@ -791,12 +811,12 @@ struct _Delay : _TimedModule {
 		if (!Timer)
 			Timer = Module::Container.AllocateTimer();
 	}
-	bool Start(std::move_only_function<void()> &FC) override {
+	bool Start(std::move_only_function<void()>& FC) override {
 		// 在冷静阶段，Restart会被高频执行，因此只能牺牲一下Start，确保Restart的效率
 		FinishCallback = [this, &FC]() {
 			UnregisterTimer();
 			FC();
-		};
+			};
 		Restart();
 		return true;
 	}
@@ -813,10 +833,10 @@ protected:
 		uint8_t const NumFields = 3;
 		PodField<UID> const ID{ UID::Field_ID, _ModuleID<Delay>::ID };
 		PodField<UID> const UnitField{ UID::Field_Unit, _TypeID<Unit>::value };
-		PodField<UID const *> const Duration{ UID::Field_Duration, &_ModuleID<Value>::ID };
+		PodField<UID const*> const Duration{ UID::Field_Duration, &_ModuleID<Value>::ID };
 	};
 #pragma pack(pop)
-	Value const *const DurationPtr = Module::Container.LoadModule<Value>();
+	Value const* const DurationPtr = Module::Container.LoadModule<Value>();
 
 public:
 	using _Delay::_Delay;
@@ -841,7 +861,7 @@ protected:
 #pragma pack(pop)
 public:
 	using Module::Module;
-	bool Start(std::move_only_function<void()> &FC) override {
+	bool Start(std::move_only_function<void()>& FC) override {
 		return true;
 	}
 	InfoImplement;
@@ -859,16 +879,16 @@ struct _RepeatEvery : _TimedModule {
 		else
 			Timer = Module::Container.AllocateTimer();
 	}
-	bool Start(std::move_only_function<void()> &FC) override {
+	bool Start(std::move_only_function<void()>& FC) override {
 		// 默认的无限重复，不需要FinishCallback。
 		Restart();
 		return true;
 	}
 
 protected:
-	Module *const ContentPtr = Module::Container.LoadModule<Content>();
+	Module* const ContentPtr = Module::Container.LoadModule<Content>();
 	std::move_only_function<void()> RepeatCallback{ _EmptyStart{ ContentPtr } };
-	Period const *const PeriodPtr = Module::Container.LoadModule<Period>();
+	Period const* const PeriodPtr = Module::Container.LoadModule<Period>();
 };
 /*
 每隔指定周期，执行一次内容模块。这个周期就是最终的绝对的周期长度，内容模块异步执行，不占用周期时间。第一次执行也需要等待周期时长之后。
@@ -878,15 +898,15 @@ template<typename Content, typename Unit, typename Period, typename Times = Infi
 struct RepeatEvery : _RepeatEvery<Content, Period> {
 protected:
 	std::move_only_function<void()> FinishCallback{ _TimedModule::_UnregisterTimer{ this } };
-	Times const *const TimesPtr = Module::Container.LoadModule<Times>();
+	Times const* const TimesPtr = Module::Container.LoadModule<Times>();
 #pragma pack(push, 1)
 	struct InfoStruct {
 		uint8_t const NumFields = 5;
 		PodField<UID> const ID{ UID::Field_ID, _ModuleID<RepeatEvery>::ID };
-		PodField<UID const *> const ContentField{ UID::Field_Content, &_ModuleID<Content>::ID };
+		PodField<UID const*> const ContentField{ UID::Field_Content, &_ModuleID<Content>::ID };
 		PodField<UID> const UnitField{ UID::Field_Unit, _TypeID<Unit>::value };
-		PodField<UID const *> const PeriodField{ UID::Field_Period, &_ModuleID<Period>::ID };
-		PodField<UID const *> const TimesField{ UID::Field_Times, &_ModuleID<Times>::ID };
+		PodField<UID const*> const PeriodField{ UID::Field_Period, &_ModuleID<Period>::ID };
+		PodField<UID const*> const TimesField{ UID::Field_Times, &_ModuleID<Times>::ID };
 	};
 #pragma pack(pop)
 	using MyBase = _RepeatEvery<Content, Period>;
@@ -897,13 +917,13 @@ public:
 		MyBase::Restart();
 		_TimedModule::Timer->RepeatEvery(Unit{ MyBase::PeriodPtr->Current() }, MyBase::RepeatCallback, TimesPtr->Current(), FinishCallback);
 	}
-	bool Start(std::move_only_function<void()> &FC) override {
+	bool Start(std::move_only_function<void()>& FC) override {
 		if (!TimesPtr->Current())
 			return false;
 		FinishCallback = [this, &FC]() {
 			this->UnregisterTimer();
 			FC();
-		};
+			};
 		Restart();
 		return true;
 	}
@@ -919,9 +939,9 @@ protected:
 	struct InfoStruct {
 		uint8_t const NumFields = 5;
 		PodField<UID> const ID{ UID::Field_ID, _ModuleID<RepeatEvery>::ID };
-		PodField<UID const *> const ContentField{ UID::Field_Content, &_ModuleID<Content>::ID };
+		PodField<UID const*> const ContentField{ UID::Field_Content, &_ModuleID<Content>::ID };
 		PodField<UID> const UnitField{ UID::Field_Unit, _TypeID<Unit>::value };
-		PodField<UID const *> const PeriodField{ UID::Field_Period, &_ModuleID<Period>::ID };
+		PodField<UID const*> const PeriodField{ UID::Field_Period, &_ModuleID<Period>::ID };
 		UID const TimesFieldName = UID::Field_Times;
 		UID const TimesFieldType = UID::Type_Infinite;
 	};
@@ -950,22 +970,23 @@ struct _DoubleRepeat : _TimedModule {
 		if (Timer) {
 			ContentAPtr->Abort();
 			ContentBPtr->Abort();
-		} else
+		}
+		else
 			Timer = Module::Container.AllocateTimer();
 	}
-	bool Start(std::move_only_function<void()> &FC) override {
+	bool Start(std::move_only_function<void()>& FC) override {
 		// 默认的无限重复，不需要FinishCallback。
 		Restart();
 		return true;
 	}
 
 protected:
-	Module *const ContentAPtr = Module::Container.LoadModule<ContentA>();
-	Module *const ContentBPtr = Module::Container.LoadModule<ContentB>();
+	Module* const ContentAPtr = Module::Container.LoadModule<ContentA>();
+	Module* const ContentBPtr = Module::Container.LoadModule<ContentB>();
 	std::move_only_function<void()> RepeatCallbackA{ _EmptyStart{ ContentAPtr } };
 	std::move_only_function<void()> RepeatCallbackB{ _EmptyStart{ ContentBPtr } };
-	PeriodA const *const PeriodAPtr = Module::Container.LoadModule<PeriodA>();
-	PeriodB const *const PeriodBPtr = Module::Container.LoadModule<PeriodB>();
+	PeriodA const* const PeriodAPtr = Module::Container.LoadModule<PeriodA>();
+	PeriodB const* const PeriodBPtr = Module::Container.LoadModule<PeriodB>();
 };
 /*
 等待时间A后，执行一次模块A；再等待时间B后，执行一次模块B，然后循环。周期总时长就是两个时间之和，不等待模块本身的执行时间。
@@ -979,15 +1000,15 @@ protected:
 	struct InfoStruct {
 		uint8_t const NumFields = 7;
 		PodField<UID> const ID{ UID::Field_ID, _ModuleID<DoubleRepeat>::ID };
-		PodField<UID const *> const ContentAField{ UID::Field_ContentA, &_ModuleID<ContentA>::ID };
-		PodField<UID const *> const ContentBField{ UID::Field_ContentB, &_ModuleID<ContentB>::ID };
+		PodField<UID const*> const ContentAField{ UID::Field_ContentA, &_ModuleID<ContentA>::ID };
+		PodField<UID const*> const ContentBField{ UID::Field_ContentB, &_ModuleID<ContentB>::ID };
 		PodField<UID> const UnitField{ UID::Field_Unit, _TypeID<Unit>::value };
-		PodField<UID const *> const PeriodAField{ UID::Field_PeriodA, &_ModuleID<PeriodA>::ID };
-		PodField<UID const *> const PeriodBField{ UID::Field_PeriodB, &_ModuleID<PeriodB>::ID };
-		PodField<UID const *> const TimesField{ UID::Field_Times, &_ModuleID<Times>::ID };
+		PodField<UID const*> const PeriodAField{ UID::Field_PeriodA, &_ModuleID<PeriodA>::ID };
+		PodField<UID const*> const PeriodBField{ UID::Field_PeriodB, &_ModuleID<PeriodB>::ID };
+		PodField<UID const*> const TimesField{ UID::Field_Times, &_ModuleID<Times>::ID };
 	};
 #pragma pack(pop)
-	Times const *const TimesPtr = Module::Container.LoadModule<Times>();
+	Times const* const TimesPtr = Module::Container.LoadModule<Times>();
 	using MyBase = _DoubleRepeat<ContentA, ContentB, PeriodA, PeriodB>;
 
 public:
@@ -996,13 +1017,13 @@ public:
 		MyBase::Restart();
 		_TimedModule::Timer->DoubleRepeat(Unit{ MyBase::PeriodAPtr->Current() }, MyBase::RepeatCallbackA, Unit{ MyBase::PeriodBPtr->Current() }, MyBase::RepeatCallbackB, TimesPtr->Current(), FinishCallback);
 	}
-	bool Start(std::move_only_function<void()> &FC) override {
+	bool Start(std::move_only_function<void()>& FC) override {
 		if (!TimesPtr->Current())
 			return false;
 		FinishCallback = [this, &FC]() {
 			this->UnregisterTimer();
 			FC();
-		};
+			};
 		Restart();
 		return true;
 	}
@@ -1018,11 +1039,11 @@ protected:
 	struct InfoStruct {
 		uint8_t const NumFields = 7;
 		PodField<UID> const ID{ UID::Field_ID, _ModuleID<DoubleRepeat>::ID };
-		PodField<UID const *> const ContentAField{ UID::Field_ContentA, &_ModuleID<ContentA>::ID };
-		PodField<UID const *> const ContentBField{ UID::Field_ContentB, &_ModuleID<ContentB>::ID };
+		PodField<UID const*> const ContentAField{ UID::Field_ContentA, &_ModuleID<ContentA>::ID };
+		PodField<UID const*> const ContentBField{ UID::Field_ContentB, &_ModuleID<ContentB>::ID };
 		PodField<UID> const UnitField{ UID::Field_Unit, _TypeID<Unit>::value };
-		PodField<UID const *> const PeriodAField{ UID::Field_PeriodA, &_ModuleID<PeriodA>::ID };
-		PodField<UID const *> const PeriodBField{ UID::Field_PeriodB, &_ModuleID<PeriodB>::ID };
+		PodField<UID const*> const PeriodAField{ UID::Field_PeriodA, &_ModuleID<PeriodA>::ID };
+		PodField<UID const*> const PeriodBField{ UID::Field_PeriodB, &_ModuleID<PeriodB>::ID };
 		UID const TimesFieldName = UID::Field_Times;
 		UID const TimesFieldType = UID::Type_Infinite;
 	};
@@ -1041,7 +1062,7 @@ template<typename ContentA, typename ContentB, typename Unit, typename PeriodA, 
 UID const DoubleRepeat<ContentA, ContentB, Unit, PeriodA, PeriodB, Infinite>::ID = UID::Module_DoubleRepeat;
 struct _InstantaneousModule : Module {
 	using Module::Module;
-	bool Start(std::move_only_function<void()> &FC) override {
+	bool Start(std::move_only_function<void()>& FC) override {
 		Restart();
 		return false;
 	}
@@ -1049,12 +1070,12 @@ struct _InstantaneousModule : Module {
 template<typename Target>
 struct ModuleAbort : _InstantaneousModule {
 protected:
-	Module *const TargetPtr = Module::Container.LoadModule<Target>();
+	Module* const TargetPtr = Module::Container.LoadModule<Target>();
 #pragma pack(push, 1)
 	struct InfoStruct {
 		uint8_t const NumFields = 2;
 		PodField<UID> const ID{ UID::Field_ID, _ModuleID<ModuleAbort>::ID };
-		PodField<UID const *> const TargetField{ UID::Field_Target, &_ModuleID<Target>::ID };
+		PodField<UID const*> const TargetField{ UID::Field_Target, &_ModuleID<Target>::ID };
 	};
 #pragma pack(pop)
 public:
@@ -1069,12 +1090,12 @@ UID const ModuleAbort<Target>::ID = UID::Module_Abort;
 template<typename Target>
 struct ModuleRestart : _InstantaneousModule {
 protected:
-	Module *const TargetPtr = Module::Container.LoadModule<Target>();
+	Module* const TargetPtr = Module::Container.LoadModule<Target>();
 #pragma pack(push, 1)
 	struct InfoStruct {
 		uint8_t const NumFields = 2;
 		PodField<UID> const ID{ UID::Field_ID, _ModuleID<ModuleRestart>::ID };
-		PodField<UID const *> const TargetField{ UID::Field_Target, &_ModuleID<Target>::ID };
+		PodField<UID const*> const TargetField{ UID::Field_Target, &_ModuleID<Target>::ID };
 	};
 #pragma pack(pop)
 public:
@@ -1089,12 +1110,12 @@ UID const ModuleRestart<Target>::ID = UID::Module_Restart;
 template<typename Target>
 struct ModuleRandomize : _InstantaneousModule {
 protected:
-	IRandom *const TargetPtr = Module::Container.LoadModule<Target>();
+	IRandom* const TargetPtr = Module::Container.LoadModule<Target>();
 #pragma pack(push, 1)
 	struct InfoStruct {
 		uint8_t const NumFields = 2;
 		PodField<UID> const ID{ UID::Field_ID, _ModuleID<ModuleRandomize>::ID };
-		PodField<UID const *> const TargetField{ UID::Field_Target, &_ModuleID<Target>::ID };
+		PodField<UID const*> const TargetField{ UID::Field_Target, &_ModuleID<Target>::ID };
 	};
 #pragma pack(pop)
 public:
@@ -1118,8 +1139,8 @@ protected:
 	};
 #pragma pack(pop)
 public:
-	DigitalWrite(Process &Container)
-	  : _InstantaneousModule(Container) {
+	DigitalWrite(Process& Container)
+		: _InstantaneousModule(Container) {
 		Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
 	}
 	void Restart() override {
@@ -1140,8 +1161,8 @@ protected:
 	};
 #pragma pack(pop)
 public:
-	DigitalToggle(Process &Container)
-	  : _InstantaneousModule(Container) {
+	DigitalToggle(Process& Container)
+		: _InstantaneousModule(Container) {
 		Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
 	}
 	void Restart() override {
@@ -1155,21 +1176,21 @@ UID const DigitalToggle<Pin>::ID = UID::Module_DigitalToggle;
 template<uint8_t Pin, typename Monitor>
 struct MonitorPin : _InstantaneousModule {
 protected:
-	Module *const MonitorPtr = Module::Container.LoadModule<Monitor>();
+	Module* const MonitorPtr = Module::Container.LoadModule<Monitor>();
 #pragma pack(push, 1)
 	struct InfoStruct {
 		uint8_t const NumFields = 3;
 		PodField<UID> const ID{ UID::Field_ID, _ModuleID<MonitorPin>::ID };
 		PodField<uint8_t> const PinField{ UID::Field_Pin, Pin };
-		PodField<UID const *> const MonitorField{ UID::Field_Monitor, &_ModuleID<Monitor>::ID };
+		PodField<UID const*> const MonitorField{ UID::Field_Monitor, &_ModuleID<Monitor>::ID };
 	};
 #pragma pack(pop)
 public:
-	MonitorPin(Process &Container)
-	  : _InstantaneousModule(Container) {
+	MonitorPin(Process& Container)
+		: _InstantaneousModule(Container) {
 		Quick_digital_IO_interrupt::PinMode<Pin, INPUT>();
 	}
-	PinListener *Listener = nullptr;
+	PinListener* Listener = nullptr;
 	void Abort() override {
 		if (Listener) {
 			Module::Container.UnregisterInterrupt(Listener);
@@ -1180,7 +1201,7 @@ public:
 		Abort();
 		Listener = Module::Container.RegisterInterrupt(Pin, [MonitorPtr = MonitorPtr]() {
 			MonitorPtr->Start(_EmptyCallback);
-		});
+			});
 	}
 	InfoImplement;
 };
@@ -1209,12 +1230,12 @@ UID const SerialMessage<Message>::ID = UID::Module_SerialMessage;
 template<typename Content>
 struct Async : _InstantaneousModule {
 protected:
-	Module *const ContentPtr = Module::Container.LoadModule<Content>();
+	Module* const ContentPtr = Module::Container.LoadModule<Content>();
 #pragma pack(push, 1)
 	struct InfoStruct {
 		uint8_t const NumFields = 2;
 		PodField<UID> const ID{ UID::Field_ID, _ModuleID<Async>::ID };
-		PodField<UID const *> const ContentField{ UID::Field_Content, &_ModuleID<Content>::ID };
+		PodField<UID const*> const ContentField{ UID::Field_Content, &_ModuleID<Content>::ID };
 	};
 #pragma pack(pop)
 public:
@@ -1235,8 +1256,8 @@ UID const Async<Content>::ID = UID::Module_Async;
 template<UID TrialID, typename Content>
 struct Trial : Module {
 protected:
-	Module *const ContentPtr = Module::Container.LoadModule<Content>();
-	std::move_only_function<void()> *FinishCallback = &_EmptyCallback;
+	Module* const ContentPtr = Module::Container.LoadModule<Content>();
+	std::move_only_function<void()>* FinishCallback = &_EmptyCallback;
 	void _Restart() {
 		Abort();
 		SerialStream.AsyncInvoke(static_cast<uint8_t>(UID::PortC_TrialStart), &Container, TrialID);
@@ -1245,7 +1266,7 @@ protected:
 	struct InfoStruct {
 		uint8_t const NumFields = 2;
 		PodField<UID> const ID{ UID::Field_ID, TrialID };
-		PodField<UID const *> const ContentField{ UID::Field_Content, &_ModuleID<Content>::ID };
+		PodField<UID const*> const ContentField{ UID::Field_Content, &_ModuleID<Content>::ID };
 	};
 #pragma pack(pop)
 public:
@@ -1257,14 +1278,15 @@ public:
 		_Restart();
 		ContentPtr->Start(*FinishCallback);
 	}
-	bool Start(std::move_only_function<void()> &FC) override {
+	bool Start(std::move_only_function<void()>& FC) override {
 		auto const It = Module::Container.TrialsDone.find(TrialID);
 		if (It != Module::Container.TrialsDone.end())
 			if (It->second) {
 				if (!--It->second)
 					Module::Container.TrialsDone.erase(It);
 				return false;
-			} else
+			}
+			else
 				Module::Container.TrialsDone.erase(It);
 		_Restart();
 		if (ContentPtr->Start(FC)) {
@@ -1282,15 +1304,15 @@ UID const Trial<TrialID, Content>::ID = TrialID;
 template<typename Target, typename Cleaner>
 struct CleanWhenAbort : Module {
 protected:
-	Module *const TargetPtr = Module::Container.LoadModule<Target>();
-	std::move_only_function<void()> *FinishCallback = &_EmptyCallback;
+	Module* const TargetPtr = Module::Container.LoadModule<Target>();
+	std::move_only_function<void()>* FinishCallback = &_EmptyCallback;
 	std::move_only_function<void()> TargetCallback = [this]() {
 		Module::Container.ExtraCleaners.erase(&StartCleaner);
 		(*FinishCallback)();
-	};
+		};
 	std::move_only_function<void()> StartCleaner = [CleanerPtr = Module::Container.LoadModule<Cleaner>()]() {
 		CleanerPtr->Start(_EmptyCallback);
-	};
+		};
 	void _Abort() {
 		TargetPtr->Abort();
 		StartCleaner();
@@ -1299,8 +1321,8 @@ protected:
 	struct InfoStruct {
 		uint8_t const NumFields = 3;
 		PodField<UID> const ID{ UID::Field_ID, _ModuleID<CleanWhenAbort>::ID };
-		PodField<UID const *> const TargetField{ UID::Field_Target, &_ModuleID<Target>::ID };
-		PodField<UID const *> const CleanerField{ UID::Field_Cleaner, &_ModuleID<Cleaner>::ID };
+		PodField<UID const*> const TargetField{ UID::Field_Target, &_ModuleID<Target>::ID };
+		PodField<UID const*> const CleanerField{ UID::Field_Cleaner, &_ModuleID<Cleaner>::ID };
 	};
 #pragma pack(pop)
 public:
@@ -1314,7 +1336,7 @@ public:
 		if (TargetPtr->Start(TargetCallback))
 			Module::Container.ExtraCleaners.insert(&StartCleaner);
 	}
-	bool Start(std::move_only_function<void()> &FC) override {
+	bool Start(std::move_only_function<void()>& FC) override {
 		_Abort();
 		if (TargetPtr->Start(TargetCallback)) {
 			FinishCallback = &FC;
@@ -1351,30 +1373,32 @@ public:
 		if (ContentPtr)
 			ContentPtr->Restart();
 	}
-	bool Start(std::move_only_function<void()> &FC) override {
+	bool Start(std::move_only_function<void()>& FC) override {
 		return ContentPtr && ContentPtr->Start(FC);
 	}
-	Module *ContentPtr = nullptr;
+	Module* ContentPtr = nullptr;
 	InfoImplement;
 	template<typename Content>
 	struct Load : _InstantaneousModule {
 	protected:
-		DynamicSlot *const SlotPtr = Module::Container.LoadModule<DynamicSlot>();
-		Module *const ContentPtr;
+		DynamicSlot* const SlotPtr = Module::Container.LoadModule<DynamicSlot>();
+		Module* const ContentPtr;
 #pragma pack(push, 1)
 		struct InfoStruct {
 			uint8_t const NumFields = 3;
 			PodField<UID> const ID{ UID::Field_ID, _ModuleID<Load>::ID };
-			PodField<UID const *> const Slot{ UID::Field_Slot, &_ModuleID<DynamicSlot>::ID };
-			PodField<UID const *> ContentField;
+			PodField<UID const*> const Slot{ UID::Field_Slot, &_ModuleID<DynamicSlot>::ID };
+			PodField<UID const*> ContentField;
 			constexpr InfoStruct()
-			  : ContentField{ UID::Field_Content, &_ModuleID<Content>::ID } {}
+				: ContentField{ UID::Field_Content, &_ModuleID<Content>::ID } {
+			}
 		};
 #pragma pack(pop)
 	public:
 		//SAM编译器bug：使用了内联struct模板参数的成员初始化只能写在构造方法里，不能直接成员初始化，成员初始化无法访问内联模板参数
-		Load(Process &Container)
-		  : _InstantaneousModule(Container), ContentPtr{ Container.LoadModule<Content>() } {}
+		Load(Process& Container)
+			: _InstantaneousModule(Container), ContentPtr{ Container.LoadModule<Content>() } {
+		}
 		void Restart() override {
 			SlotPtr->ContentPtr = ContentPtr;
 		}
@@ -1382,12 +1406,12 @@ public:
 	};
 	struct Clear : _InstantaneousModule {
 	protected:
-		DynamicSlot *const SlotPtr = Module::Container.LoadModule<DynamicSlot>();
+		DynamicSlot* const SlotPtr = Module::Container.LoadModule<DynamicSlot>();
 #pragma pack(push, 1)
 		struct InfoStruct {
 			uint8_t const NumFields = 2;
 			PodField<UID> const ID{ UID::Field_ID, _ModuleID<Clear>::ID };
-			PodField<UID const *> const Slot{ UID::Field_Slot, &_ModuleID<DynamicSlot>::ID };
+			PodField<UID const*> const Slot{ UID::Field_Slot, &_ModuleID<DynamicSlot>::ID };
 		};
 #pragma pack(pop)
 	public:
@@ -1407,12 +1431,12 @@ template<UID UniqueID>
 UID const DynamicSlot<UniqueID>::Clear::ID = UID::Module_ClearSlot;
 
 template<typename TModule>
-uint16_t Session(Process *P) {
+uint16_t Session(Process* P) {
 	return P->LoadStartModule<TModule>();
 };
 #define Pin static constexpr uint8_t
 template<typename Target>
-UID const &_ModuleID<Target>::ID = Target::ID;
+UID const& _ModuleID<Target>::ID = Target::ID;
 
 // 将模块绑定到指定UID，方便循环引用，并在返回信息中显示自定义名称
 #define AssignModuleID(TargetModule, TargetID) \

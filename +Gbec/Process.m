@@ -50,9 +50,12 @@ classdef Process<handle
 				obj.Pointer=typecast(Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_CreateProcess),Server.PointerType);
 			end
 			DeleteOld=Server.AllProcesses.isConfigured&&Server.AllProcesses.isKey(obj.Pointer);
+			if DeleteOld
+				OldHandle=Server.AllProcesses(obj.Pointer);
+			end
 			Server.AllProcesses(obj.Pointer)=matlab.lang.WeakReference(obj);
 			if DeleteOld
-				Server.AllProcesses(obj.Pointer).Handle.delete;
+				OldHandle.Handle.delete;
 				%必须先替换AllProcesses条目后再删除旧进程，这样旧进程的delete发现AllProcesses中的条目已被新进程替代，就不会联络Arduino释放指针。否则会误删新进程
 			end
 		end

@@ -35,10 +35,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			if~MessageSize
 				return;
 			end
-			try
 			Port=obj.Read;
-			catch
-			end
 			Arguments=obj.Read(MessageSize-1);
 			if Port==255
 				Function(Arguments);
@@ -399,6 +396,7 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 			% Message，任何支持typecast为uint8类型的数据
 			% ToPort，要发送到的远程端口
 			%See also typecast Async_stream_IO.AsyncSerialStream.BeginSend Async_stream_IO.AsyncSerialStream.le
+
 			obj.Serial.write(Async_stream_IO.IAsyncStream.MagicByte,'uint8');
 			obj.Serial.write(ToPort,'uint8');
 			Message=typecast(Message(:),'uint8');

@@ -1,8 +1,13 @@
+%[text] 安装通用行为控制工具箱的向导
+%[text] 该向导将引导用户选择一个工作目录，存放Experiment\_Client和SelfCheck\_Client两个客户端界面脚本，以及选择Arduino端的UIDs.h以生成MATLAB端的对应文件
 function Setup
-%  SETUP 安装通用行为控制工具箱的向导
-% 
-% 该向导将引导用户选择一个工作目录，存放Experiment_Client和SelfCheck_Client两个客户端界面脚本，以及选择Arduino端的UIDs.h以生成MATLAB端的对应文件
-feature("USE_DOTNETCLI2_WINDOWS", 1);%绕过.NET9导致的崩溃问题
+try
+	feature("USE_DOTNETCLI2_WINDOWS", 1);%绕过.NET9导致的崩溃问题
+catch ME
+	if ME.identifier~="MATLAB:feature:unknownFeature"
+		ME.rethrow;
+	end
+end
 try
 	dotnetenv('core');
 catch ME
@@ -23,3 +28,6 @@ catch ME
 	end
 end
 end
+
+%[appendix]{"version":"1.0"}
+%---

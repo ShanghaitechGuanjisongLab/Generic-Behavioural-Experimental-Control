@@ -206,10 +206,9 @@ classdef Formal<Gbec.Process
 				cprintf([1,0,1],'\n已过%u回合，请检查实验状态',obj.TrialIndex-1);
 			end
 			FprintfInCommandWindow('\n%s 回合%u-%s：',obj.Mouse,obj.TrialIndex,TrialID);
-			persis
 			if~isempty(obj.oTrialwiseSave)
 				Blocks=obj.oTrialwiseSave.Blocks;
-				Blocks.EventLog=obj.EventLog;
+				Blocks.EventLog={obj.EventLog};
 				obj.oTrialwiseSave.Blocks=Blocks;
 				Trials=obj.oTrialwiseSave.Trials;
 				Trials(end+1,["TrialUID","BlockUID","TrialIndex","Time","Stimulus"])={obj.TrialIndex,1,obj.TrialIndex,Time,categorical(extractAfter(string(TrialID),textBoundary('start')+"Trial_"))};

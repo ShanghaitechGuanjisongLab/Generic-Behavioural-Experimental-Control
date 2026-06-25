@@ -125,6 +125,9 @@ classdef Server<handle
 				end
 				if~HasOld
 					obj.AllProcesses=dictionary;
+					if~isempty(obj.AsyncStream)
+						obj.AsyncStream.delete;
+					end
 					obj.AsyncStream=Async_stream_IO.AsyncSerialStream(varargin{:});
 					obj.AsyncStream.Serial.Timeout=obj.oSerialTimeout;
 					obj.AsyncStream.Listen(Gbec.UID.PortC_ImReady);

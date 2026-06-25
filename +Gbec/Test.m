@@ -105,6 +105,7 @@ classdef Test<Gbec.Process
 		function StopCheck(obj)
 			%停止当前测试
 			obj.Server.FeedDogIfActive();
+			MATLAB.Lang.GlobalCache("Debug",true);
 			obj.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_AbortProcess,obj.Pointer));
 			disp('测试结束');
 		end

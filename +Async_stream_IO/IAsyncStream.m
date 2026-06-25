@@ -209,7 +209,8 @@ classdef IAsyncStream<handle
 		Return=SyncInvoke(obj,RemotePort,varargin)
 	end
 	events(NotifyAccess=protected)
-		%如果基础流支持断线重连，重连成功后抛出此事件
+		%如果基础流支持断线重连，重连成功后抛出此事件。
+		%断线重连后中断处于关闭状态，需要用户代码负责重新启动。
 		ConnectionReset
 
 		%如果基础流发生意外断线且未能成功重连，抛出此事件

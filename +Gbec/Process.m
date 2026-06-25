@@ -83,13 +83,7 @@ classdef Process<handle
 				AllProcesses=obj.Server.AllProcesses;
 				if AllProcesses.isConfigured&&AllProcesses.isKey(obj.Pointer)&&AllProcesses(obj.Pointer).Handle==obj
 					%如果所有进程中不存在本指针，或者指向的不是本对象，说明可能存在新的服务器，包含一个和本对象指针相同的新进程。此时不应删除，以免误删新进程
-					try
-						obj.Server.AllProcesses.remove(obj.Pointer);
-					catch ME
-						if ME.identifier~="MATLAB:dictionary:UnconfiguredRemovalNotSupported"
-							ME.rethrow;
-						end
-					end
+					obj.Server.AllProcesses(obj.Pointer)=[];
 					try
 						obj.ThrowResult(obj.Server.AsyncStream.SyncInvoke(Gbec.UID.PortA_DeleteProcess,obj.Pointer));
 					catch ME

@@ -129,14 +129,10 @@ classdef AsyncSerialStream<Async_stream_IO.IAsyncStream
 				obj.Serial.Timeout=Timeout;
 				WeakReference=matlab.lang.WeakReference(obj);
 				obj.Serial.ErrorOccurredFcn=@(varargin)WeakReference.Handle.InterruptRetry(varargin{:});
-				if obj.InterruptEnabled_
-					obj.Flush;
-					if obj.Listeners.numEntries
-						obj.Serial.configureCallback('byte',1,@(~,~)WeakReference.Handle.Flush);
-					end
-				end
+				obj.InterruptEnabled_=false;
 				disp("重新连接成功");
 				obj.notify('ConnectionReset');
+				%不能自动启用Interrupt，因为客户端可能还有其它东西要监听，在那之前启用中断可能导致信号丢失。
 			end
 		end
 	end

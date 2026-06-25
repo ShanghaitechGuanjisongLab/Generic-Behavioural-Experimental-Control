@@ -52,6 +52,7 @@ classdef Server<handle
 			if obj.AllProcesses.numEntries
 				arrayfun(@(P)P.Handle.ConnectionReset_(),obj.AllProcesses.values);
 			end
+			obj.AsyncStream.InterruptEnabled=true;
 		end
 	end
 	methods(Access=?Gbec.Process)

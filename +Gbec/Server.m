@@ -112,8 +112,11 @@ classdef Server<handle
 				if HasOld
 					try
 						obj.AsyncStream.Serial.NumBytesAvailable;
+
+						obj.PointerSize=obj.AsyncStream.SyncInvoke(Gbec.UID.PortA_PointerSize);
+						%即使前项通过，后项也可能不通过，需要重置
 					catch ME
-						if ME.identifier=="transportlib:transport:invalidConnectionState"
+						if any(ME.identifier==["transportlib:transport:invalidConnectionState","Async_stream_IO:Exception:Serial_not_respond_in_time"])
 							HasOld=false;
 						else
 							ME.rethrow;
@@ -125,6 +128,7 @@ classdef Server<handle
 					obj.AsyncStream=Async_stream_IO.AsyncSerialStream(varargin{:});
 					obj.AsyncStream.Serial.Timeout=obj.oSerialTimeout;
 					obj.AsyncStream.Listen(Gbec.UID.PortC_ImReady);
+					obj.PointerSize=obj.AsyncStream.SyncInvoke(Gbec.UID.PortA_PointerSize);
 				end
 			end
 			WeakReference=matlab.lang.WeakReference(obj);
@@ -137,7 +141,6 @@ classdef Server<handle
 				obj.Name=erase(formattedDisplayText(varargin{1}),newline);
 			end
 			obj.ConnectionInterruptedListener=event.listener(obj.AsyncStream,'ConnectionInterrupted',@(~,EventData)WeakReference.Handle.ConnectionInterruptedHandler(EventData));
-			obj.PointerSize=obj.AsyncStream.SyncInvoke(Gbec.UID.PortA_PointerSize);
 			obj.PointerType="uint"+string(obj.PointerSize*8);
 			obj.AsyncStream.AsyncInvoke(Gbec.UID.PortA_RandomSeed,randi([0,intmax('uint32')],'uint32'));
 			obj.ConnectionResetListener=event.listener(obj.AsyncStream,'ConnectionReset',@(~,~)WeakReference.Handle.ConnectionResetHandler());

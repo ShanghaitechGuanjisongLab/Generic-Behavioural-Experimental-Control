@@ -1,16 +1,13 @@
 %[text] 将本文件中的“BOX1”和“Formal1”替换成任何自定义名称，可以同时在工作区中存在多个Server和Formal对象，以在本MATLAB会话中同时执行多个实验会话，甚至从同一个COM口（开发板）同时运行多个实验
-if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid) %[output:group:3dcd8677]
-	BOX1=Gbec.Server; %[output:3e7a14c5]
-end %[output:group:3dcd8677]
+if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid) %[output:group:64a37dc5]
+	BOX1=Gbec.Server; %[output:59d8bbcf]
+end %[output:group:64a37dc5]
 %[text] # 在下方输入会话设置
 %[text] 串口号
 BOX1.Initialize('COM6',9600);
 if~(exist('Formal1','var')&&Formal1.IsValid&&Formal1.Server==BOX1)
 	Formal1=Gbec.Formal(BOX1);
 	Formal1.LogName='BOX1';
-end
-if Formal1.State~=Gbec.UID.State_Idle
-	Gbec.Exception.Process_not_idle.Throw;
 end
 if Formal1.State~=Gbec.UID.State_Idle
 	Gbec.Exception.Process_not_idle.Throw;
@@ -70,10 +67,15 @@ if false
 end
 %[text] 此例中，在Arduino端向串口发送UID.Host\_GratingImage即可显示图像。参见[Gbec.GratingImage](<matlab:edit Gbec.GratingImage>)
 %[text] # 然后运行脚本，在命令行窗口中执行交互
-Formal1.StartSession; %[output:1ebca54f]
+try %[output:group:2da1610e]
+Formal1.StartSession; %[output:89bcfe4f]
 if ismissing(Formal1.DateTime)
     Formal1.DateTime=datetime;
 end
+catch ME
+	BOX1.delete;
+	ME.rethrow;
+end %[output:group:2da1610e]
 return;
 %%
 %[text] # 实时控制命令
@@ -85,7 +87,7 @@ Formal1.PauseSession;
 Formal1.ContinueSession;
 %%
 %[text] 放弃会话
-Formal1.AbortSession;
+Formal1.AbortSession; %[output:56549da2] %[output:838260bd]
 %%
 %[text] 获取信息
 Formal1Info=Formal1.GetInformation
@@ -104,9 +106,15 @@ delete(BOX1)
 %[metadata:view]
 %   data: {"layout":"inline","rightPanelPercent":40}
 %---
-%[output:3e7a14c5]
+%[output:59d8bbcf]
 %   data: {"dataType":"text","outputData":{"text":"通用行为实验控制器v8.2.0 by 张天夫\n","truncated":false}}
 %---
-%[output:1ebca54f]
-%   data: {"dataType":"text","outputData":{"text":"\nBOX1：会话开始，回合总数：50，将保存为：D:\\张天夫\\假🐀.202606251408.AudioLearnWater.行为.mat\n","truncated":false}}
+%[output:89bcfe4f]
+%   data: {"dataType":"text","outputData":{"text":"\nBOX1：会话开始，回合总数：50，将保存为：D:\\张天夫\\假🐀.202606262103.AudioLearnWater.行为.mat\n","truncated":false}}
+%---
+%[output:56549da2]
+%   data: {"dataType":"text","outputData":{"text":"\nBOX1：会话已放弃","truncated":false}}
+%---
+%[output:838260bd]
+%   data: {"dataType":"warning","outputData":{"text":"警告: 数据未保存"}}
 %---

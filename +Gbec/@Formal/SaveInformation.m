@@ -46,7 +46,7 @@ if isempty(obj.oTrialwiseSave)
 	end
 else
 	Blocks=obj.oTrialwiseSave.Blocks;
-	Blocks.EventLog=obj.EventLog;
+	Blocks.EventLog={obj.EventLog};
 	obj.oTrialwiseSave.Blocks=Blocks;
 	if obj.OverwriteExisting%这个属性应当在设置SavePath时一同被设置
 		%文件不存在或用户确认覆盖的情况都可以安全覆盖

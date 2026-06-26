@@ -35,6 +35,7 @@ inline std::enable_if_t<sizeof(T) == 1, std::vector<byte>> &operator<<(std::vect
 	return S;
 }
 void AsyncStream::Send(const void *Message, MessageSize Length, Port ToPort) {
+
 	InterruptGuard const _;
 	(InputBuffer << MagicByte << ToPort << Length).insert(InputBuffer.end(), reinterpret_cast<const char *>(Message), reinterpret_cast<const char *>(Message) + Length);
 }

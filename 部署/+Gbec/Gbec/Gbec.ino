@@ -39,7 +39,6 @@ bool CommonListenersHeader(Async_stream_IO::MessageSize &MessageSize, GbecHeader
 }
 
 void setup() {
-	pinMode(6, OUTPUT);
 	Serial.begin(9600);
 	Serial.setTimeout(-1);
 	BindFunctionToPort([]() {
@@ -54,9 +53,11 @@ void setup() {
 	BindFunctionToPort(std::ArduinoUrng::seed,
 	                   UID::PortA_RandomSeed);
 #endif
+static Process* DebugPointer;
 	BindFunctionToPort([]() {
 		Process *P = new Process;
 		ExistingProcesses.insert(P);
+		DebugPointer=P;
 		return P;
 	},
 	                   UID::PortA_CreateProcess);
@@ -69,6 +70,7 @@ void setup() {
 	},
 	                   UID::PortA_DeleteProcess);
 	SerialListen([](Async_stream_IO::MessageSize MessageSize) {
+		
 		GbecHeader Header;
 		if (CommonListenersHeader(MessageSize, Header))
 			return;
@@ -94,8 +96,10 @@ void setup() {
 		}
 		Header.P->TrialsDone.clear();
 		SerialStream.Send(ModuleStartReturn{ UID::Exception_Success, Iterator->second(Header.P) }, Header.RemotePort);
+
 		if (!Header.P->Start(Times))
 			SerialStream.AsyncInvoke(static_cast<Async_stream_IO::Port>(UID::PortC_ProcessFinished), Header.P);
+
 	},
 	             UID::PortA_StartModule);
 	SerialListen([](Async_stream_IO::MessageSize MessageSize) {

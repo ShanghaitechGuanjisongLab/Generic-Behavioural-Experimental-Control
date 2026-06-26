@@ -306,6 +306,7 @@ public:
 	// 此方法会终止并清空当前执行的所有模块（通过清理资源的方法，不调用模块Abort，但会调用清理模块），然后再开始新的模块
 	template<typename Entry>
 	uint16_t LoadStartModule() {
+
 		using _Entry = _IDModule_t<Entry>;
 		Abort();
 		Modules.clear();
@@ -316,9 +317,11 @@ public:
 	}
 
 	bool Start(uint16_t Times) {
-		for (TimesLeft = Times; TimesLeft > 0; --TimesLeft)
+
+		for (TimesLeft = Times; TimesLeft > 0; --TimesLeft) {
 			if (static_cast<Module*>(Modules[StartPointer].get())->Start(FinishCallback))
 				return true;
+		}
 		return false;
 	}
 	// 发送当前或上一个执行模块及其关联模块的所有信息
@@ -414,8 +417,8 @@ public:
 		};
 #pragma pack(pop)
 		Module* SubPointers[_Sum<Repeats...>::value];
-		Module** CurrentModule = std::end(SubPointers);  //初始化为end表示当前未在运行，<end表示正在运行
-		std::move_only_function<void()> NextBlock;       // 不能在此处等号初始化，SAM会编译器错误
+		Module** CurrentModule = std::begin(SubPointers);  //必须设为begin；因为构造函数中要用到
+		std::move_only_function<void()> NextBlock;         // 不能在此处等号初始化，SAM会编译器错误
 	public:
 		void Randomize() override {
 			std::shuffle(std::begin(SubPointers), std::end(SubPointers), Urng);
@@ -427,6 +430,7 @@ public:
 					    return;
 			  } } {
 			Module** _[] = { (CurrentModule = std::fill_n(CurrentModule, Repeats, Module::Container.LoadModule<_IDModule_t<SubModules>>()))... };
+			//自此CurrentModule变为end位置，正好表示未在运行
 			Randomize();
 		}
 		void Abort() override {

@@ -1,16 +1,16 @@
 #pragma once
 #include "Predefined.hpp"
 // 快速切换BOX设定集
-#define BOX 3
+#define BOX 1
 
 // 引脚设定集，你可以为每套设备创建一个#if BOX块，记录不同设备的不同引脚信息，然后通过设定BOX宏进行快速切换。
 #if BOX == 1
-Pin BlueLed = 11;
-Pin WaterPump = 2;
+Pin BlueLed = 2;
+Pin WaterPump = 9;
 Pin CapacitorVdd = 7;
 Pin CapacitorOut = 18;
 Pin CD1 = 10;
-Pin ActiveBuzzer = 52;
+Pin ActiveBuzzer = 5;
 Pin AirPump = 8;
 Pin PassiveBuzzer = 25;
 Pin Optogenetic = 7;

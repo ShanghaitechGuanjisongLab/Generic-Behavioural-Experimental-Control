@@ -10,9 +10,7 @@ struct ModuleStartReturn {
 	uint16_t NumTrials;
 };
 #pragma pack(pop)
-std::queue<std::move_only_function<void()> *> PinListener::PendingCallbacks;
-std::unordered_map<uint8_t, std::set<std::move_only_function<void()> *>> PinListener::Listening;
-std::unordered_map<uint8_t, std::set<std::move_only_function<void()> *>> PinListener::Resting;
+std::map<uint8_t, PinListener::PinState> PinListener::PinStates;
 std::move_only_function<void()> Module::_EmptyCallback{ []() {} };
 Async_stream_IO::AsyncStream SerialStream;
 extern std::unordered_map<UID, uint16_t (*)(Process *)> SessionMap;

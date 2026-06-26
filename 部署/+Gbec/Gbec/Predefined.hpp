@@ -14,10 +14,10 @@ using namespace std::chrono_literals;
 using DurationRep = uint32_t;
 struct PinListener {
 	uint8_t const Pin;
-	std::shared_ptr<move_only_function<void()>> Callback;
+	std::shared_ptr<std::move_only_function<void()>> const Callback;
 
 	// 中断不安全
-	void Pause() {
+	void Pause() const {
 		auto& CallbackSet = PinStates[Pin].CallbackSet;
 
 		CallbackSet.erase(Callback);
@@ -31,7 +31,7 @@ struct PinListener {
 	}
 
 	// 中断不安全
-	void Continue() {
+	void Continue() const {
 		auto& CallbackSet = PinStates[Pin].CallbackSet;
 		if (CallbackSet.empty())
 			Quick_digital_IO_interrupt::AttachInterrupt<RISING>(Pin, PinInterrupt{ Pin });
@@ -56,6 +56,8 @@ struct PinListener {
 				for (auto const& Callback : PS.CallbackSet)
 					if (auto CallbackPtr = Callback.lock())
 						(*CallbackPtr)();
+					else
+						PS.CallbackSet.erase(Callback);
 				Quick_digital_IO_interrupt::AttachInterrupt<RISING>(Iterator.first, PinInterrupt{ Iterator.first });
 			}
 		}
@@ -233,8 +235,8 @@ class Process {
 
 	// 中断不安全
 	void _Abort() {
-		for (PinListener* H : ActiveInterrupts)
-			delete H;
+		for (PinListener const* H : ActiveInterrupts)
+			H->Pause();
 		for (Timers_one_for_all::TimerClass* T : ActiveTimers) {
 			T->Stop();
 			T->Allocatable = true;  // 使其可以被重新分配
@@ -252,15 +254,15 @@ class Process {
 	}
 
 public:
-	std::set<PinListener*> ActiveInterrupts;
+	std::set<PinListener const*> ActiveInterrupts;
 	void Pause() const {
-		for (PinListener* H : ActiveInterrupts)
+		for (PinListener const* H : ActiveInterrupts)
 			H->Pause();
 		for (Timers_one_for_all::TimerClass* T : ActiveTimers)
 			T->Pause();
 	}
 	void Continue() const {
-		for (PinListener* H : ActiveInterrupts)
+		for (PinListener const* H : ActiveInterrupts)
 			H->Continue();
 		for (Timers_one_for_all::TimerClass* T : ActiveTimers)
 			T->Continue();
@@ -1168,10 +1170,8 @@ template<uint8_t Pin>
 UID const DigitalToggle<Pin>::ID = UID::Module_DigitalToggle;
 // 此模块可以用ModuleAbort停止监视
 template<uint8_t Pin, typename Monitor>
-class MonitorPin : _InstantaneousModule {
-	PinListener Listener{ Pin,std::make_shared<std::move_only_function<void()>>([MonitorPtr = Module::Container.LoadModule<Monitor>()]() {
-		                     MonitorPtr->Start(_EmptyCallback);
-		                   } };
+class MonitorPin : public _InstantaneousModule {
+	PinListener const Listener;
 #pragma pack(push, 1)
 	struct InfoStruct {
 		uint8_t const NumFields = 3;
@@ -1182,7 +1182,9 @@ class MonitorPin : _InstantaneousModule {
 #pragma pack(pop)
 public:
 	MonitorPin(Process& Container)
-	  : _InstantaneousModule(Container) {
+	  : _InstantaneousModule(Container), Listener{ Pin, std::make_shared<std::move_only_function<void()>>([MonitorPtr = Module::Container.LoadModule<Monitor>()]() {
+		                                               MonitorPtr->Start(_EmptyCallback);
+		                                             }) } {
 		Quick_digital_IO_interrupt::PinMode<Pin, INPUT>();
 	}
 	void Abort() override {

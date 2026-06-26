@@ -14,66 +14,71 @@ using namespace std::chrono_literals;
 using DurationRep = uint32_t;
 struct PinListener {
 	uint8_t const Pin;
-	std::move_only_function<void()> Callback;
+	std::shared_ptr<move_only_function<void()>> Callback;
+
 	// 中断不安全
 	void Pause() {
-		std::set<std::move_only_function<void()>*>* CallbackSet = &Listening[Pin];
-		CallbackSet->erase(&Callback);
-		if (CallbackSet->empty())
+		auto& CallbackSet = PinStates[Pin].CallbackSet;
+
+		CallbackSet.erase(Callback);
+		//必须先erase再检测空，不能检测到剩1就直接全删，因为Callback有可能不匹配
+		if (CallbackSet.empty()) {
 			Quick_digital_IO_interrupt::DetachInterrupt(Pin);
-		CallbackSet = &Resting[Pin];
-		CallbackSet->erase(&Callback);
-		if (CallbackSet->empty())
-			Resting.erase(Pin);
+
+			//高频调用在ClearPending处，优先优化它，减少迭代次数，因此这里擦除空Pin是合适的
+			PinStates.erase(Pin);
+		}
 	}
+
 	// 中断不安全
 	void Continue() {
-		std::set<std::move_only_function<void()>*>& CallbackSet = Listening[Pin];
+		auto& CallbackSet = PinStates[Pin].CallbackSet;
 		if (CallbackSet.empty())
 			Quick_digital_IO_interrupt::AttachInterrupt<RISING>(Pin, PinInterrupt{ Pin });
-		CallbackSet.insert(&Callback);
+		CallbackSet.insert(Callback);
 	}
-	// 中断不安全
-	PinListener(uint8_t Pin, std::move_only_function<void()>&& Callback)
-		: Pin(Pin), Callback(std::move(Callback)) {
-		Continue();
-	}
+
 	// 中断不安全
 	~PinListener() {
 		Pause();
 	}
+
 	// 中断安全
 	static void ClearPending() {
-		static std::queue<std::move_only_function<void()>*> LocalSwap;
-		{
-			Quick_digital_IO_interrupt::InterruptGuard const _;
-			std::swap(LocalSwap, PendingCallbacks);
-			for (auto& Iterator : Resting) {
-				std::set<std::move_only_function<void()>*>& ListeningSet = Listening[Iterator.first];
-				ListeningSet.merge(Iterator.second);
-				if (ListeningSet.size())
-					Quick_digital_IO_interrupt::AttachInterrupt<RISING>(Iterator.first, PinInterrupt{ Iterator.first });
-				Iterator.second.clear();
+
+		Quick_digital_IO_interrupt::InterruptGuard const _;
+		//此函数必须全程禁用中断，否则引脚中断和计时器中断可能打断Callback导致全局状态异常
+
+		for (auto& Iterator : PinStates) {
+			PinState& PS = Iterator.second;
+			if (PS.Pending) {
+				PS.Pending = false;
+				for (auto const& Callback : PS.CallbackSet)
+					if (auto CallbackPtr = Callback.lock())
+						(*CallbackPtr)();
+				Quick_digital_IO_interrupt::AttachInterrupt<RISING>(Iterator.first, PinInterrupt{ Iterator.first });
 			}
-		}
-		while (LocalSwap.size()) {
-			(*LocalSwap.front())();
-			LocalSwap.pop();
 		}
 	}
 
 protected:
-	static std::queue<std::move_only_function<void()>*> PendingCallbacks;
-	static std::unordered_map<uint8_t, std::set<std::move_only_function<void()>*>> Listening;
-	static std::unordered_map<uint8_t, std::set<std::move_only_function<void()>*>> Resting;
+	class PinState {
+		using FunctionPointer = std::weak_ptr<std::move_only_function<void()>>;
+	public:
+		bool Pending = false;
+		std::set<FunctionPointer, std::owner_less<FunctionPointer>> CallbackSet;
+	};
+	static std::map<uint8_t, PinState> PinStates;
+
+	/*无需记住Callback，只需根据Pin从全局列表中检索并转移Callback。每个引脚对应的Callback列表需要对全局ClearPending可见，因此不能被任何单个对象私有。
+	此对象只有一个字节，通常直接传值即可，无需考虑拷贝开销。
+	*/
 	struct PinInterrupt {
-		uint8_t const Pin;
+		uint8_t const Pin;  //Pin不能是模板参数：需要接受运行时值
+
+		//此函数被引脚中断调用，因此中断安全
 		void operator()() const {
-			std::set<std::move_only_function<void()>*>& Listenings = Listening[Pin];
-			for (auto H : Listenings)
-				PendingCallbacks.push(H);
-			Resting[Pin].merge(Listenings);
-			Listenings.clear();
+			PinStates[Pin].Pending = true;
 			Quick_digital_IO_interrupt::DetachInterrupt(Pin);
 		}
 	};
@@ -111,7 +116,7 @@ struct IInformative {
 struct Module : IInformative {
 	Process& Container;
 	constexpr Module(Process& Container)
-		: Container(Container) {
+	  : Container(Container) {
 	}
 	// 返回是否需要等待回调，并提供回调函数。返回true表示模块还在执行中，将在执行完毕后调用回调函数；返回false表示模块已执行完毕，不会调用回调函数。
 	virtual bool Start(std::move_only_function<void()>& FinishCallback) {
@@ -189,16 +194,15 @@ struct PodField {
 	UID const FieldType;
 	T FieldValue;
 	constexpr PodField(UID FieldName, T FieldValue)
-		: FieldName(FieldName), FieldType(_TypeID<T>::value), FieldValue(FieldValue) {
+	  : FieldName(FieldName), FieldType(_TypeID<T>::value), FieldValue(FieldValue) {
 	}
 	constexpr PodField(UID FieldName, UID FieldType, T FieldValue)
-		: FieldName(FieldName), FieldType(FieldType), FieldValue(FieldValue) {
+	  : FieldName(FieldName), FieldType(FieldType), FieldValue(FieldValue) {
 	}
 };
 #pragma pack(pop)
 class Process {
 	Async_stream_IO::MessageSize InfoSize;
-	std::set<PinListener*> ActiveInterrupts;
 	std::set<Timers_one_for_all::TimerClass*> ActiveTimers;
 	std::map<UID const*, std::unique_ptr<IInformative>> Modules;
 	uint16_t TimesLeft;
@@ -213,7 +217,7 @@ class Process {
 		UID const ModuleKeyType = UID::Type_Pointer;
 		UID const ModuleValueType = UID::Type_Struct;
 		constexpr InfoHeader(UID const* StartPointer, uint8_t NumModules)
-			: StartModule{ UID::Field_StartModule, StartPointer }, NumModules(NumModules) {
+		  : StartModule{ UID::Field_StartModule, StartPointer }, NumModules(NumModules) {
 		}
 	};
 #pragma pack(pop)
@@ -248,6 +252,7 @@ class Process {
 	}
 
 public:
+	std::set<PinListener*> ActiveInterrupts;
 	void Pause() const {
 		for (PinListener* H : ActiveInterrupts)
 			H->Pause();
@@ -269,15 +274,6 @@ public:
 	}
 	virtual ~Process() {
 		_Abort();
-	}
-	PinListener* RegisterInterrupt(uint8_t Pin, std::move_only_function<void()>&& Callback) {
-		PinListener* Listener = new PinListener(Pin, std::move(Callback));
-		ActiveInterrupts.insert(Listener);
-		return Listener;
-	}
-	void UnregisterInterrupt(PinListener* Handle) {
-		delete Handle;
-		ActiveInterrupts.erase(Handle);
 	}
 	Timers_one_for_all::TimerClass* AllocateTimer() {
 		Timers_one_for_all::TimerClass* Timer = Timers_one_for_all::AllocateTimer();
@@ -371,12 +367,12 @@ struct RandomSequential : Module, IRandom, OneTimeFC {
 protected:
 	static constexpr
 #ifdef ARDUINO_ARCH_AVR
-		std::ArduinoUrng
+	  std::ArduinoUrng
 #endif
 #ifdef ARDUINO_ARCH_SAM
-		std::TrueUrng
+	    std::TrueUrng
 #endif
-		Urng{};
+	      Urng{};
 #pragma pack(push, 1)
 	struct InfoStruct {
 		uint8_t const NumFields = 2;
@@ -411,7 +407,7 @@ public:
 			UID const Column2Type = UID::Type_UInt16;
 			uint16_t const Column2Values[sizeof...(SubModules)];
 			constexpr InfoStruct()
-				: Column2Values{ Repeats... } {
+			  : Column2Values{ Repeats... } {
 			}
 		};
 #pragma pack(pop)
@@ -423,11 +419,11 @@ public:
 			std::shuffle(std::begin(SubPointers), std::end(SubPointers), Urng);
 		}
 		WithRepeat(Process& Container)
-			: Module(Container), NextBlock{ [this]() {  //初始化NextBlock，主要是为了防止直接Restart时NextBlock未定义。
-				  while (++CurrentModule < std::end(SubPointers))
-					  if ((*CurrentModule)->Start(NextBlock))
-						  return;
-				} } {
+		  : Module(Container), NextBlock{ [this]() {  //初始化NextBlock，主要是为了防止直接Restart时NextBlock未定义。
+			    while (++CurrentModule < std::end(SubPointers))
+				    if ((*CurrentModule)->Start(NextBlock))
+					    return;
+			  } } {
 			Module** _[] = { (CurrentModule = std::fill_n(CurrentModule, Repeats, Module::Container.LoadModule<_IDModule_t<SubModules>>()))... };
 			Randomize();
 		}
@@ -440,7 +436,7 @@ public:
 		void Skip() {
 			if (CurrentModule < std::end(SubPointers)) {
 				(*CurrentModule)->Abort();
-				if (FinishCallback)//被Restart启动的运行状态，FinishCallback可能为空
+				if (FinishCallback)  //被Restart启动的运行状态，FinishCallback可能为空
 					FcAndDiscard();
 			}
 		}
@@ -460,7 +456,7 @@ public:
 							if ((*CurrentModule)->Start(NextBlock))
 								return;
 						FcAndDiscard();
-						};
+					};
 					return true;
 				}
 			return false;
@@ -472,16 +468,15 @@ public:
 		std::shuffle(std::begin(SubPointers), std::end(SubPointers), Urng);
 	}
 	RandomSequential(Process& Container)
-		: Module(Container), NextBlock{ [this]() {
-			  while (++CurrentModule < std::cend(SubPointers))
-				  if ((*CurrentModule)->Start(NextBlock))
-					  return;
-			} } {
+	  : Module(Container), NextBlock{ [this]() {
+		    while (++CurrentModule < std::cend(SubPointers))
+			    if ((*CurrentModule)->Start(NextBlock))
+				    return;
+		  } } {
 		Randomize();
 	}
 	void Abort() override {
-		if (CurrentModule < std::cend(SubPointers))
-		{
+		if (CurrentModule < std::cend(SubPointers)) {
 			(*CurrentModule)->Abort();
 			FinishCallback = nullptr;
 		}
@@ -502,7 +497,7 @@ public:
 						if ((*CurrentModule)->Start(NextBlock))
 							return;
 					FcAndDiscard();
-					};
+				};
 				return true;
 			}
 		return false;
@@ -589,12 +584,12 @@ protected:
 
 public:
 	Repeat(Process& Container)
-		: Module(Container), NextBlock{ [this]() {
-			  while (--TimesLeft)
-				  if (ContentPtr->Start(NextBlock))
-					  return;
-			} },
-		T{ Module::Container.LoadModule<Times>() } {
+	  : Module(Container), NextBlock{ [this]() {
+		    while (--TimesLeft)
+			    if (ContentPtr->Start(NextBlock))
+				    return;
+		  } },
+	    T{ Module::Container.LoadModule<Times>() } {
 	}
 	void Restart() override {
 		Abort();
@@ -611,7 +606,7 @@ public:
 						if (ContentPtr->Start(NextBlock))
 							return;
 					FC();
-					};
+				};
 				return true;
 			}
 		return false;
@@ -635,11 +630,11 @@ protected:
 	std::move_only_function<void()> NextBlock;
 public:
 	Repeat(Process& Container)
-		: Module(Container), NextBlock{ [this]() {
-			  for (;;)
-				  if (ContentPtr->Start(NextBlock))
-					  return;
-			} } {
+	  : Module(Container), NextBlock{ [this]() {
+		    for (;;)
+			    if (ContentPtr->Start(NextBlock))
+				    return;
+		  } } {
 	}
 	void Abort() override {
 		ContentPtr->Abort();
@@ -681,11 +676,11 @@ protected:
 #pragma pack(pop)
 public:
 	_Sequential(Process& Container)
-		: Module(Container), NextBlock{ [this]() {
-			  while (++CurrentModule < std::cend(SubPointers))
-				  if ((*CurrentModule)->Start(NextBlock))
-					  return;
-			} } {
+	  : Module(Container), NextBlock{ [this]() {
+		    while (++CurrentModule < std::cend(SubPointers))
+			    if ((*CurrentModule)->Start(NextBlock))
+				    return;
+		  } } {
 	}
 	void Abort() override {
 		if (CurrentModule < std::cend(SubPointers))
@@ -706,7 +701,7 @@ public:
 						if ((*CurrentModule)->Start(NextBlock))
 							return;
 					FC();
-					};
+				};
 				return true;
 			}
 		}
@@ -725,7 +720,7 @@ protected:
 #pragma pack(pop)
 public:
 	_Sequential(Process& Container)
-		: Module(Container) {
+	  : Module(Container) {
 	}
 	static constexpr uint16_t NumTrials = 0;
 	InfoImplement;
@@ -734,53 +729,53 @@ template<typename... SubModules>
 UID const _Sequential<SubModules...>::ID = UID::Module_Sequential;
 
 namespace detail {
-	template<typename... Ts>
-	struct type_list {
-	};
+template<typename... Ts>
+struct type_list {
+};
 
-	template<typename A, typename B>
-	struct concat;
-	template<typename... A, typename... B>
-	struct concat<type_list<A...>, type_list<B...>> {
-		using type = type_list<A..., B...>;
-	};
+template<typename A, typename B>
+struct concat;
+template<typename... A, typename... B>
+struct concat<type_list<A...>, type_list<B...>> {
+	using type = type_list<A..., B...>;
+};
 
-	template<typename... Args>
-	struct flatten_pack;
+template<typename... Args>
+struct flatten_pack;
 
-	template<typename T>
-	struct flatten_one {
-		using type = type_list<T>;
-	};
+template<typename T>
+struct flatten_one {
+	using type = type_list<T>;
+};
 
-	template<typename... Inner>
-	struct flatten_one<_Sequential<Inner...>> {
-		using type = typename flatten_pack<Inner...>::type;
-	};
+template<typename... Inner>
+struct flatten_one<_Sequential<Inner...>> {
+	using type = typename flatten_pack<Inner...>::type;
+};
 
-	template<>
-	struct flatten_pack<> {
-		using type = type_list<>;
-	};
+template<>
+struct flatten_pack<> {
+	using type = type_list<>;
+};
 
-	template<typename Head, typename... Tail>
-	struct flatten_pack<Head, Tail...> {
-		using type = typename concat<
-			typename flatten_one<Head>::type,
-			typename flatten_pack<Tail...>::type>::type;
-	};
+template<typename Head, typename... Tail>
+struct flatten_pack<Head, Tail...> {
+	using type = typename concat<
+	  typename flatten_one<Head>::type,
+	  typename flatten_pack<Tail...>::type>::type;
+};
 
-	template<typename List>
-	struct list_to_seq;
-	template<typename... Ts>
-	struct list_to_seq<type_list<Ts...>> {
-		using type = _Sequential<Ts...>;
-	};
+template<typename List>
+struct list_to_seq;
+template<typename... Ts>
+struct list_to_seq<type_list<Ts...>> {
+	using type = _Sequential<Ts...>;
+};
 }
 // 依次执行模块。嵌套的Sequential会被展开。
 template<typename... Args>
 using Sequential = typename detail::list_to_seq<
-	typename detail::flatten_pack<Args...>::type>::type;
+  typename detail::flatten_pack<Args...>::type>::type;
 
 struct _TimedModule : Module {
 	using Module::Module;
@@ -816,7 +811,7 @@ struct _Delay : _TimedModule {
 		FinishCallback = [this, &FC]() {
 			UnregisterTimer();
 			FC();
-			};
+		};
 		Restart();
 		return true;
 	}
@@ -923,7 +918,7 @@ public:
 		FinishCallback = [this, &FC]() {
 			this->UnregisterTimer();
 			FC();
-			};
+		};
 		Restart();
 		return true;
 	}
@@ -970,8 +965,7 @@ struct _DoubleRepeat : _TimedModule {
 		if (Timer) {
 			ContentAPtr->Abort();
 			ContentBPtr->Abort();
-		}
-		else
+		} else
 			Timer = Module::Container.AllocateTimer();
 	}
 	bool Start(std::move_only_function<void()>& FC) override {
@@ -1023,7 +1017,7 @@ public:
 		FinishCallback = [this, &FC]() {
 			this->UnregisterTimer();
 			FC();
-			};
+		};
 		Restart();
 		return true;
 	}
@@ -1140,7 +1134,7 @@ protected:
 #pragma pack(pop)
 public:
 	DigitalWrite(Process& Container)
-		: _InstantaneousModule(Container) {
+	  : _InstantaneousModule(Container) {
 		Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
 	}
 	void Restart() override {
@@ -1162,7 +1156,7 @@ protected:
 #pragma pack(pop)
 public:
 	DigitalToggle(Process& Container)
-		: _InstantaneousModule(Container) {
+	  : _InstantaneousModule(Container) {
 		Quick_digital_IO_interrupt::PinMode<Pin, OUTPUT>();
 	}
 	void Restart() override {
@@ -1174,9 +1168,10 @@ template<uint8_t Pin>
 UID const DigitalToggle<Pin>::ID = UID::Module_DigitalToggle;
 // 此模块可以用ModuleAbort停止监视
 template<uint8_t Pin, typename Monitor>
-struct MonitorPin : _InstantaneousModule {
-protected:
-	Module* const MonitorPtr = Module::Container.LoadModule<Monitor>();
+class MonitorPin : _InstantaneousModule {
+	PinListener Listener{ Pin,std::make_shared<std::move_only_function<void()>>([MonitorPtr = Module::Container.LoadModule<Monitor>()]() {
+		                     MonitorPtr->Start(_EmptyCallback);
+		                   } };
 #pragma pack(push, 1)
 	struct InfoStruct {
 		uint8_t const NumFields = 3;
@@ -1187,21 +1182,16 @@ protected:
 #pragma pack(pop)
 public:
 	MonitorPin(Process& Container)
-		: _InstantaneousModule(Container) {
+	  : _InstantaneousModule(Container) {
 		Quick_digital_IO_interrupt::PinMode<Pin, INPUT>();
 	}
-	PinListener* Listener = nullptr;
 	void Abort() override {
-		if (Listener) {
-			Module::Container.UnregisterInterrupt(Listener);
-			Listener = nullptr;
-		}
+		Listener.Pause();
+		Module::Container.ActiveInterrupts.erase(&Listener);
 	}
 	void Restart() override {
-		Abort();
-		Listener = Module::Container.RegisterInterrupt(Pin, [MonitorPtr = MonitorPtr]() {
-			MonitorPtr->Start(_EmptyCallback);
-			});
+		Listener.Continue();
+		Module::Container.ActiveInterrupts.insert(&Listener);
 	}
 	InfoImplement;
 };
@@ -1285,8 +1275,7 @@ public:
 				if (!--It->second)
 					Module::Container.TrialsDone.erase(It);
 				return false;
-			}
-			else
+			} else
 				Module::Container.TrialsDone.erase(It);
 		_Restart();
 		if (ContentPtr->Start(FC)) {
@@ -1309,10 +1298,10 @@ protected:
 	std::move_only_function<void()> TargetCallback = [this]() {
 		Module::Container.ExtraCleaners.erase(&StartCleaner);
 		(*FinishCallback)();
-		};
+	};
 	std::move_only_function<void()> StartCleaner = [CleanerPtr = Module::Container.LoadModule<Cleaner>()]() {
 		CleanerPtr->Start(_EmptyCallback);
-		};
+	};
 	void _Abort() {
 		TargetPtr->Abort();
 		StartCleaner();
@@ -1390,14 +1379,14 @@ public:
 			PodField<UID const*> const Slot{ UID::Field_Slot, &_ModuleID<DynamicSlot>::ID };
 			PodField<UID const*> ContentField;
 			constexpr InfoStruct()
-				: ContentField{ UID::Field_Content, &_ModuleID<Content>::ID } {
+			  : ContentField{ UID::Field_Content, &_ModuleID<Content>::ID } {
 			}
 		};
 #pragma pack(pop)
 	public:
 		//SAM编译器bug：使用了内联struct模板参数的成员初始化只能写在构造方法里，不能直接成员初始化，成员初始化无法访问内联模板参数
 		Load(Process& Container)
-			: _InstantaneousModule(Container), ContentPtr{ Container.LoadModule<Content>() } {
+		  : _InstantaneousModule(Container), ContentPtr{ Container.LoadModule<Content>() } {
 		}
 		void Restart() override {
 			SlotPtr->ContentPtr = ContentPtr;

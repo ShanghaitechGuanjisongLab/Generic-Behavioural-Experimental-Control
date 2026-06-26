@@ -2,7 +2,6 @@
 #include <queue>
 #include <unordered_map>
 #include <set>
-extern bool Debug;
 namespace Async_stream_IO {
 
 // 调用这些方法前必须禁用中断

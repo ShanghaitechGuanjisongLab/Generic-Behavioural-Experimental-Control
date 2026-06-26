@@ -40,7 +40,6 @@ bool CommonListenersHeader(Async_stream_IO::MessageSize &MessageSize, GbecHeader
 	return true;
 }
 
-bool Debug = false;
 void setup() {
 	pinMode(6, OUTPUT);
 	Serial.begin(9600);

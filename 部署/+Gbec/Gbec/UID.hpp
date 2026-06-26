@@ -27,7 +27,6 @@ enum class UID : uint8_t {
 	PortC_TrialStart,
 	PortC_Exception,
 	PortC_ImReady,
-	PortC_Debug,
 
 	// 运行时异常
 
@@ -132,7 +131,6 @@ enum class UID : uint8_t {
 	Event_LowDown,
 	Event_HighUp,
 	Event_HighDown,
-	Event_Debug,
 	Event_FlareUp,
 	Event_FlareDown,
 

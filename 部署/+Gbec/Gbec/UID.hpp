@@ -175,6 +175,7 @@ enum class UID : uint8_t {
 	Module_Abort,
 	Module_Restart,
 	Module_Randomize,
+	Module_Skip,
 	Module_MonitorPin,
 	Module_SerialMessage,
 	Module_DigitalWrite,

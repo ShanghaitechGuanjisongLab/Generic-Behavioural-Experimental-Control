@@ -2,6 +2,7 @@ classdef Formal<Gbec.Process
 	%正规实验进程，提供完善可靠的数据收集系统和自定义接口
 	properties(Constant,GetAccess=protected)
 		DurationRep='uint32'
+		Instances=MATLAB.Containers.Set
 	end
 	properties
 		%提醒检查回合周期
@@ -115,9 +116,12 @@ classdef Formal<Gbec.Process
 			%# 输入参数
 			% Server(1,1)Gbec.Server，服务器对象
 			obj@Gbec.Process(Server);
-			obj.LogName=obj.Server.Name;
 			obj.EventRecorder=MATLAB.DataTypes.EventLogger;
 			obj.TrialRecorder=MATLAB.DataTypes.EventLogger;
+			Gbec.Formal.Instances.Insert(matlab.lang.WeakReference(obj));
+		end
+		function delete(obj)
+			Gbec.Formal.Instances.Erase(matlab.lang.WeakReference(obj));
 		end
 		function SP=get.SavePath(obj)
 			SP=obj.oSavePath;

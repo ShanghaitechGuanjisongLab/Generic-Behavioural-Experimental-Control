@@ -5,6 +5,14 @@ obj.Server.FeedDogIfActive;
 if obj.State~=Gbec.UID.State_Idle
 	Gbec.Exception.Process_not_idle.Throw;
 end
+for F=Gbec.Formal.Instances.Range
+	F=F.Handle;
+	if F~=obj&&F.State~=Gbec.UID.State_Idle&&F.Mouse==obj.Mouse
+		if questdlg(sprintf('%s中已有%s正在运行，与本进程重复',F.LogName,F.Mouse),'确定鼠名正确？','确定','取消','确定')~="确定"
+			Gbec.Exception.User_canceled_operation.Throw('鼠名错误');
+		end
+	end
+end
 if obj.OverwriteExisting
 	OverwriteOrMerge='覆盖掉';
 else

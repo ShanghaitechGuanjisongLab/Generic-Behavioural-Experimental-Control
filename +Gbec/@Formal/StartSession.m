@@ -28,13 +28,6 @@ if ~isempty(obj.VideoInput)
 	waitfor(obj.VideoInput,'Running','on');
 end
 
-%必须先获取信息，否则信息返回时会话可能已结束（特别是对于无内容的测试会话）
-if~isempty(obj.oTrialwiseSave)
-	[obj.oTrialwiseSave.DateTimes,obj.oTrialwiseSave.Blocks]=obj.SessionMeta;
-	obj.oTrialwiseSave.Trials=table;
-	obj.oTrialwiseSave.Version=Gbec.Version;
-end
-
 AsyncStream=obj.Server.AsyncStream;
 Port=AsyncStream.AllocatePort;
 OCU=onCleanup(@()AsyncStream.ReleasePort(Port));
@@ -65,6 +58,12 @@ obj.EventRecorder.Reset;
 obj.TrialRecorder.Reset;
 obj.TrialIndex=0;
 obj.State=Gbec.UID.State_Running;
+
+if~isempty(obj.oTrialwiseSave)
+	obj.oTrialwiseSave.Trials=table;
+	[obj.oTrialwiseSave.DateTimes,obj.oTrialwiseSave.Blocks]=obj.SessionMeta;
+	obj.oTrialwiseSave.Version=Gbec.Version;
+end
 end
 
 %[appendix]{"version":"1.0"}

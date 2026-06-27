@@ -78,8 +78,8 @@ if false %[control:checkbox:9fe7]{"position":[4,9]}
 	VideoInput.LoggingMode='disk'; %记录模式，一般无需修改。如果不写出到磁盘，请设为'memory'。
 	triggerconfig(VideoInput,'manual');%如果全程拍摄，设为immediate；设为manual则只拍回合开始后一段时间
 	Formal1.HostActions{Gbec.UID.Host_StartRecord}=Gbec.VideoRecord(VideoInput);
-else
-	Formal1.HostActions{Gbec.UID.Host_StartRecord}=[];
+elseif Formal1.HostActions.isConfigured
+	Formal1.HostActions(Gbec.UID.Host_StartRecord)=[];
 end
 %[text] 此例中，在Arduino端向串口发送UID.Host\_StartRecord即可开始拍摄。参见[Gbec.VideoRecord](<matlab:edit Gbec.VideoRecord>)
 %%
@@ -87,8 +87,8 @@ end
 %[text] 如果不显示图像，将if条件设为false即可。
 if false %[control:checkbox:320d]{"position":[4,9]}
 	Formal1.HostActions{Gbec.UID.Host_GratingImage}=Gbec.GratingImage(CyclesPerWidth=[1,10],DurationRange=1);
-else
-	Formal1.HostActions{Gbec.UID.Host_GratingImage}=[];
+elseif Formal1.HostActions.isConfigured
+	Formal1.HostActions(Gbec.UID.Host_GratingImage)=[];
 end
 %[text] 此例中，在Arduino端向串口发送UID.Host\_GratingImage即可显示图像。参见[Gbec.GratingImage](<matlab:edit Gbec.GratingImage>)
 %%

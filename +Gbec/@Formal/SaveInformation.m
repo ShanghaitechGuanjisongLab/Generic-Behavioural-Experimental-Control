@@ -4,6 +4,7 @@ obj.Server.FeedDogIfActive;
 SP=obj.SavePath;
 if isempty(obj.oTrialwiseSave)
 	[DateTimes,Blocks]=obj.SessionMeta;
+	DateTimes.Metadata={obj.GetInformation};
 	Blocks.EventLog=obj.EventLog;
 	Trials=table;
 	Stimulus=obj.TrialRecorder.GetTimeTable;
@@ -46,8 +47,14 @@ if isempty(obj.oTrialwiseSave)
 	end
 else
 	Blocks=obj.oTrialwiseSave.Blocks;
+	DateTimes=obj.oTrialwiseSave.DateTimes;
+
+	%不能在会话开始前获取信息。也不能在刚开始后获取，因为会话可能是瞬时的，此时会话会在GetInformation之前结束并触发SaveInformation导致错误
+	DateTimes.Metadata={obj.GetInformation};
+
 	Blocks.EventLog={obj.EventLog};
 	obj.oTrialwiseSave.Blocks=Blocks;
+	obj.oTrialwiseSave.DateTimes=DateTimes;
 	if obj.OverwriteExisting%这个属性应当在设置SavePath时一同被设置
 		%文件不存在或用户确认覆盖的情况都可以安全覆盖
 		copyfile(obj.oTrialwiseSave.Properties.Source,SP,'f');

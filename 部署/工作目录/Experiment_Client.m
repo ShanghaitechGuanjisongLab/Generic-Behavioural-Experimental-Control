@@ -6,7 +6,7 @@ end %[output:group:276d8891]
 %[text] # 在下方输入会话设置
 %[text] 串口号
 BOX1.Initialize('COM6',9600);
-if~(exist('Formal1','var')&&Formal1.IsValid&&Formal1.Server==BOX1)
+if~(exist('Formal1','var')&&isa(Formal1,'Gbec.Formal')&&Formal1.IsValid&&Formal1.Server==BOX1)
 	Formal1=Gbec.Formal(BOX1);
 	Formal1.LogName='BOX1';
 end

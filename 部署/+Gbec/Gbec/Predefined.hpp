@@ -46,27 +46,25 @@ struct PinListener {
 
 	// 中断安全
 	static void ClearPending() {
-		static std::vector<std::shared_ptr<std::move_only_function<void()>>> LocalCallbackSet;
-		{
-			Quick_digital_IO_interrupt::InterruptGuard const _;
-
-			for (auto& Iterator : PinStates) {
-				PinState& PS = Iterator.second;
-				if (PS.Pending) {
-					PS.Pending = false;
-					for (auto const& Callback : PS.CallbackSet)
-						if (auto CallbackPtr = Callback.lock())
-							LocalCallbackSet.push_back(std::move(CallbackPtr));
-						else
-							PS.CallbackSet.erase(Callback);
-					Quick_digital_IO_interrupt::AttachInterrupt<RISING>(Iterator.first, PinInterrupt{ Iterator.first });
-				}
+		static std::vector<std::shared_ptr<std::move_only_function<void()>>> LocalSnapshot;
+		noInterrupts();
+		for (auto& Iterator : PinStates) {
+			PinState& PS = Iterator.second;
+			if (PS.Pending) {
+				PS.Pending = false;
+				for (auto const& Callback : PS.CallbackSet)
+					if (std::shared_ptr<std::move_only_function<void()>> const CallbackPtr = Callback.lock())
+						LocalSnapshot.push_back(CallbackPtr);
+					else
+						PS.CallbackSet.erase(Callback);
+				Quick_digital_IO_interrupt::AttachInterrupt<RISING>(Iterator.first, PinInterrupt{ Iterator.first });
 			}
 		}
-		//中断处理函数不能在无中断条件下执行，因为写串口依赖中断，无中断时会卡死
-		for (auto const& Callback : LocalCallbackSet)
-			(*Callback)();
-		LocalCallbackSet.clear();
+		interrupts();
+		//回调函数可能修改CallbackSet，删除其中的元素会导致for循环迭代器失效无法递增，产生未定义行为。因此必须在循环结束后统一执行回调。
+		for (auto const& C : LocalSnapshot)
+			(*C)();
+		LocalSnapshot.clear();
 	}
 
 protected:

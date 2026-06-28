@@ -1,8 +1,8 @@
 %[text] 同时运行多个实验时，需要区分BOX1、Formal1等名称。BOX1对应串口，Formal1对应鼠，不同对应对象应有不同名称。
   %[control:button:0ad1]{"position":[1,2]}
-if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid)
-	BOX1=Gbec.Server;
-end
+if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid) %[output:group:276d8891]
+	BOX1=Gbec.Server; %[output:4f0e457d]
+end %[output:group:276d8891]
 %[text] # 在下方输入会话设置
 %[text] 串口号
 BOX1.Initialize('COM6',9600);
@@ -22,12 +22,12 @@ Formal1.Mouse='假🐀';
 Formal1.DateTime=datetime;
 %[text] 是否要在每次实验（第一次除外）后监控行为曲线；若无需监控可设为false。若设为true，必须安装[统一实验分析作图](https://github.com/ShanghaitechGuanjisongLab/Unified-Experimental-Analysis-and-Figuring/releases)工具箱。
 %[text] 示例代码根据鼠名自动生成路径，你也可以另行设定命名规则。
-if true %[control:checkbox:9422]{"position":[4,8]}
+if false %[control:checkbox:9422]{"position":[4,9]}
 	Filename=sprintf('D:\\张天夫\\%s.%s',Formal1.Mouse,SessionName(9:end));
 else
 	Filename=sprintf('D:\\张天夫\\%s.%s.%s',Formal1.Mouse,char(Formal1.DateTime,'yyyyMMddHHmm'),SessionName(9:end));
 end
-Formal1.SavePath=strcat(Filename,'.行为.mat'); %[output:4f0e457d]
+Formal1.SavePath=strcat(Filename,'.行为.mat');
 %%
 %[text] 实验性功能，是否每个回合自动保存一次。此方法可以缓解意外崩溃的数据损失，但有一定性能代价。
 if false %[control:checkbox:33cb]{"position":[4,9]}
@@ -93,7 +93,7 @@ end
 %[text] 此例中，在Arduino端向串口发送UID.Host\_GratingImage即可显示图像。参见[Gbec.GratingImage](<matlab:edit Gbec.GratingImage>)
 %%
 %[text] # 然后运行脚本，在命令行窗口中执行交互
-Formal1.StartSession; %[output:49c004d7]
+Formal1.StartSession; %[output:72116efb]
 return;
   %[control:button:0ffc]{"position":[1,2]}
 %%
@@ -106,7 +106,7 @@ Formal1.PauseSession;
 Formal1.ContinueSession;
 %%
   %[control:button:472e]{"position":[1,2]}
-Formal1.AbortSession; %[output:32315367] %[output:8d5c3d46]
+Formal1.AbortSession;
 %%
   %[control:button:1fa9]{"position":[1,2]}
 Formal1Info=Formal1.GetInformation
@@ -178,14 +178,8 @@ delete(BOX1)
 %   data: {"label":"关闭串口","run":"Section"}
 %---
 %[output:4f0e457d]
-%   data: {"dataType":"text","outputData":{"text":"\nBOX1：目标文件已存在，将尝试合并","truncated":false}}
+%   data: {"dataType":"text","outputData":{"text":"通用行为实验控制器v8.2.0 by 张天夫\n","truncated":false}}
 %---
-%[output:49c004d7]
-%   data: {"dataType":"text","outputData":{"text":"\nBOX1：会话开始，回合总数：30，将保存为：D:\\张天夫\\假🐀.AudioWater.行为.mat\n","truncated":false}}
-%---
-%[output:32315367]
-%   data: {"dataType":"text","outputData":{"text":"\nBOX1：会话已放弃","truncated":false}}
-%---
-%[output:8d5c3d46]
-%   data: {"dataType":"warning","outputData":{"text":"警告: 数据未保存"}}
+%[output:72116efb]
+%   data: {"dataType":"text","outputData":{"text":"\nBOX1：会话开始，回合总数：30，将保存为：D:\\张天夫\\假🐀.202606281301.AudioWater.行为.mat\n","truncated":false}}
 %---

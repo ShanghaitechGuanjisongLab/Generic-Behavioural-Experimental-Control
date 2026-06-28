@@ -5,7 +5,7 @@ SP=obj.SavePath;
 if isempty(obj.oTrialwiseSave)
 	[DateTimes,Blocks]=obj.SessionMeta;
 	DateTimes.Metadata={obj.GetInformation};
-	Blocks.EventLog=obj.EventLog;
+	Blocks.EventLog={obj.EventLog};
 	Trials=table;
 	Stimulus=obj.TrialRecorder.GetTimeTable;
 	NumTrials=height(Stimulus);

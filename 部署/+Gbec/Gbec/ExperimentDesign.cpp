@@ -1,7 +1,7 @@
 #pragma once
 #include "Predefined.hpp"
 // 快速切换BOX设定集
-#define BOX 2
+#define BOX 4
 
 // 引脚设定集，你可以为每套设备创建一个#if BOX块，记录不同设备的不同引脚信息，然后通过设定BOX宏进行快速切换。
 #if BOX == 1
@@ -15,8 +15,7 @@ Pin AirPump = 8;
 Pin PassiveBuzzer = 25;
 Pin Optogenetic = 7;
 Pin Flare = 5;
-#endif
-#if BOX == 2
+#elif BOX == 2
 Pin BlueLed = 8;
 Pin WaterPump = 2;
 Pin CapacitorVdd = 7;
@@ -27,8 +26,7 @@ Pin AirPump = 12;
 Pin Optogenetic = 53;
 Pin PassiveBuzzer = 3;
 Pin Flare = 5;
-#endif
-#if BOX == 3
+#elif BOX == 3
 Pin BlueLed = 4;
 Pin WaterPump = 2;
 Pin CapacitorVdd = 6;
@@ -38,6 +36,17 @@ Pin ActiveBuzzer = 3;
 Pin AirPump = 12;
 Pin Optogenetic = 7;
 Pin PassiveBuzzer = 32;
+Pin Flare = 5;
+#elif BOX == 4
+Pin BlueLed = 2;
+Pin WaterPump = 9;
+Pin CapacitorVdd = 12;
+Pin CapacitorOut = 13;
+Pin CD1 = 10;
+Pin ActiveBuzzer = 5;
+Pin AirPump = 9;
+Pin Optogenetic = 7;
+Pin PassiveBuzzer = 6;
 Pin Flare = 5;
 #endif
 
@@ -157,7 +166,7 @@ using Random100To1000 = RandomInteger<100, 1000>;
 
 using RandomFlash = Repeat<Sequential<DigitalToggle<Optogenetic>, Delay<std::chrono::milliseconds, Random100To1000>, ModuleRandomize<Random100To1000>>>;
 
-using Random5To10 = RandomInteger<5, 10>;
+using Random5To10 = RandomInteger<1, 2>;
 
 using Delay5To10 = Delay<std::chrono::seconds, Random5To10>;
 
@@ -174,7 +183,7 @@ AssignModuleID(ResponseWindow, UID::Module_ResponseWindow);
 
 using CalmDown = Sequential<DynamicSlot<>::Load<Sequential<ModuleAbort<ResponseWindow>, SerialMessage<UID::Event_MonitorMiss>>>, MonitorRestart, Delay5To10, ModuleAbort<MonitorRestart>>;
 
-using Settlement = Sequential<ModuleRandomize<Random5To10>, DelaySeconds<20>>;
+using Settlement = Sequential<ModuleRandomize<Random5To10>, DelaySeconds<1>>;
 
 using Delay800ms = DelayMilliseconds<800>;
 
@@ -212,5 +221,5 @@ std::unordered_map<UID, uint16_t (*)(Process *)> SessionMap = {
                                                                               Trial<UID::Trial_AudioOnly, CueOnlyTrial<PinFlashUpDown<ActiveBuzzer, 200, UID::Event_AudioUp, UID::Event_AudioDown>>>,
                                                                               Trial<UID::Trial_WaterOnly, CueOnlyTrial<PinFlashUp<WaterPump, 150, UID::Event_Water>>>>::WithRepeat<20, 20, 20>>> },
   { UID::Session_AudioWaterFlare, Session<AssociationSession<Trial<UID::Trial_AudioWaterFlare, Sequential<CalmDown, ResponseWindow, DigitalWrite<Flare, HIGH>, SerialMessage<UID::Event_FlareUp>, PinFlashUpDown<ActiveBuzzer, 200, UID::Event_AudioUp, UID::Event_AudioDown>, Delay800ms, DynamicSlot<>, DigitalWrite<WaterPump, HIGH>, SerialMessage<UID::Event_Water>, DigitalWrite<CapacitorVdd, LOW>, DelayMilliseconds<150>, DigitalWrite<CapacitorVdd, HIGH>, DigitalWrite<WaterPump, LOW>, DelayMilliseconds<1850>, DigitalWrite<Flare, LOW>, SerialMessage<UID::Event_FlareDown>, Settlement>>>> },
-  { UID::Session_Empty, Session<Trial<UID::Trial_Empty,Sequential<>>> },
+  { UID::Session_Empty, Session<Trial<UID::Trial_Empty, Sequential<>>> },
 };

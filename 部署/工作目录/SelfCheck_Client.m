@@ -3,7 +3,7 @@
 if~(exist('BOX1','var')&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid)
 	BOX1=Gbec.Server;
 end
-BOX1.Initialize('COM6',9600); %[output:10f959ee]
+BOX1.Initialize('COM6',9600);
 if~(exist('Test1','var')&&isa(Test1,'Gbec.Test')&&Test1.IsValid&&Test1.Server==BOX1)
 	Test1=Gbec.Test(BOX1);
 end
@@ -22,7 +22,7 @@ Test1.RepeatCheck(Gbec.UID.Test_CapacitorReset,1);
 if false %[control:statebutton:87b9]{"position":[4,9]} %[output:group:0f1b8064]
 	Test1.StartCheck(Gbec.UID.Test_CapacitorMonitor);
 else
-	Test1.StopCheck; %[output:2731441a]
+	Test1.StopCheck; %[output:001ff5d3]
 end %[output:group:0f1b8064]
 %%
   %[control:button:0a8d]{"position":[1,2]}
@@ -135,12 +135,9 @@ delete(BOX1);
 %[control:button:3eb3]
 %   data: {"label":"关闭串口","run":"Section"}
 %---
-%[output:10f959ee]
-%   data: {"dataType":"error","outputData":{"errorType":"runtime","text":"错误使用 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('serialport', 'C:\\Program Files\\MATLAB\\R2026a\\toolbox\\matlab\\serialport\\interface\\serialport.m', 121)\" style=\"font-weight:bold\">serialport<\/a> (<a href=\"matlab: opentoline('C:\\Program Files\\MATLAB\\R2026a\\toolbox\\matlab\\serialport\\interface\\serialport.m',121,0)\">第 121 行<\/a>)\n无法连接到端口 'COM6' 上的 serialport 设备。请确认设备已连接到该端口，该端口未被占用，并且设备支持所有 serialport 输入实参和形参值。\n请参阅 <a href=\"matlab: helpview('matlab', 'serialport_connectError')\">相关文档<\/a> 了解故障排除步骤。\n\n出错 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Async_stream_IO.AsyncSerialStream\/SerialInitialize', 'C:\\Users\\vhtmf\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m', 92)\" style=\"font-weight:bold\">Async_stream_IO.AsyncSerialStream\/SerialInitialize<\/a> (<a href=\"matlab: opentoline('C:\\Users\\vhtmf\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m',92,0)\">第 92 行<\/a>)\n\t\t\t\tobj.Serial=serialport(Port,BaudRate);\n\n出错 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Async_stream_IO.AsyncSerialStream', 'C:\\Users\\vhtmf\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m', 153)\" style=\"font-weight:bold\">Async_stream_IO.AsyncSerialStream<\/a> (<a href=\"matlab: opentoline('C:\\Users\\vhtmf\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m',153,0)\">第 153 行<\/a>)\n\t\t\tobj.SerialInitialize(Port,BaudRate);\n\n出错 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Gbec.Server\/Initialize', 'C:\\Users\\vhtmf\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\Server.m', 131)\" style=\"font-weight:bold\">Gbec.Server\/Initialize<\/a> (<a href=\"matlab: opentoline('C:\\Users\\vhtmf\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\Server.m',131,0)\">第 131 行<\/a>)\n\t\t\t\t\tobj.AsyncStream=Async_stream_IO.AsyncSerialStream(varargin{:});"}}
-%---
 %[output:8ca5ee60]
 %   data: {"dataType":"error","outputData":{"errorType":"runtime","text":"无法解析名称 'Test1.RepeatCheck'。"}}
 %---
-%[output:2731441a]
-%   data: {"dataType":"error","outputData":{"errorType":"runtime","text":"无法解析名称 'Test1.StopCheck'。"}}
+%[output:001ff5d3]
+%   data: {"dataType":"text","outputData":{"text":"\n2026-06-28 10:52:32 命中：101\n\n2026-06-28 10:52:32 命中：102\n\n2026-06-28 10:52:32 命中：103\n\n2026-06-28 10:52:32 命中：104\n\n2026-06-28 10:52:32 命中：105\n\n2026-06-28 10:52:32 命中：106\n\n2026-06-28 10:52:32 命中：107\n\n2026-06-28 10:52:32 命中：108\n\n2026-06-28 10:52:32 命中：109\n\n2026-06-28 10:52:32 命中：110\n\n2026-06-28 10:52:32 命中：111\n\n2026-06-28 10:52:32 命中：112\n\n2026-06-28 10:52:32 命中：113\n\n2026-06-28 10:52:32 命中：114\n\n2026-06-28 10:52:32 命中：115\n测试结束\n","truncated":false}}
 %---

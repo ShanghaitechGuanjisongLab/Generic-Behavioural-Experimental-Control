@@ -5,7 +5,7 @@ if~(exist("BOX1","var")&&isa(BOX1,'Gbec.Server')&&BOX1.isvalid)
 end
 %[text] # 在下方输入会话设置
 %[text] 串口号
-BOX1.Initialize('COM6',9600); %[output:9945f7a8]
+BOX1.Initialize('COM6',9600);
 if~(exist('Formal1','var')&&Formal1.IsValid&&Formal1.Server==BOX1)
 	Formal1=Gbec.Formal(BOX1);
 	Formal1.LogName='BOX1';
@@ -14,7 +14,7 @@ if Formal1.State~=Gbec.UID.State_Idle
 	Gbec.Exception.Process_not_idle.Throw;
 end
 %[text] 选择要运行的会话
-Formal1.SessionID=Gbec.UID.Session_AudioLearnWater;
+Formal1.SessionID=Gbec.UID.Session_AudioWater;
 SessionName=char(Formal1.SessionID);
 %%
 %[text] 鼠名和路径可以在实验运行中修改，注意修改鼠名后不会自动修改路径
@@ -22,15 +22,15 @@ Formal1.Mouse='假🐀';
 Formal1.DateTime=datetime;
 %[text] 是否要在每次实验（第一次除外）后监控行为曲线；若无需监控可设为false。若设为true，必须安装[统一实验分析作图](https://github.com/ShanghaitechGuanjisongLab/Unified-Experimental-Analysis-and-Figuring/releases)工具箱。
 %[text] 示例代码根据鼠名自动生成路径，你也可以另行设定命名规则。
-if true %[control:checkbox:9422]{"position":[4,8]} %[output:group:4bae0c3f]
-	Filename=sprintf('D:\\张天夫\\%s.%s',Formal1.Mouse,SessionName(9:end)); %[output:9cf37413]
+if true %[control:checkbox:9422]{"position":[4,8]}
+	Filename=sprintf('D:\\张天夫\\%s.%s',Formal1.Mouse,SessionName(9:end));
 else
 	Filename=sprintf('D:\\张天夫\\%s.%s.%s',Formal1.Mouse,char(Formal1.DateTime,'yyyyMMddHHmm'),SessionName(9:end));
-end %[output:group:4bae0c3f]
-Formal1.SavePath=strcat(Filename,'.行为.mat');
+end
+Formal1.SavePath=strcat(Filename,'.行为.mat'); %[output:4f0e457d]
 %%
 %[text] 实验性功能，是否每个回合自动保存一次。此方法可以缓解意外崩溃的数据损失，但有一定性能代价。
-if true %[control:checkbox:33cb]{"position":[4,8]}
+if false %[control:checkbox:33cb]{"position":[4,9]}
 	Formal1.TrialwiseSave=strcat(Filename,'.回合备份.mat');
 else
 	Formal1.TrialwiseSave='';
@@ -93,20 +93,20 @@ end
 %[text] 此例中，在Arduino端向串口发送UID.Host\_GratingImage即可显示图像。参见[Gbec.GratingImage](<matlab:edit Gbec.GratingImage>)
 %%
 %[text] # 然后运行脚本，在命令行窗口中执行交互
-Formal1.StartSession;
+Formal1.StartSession; %[output:49c004d7]
 return;
   %[control:button:0ffc]{"position":[1,2]}
 %%
 %[text] # 实时控制命令
 %%
   %[control:button:5cdf]{"position":[1,2]}
-Formal1.PauseSession; %[output:7e9fa769]
+Formal1.PauseSession;
 %%
   %[control:button:364b]{"position":[1,2]}
 Formal1.ContinueSession;
 %%
   %[control:button:472e]{"position":[1,2]}
-Formal1.AbortSession;
+Formal1.AbortSession; %[output:32315367] %[output:8d5c3d46]
 %%
   %[control:button:1fa9]{"position":[1,2]}
 Formal1Info=Formal1.GetInformation
@@ -119,7 +119,7 @@ Formal1.SaveInformation;
 Formal1.State
 %%
   %[control:button:1b5e]{"position":[1,2]}
-delete(BOX1) %[output:7f525406]
+delete(BOX1)
 
 %[appendix]{"version":"1.0"}
 %---
@@ -177,15 +177,15 @@ delete(BOX1) %[output:7f525406]
 %[control:button:1b5e]
 %   data: {"label":"关闭串口","run":"Section"}
 %---
-%[output:9945f7a8]
-%   data: {"dataType":"error","outputData":{"errorType":"runtime","text":"错误使用 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('serialport', 'C:\\Program Files\\MATLAB\\R2026a\\toolbox\\matlab\\serialport\\interface\\serialport.m', 121)\" style=\"font-weight:bold\">serialport<\/a> (<a href=\"matlab: opentoline('C:\\Program Files\\MATLAB\\R2026a\\toolbox\\matlab\\serialport\\interface\\serialport.m',121,0)\">第 121 行<\/a>)\n无法连接到端口 'COM6' 上的 serialport 设备。请确认设备已连接到该端口，该端口未被占用，并且设备支持所有 serialport 输入实参和形参值。\n请参阅 <a href=\"matlab: helpview('matlab', 'serialport_connectError')\">相关文档<\/a> 了解故障排除步骤。\n\n出错 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Async_stream_IO.AsyncSerialStream\/SerialInitialize', 'C:\\Users\\vhtmf\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m', 92)\" style=\"font-weight:bold\">Async_stream_IO.AsyncSerialStream\/SerialInitialize<\/a> (<a href=\"matlab: opentoline('C:\\Users\\vhtmf\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m',92,0)\">第 92 行<\/a>)\n\t\t\t\tobj.Serial=serialport(Port,BaudRate);\n\n出错 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Async_stream_IO.AsyncSerialStream', 'C:\\Users\\vhtmf\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m', 153)\" style=\"font-weight:bold\">Async_stream_IO.AsyncSerialStream<\/a> (<a href=\"matlab: opentoline('C:\\Users\\vhtmf\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Async_stream_IO\\AsyncSerialStream.m',153,0)\">第 153 行<\/a>)\n\t\t\tobj.SerialInitialize(Port,BaudRate);\n\n出错 <a href=\"matlab:matlab.lang.internal.introspective.errorDocCallback('Gbec.Server\/Initialize', 'C:\\Users\\vhtmf\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\Server.m', 131)\" style=\"font-weight:bold\">Gbec.Server\/Initialize<\/a> (<a href=\"matlab: opentoline('C:\\Users\\vhtmf\\Documents\\MATLAB\\Generic-Behavioural-Experimental-Control\\+Gbec\\Server.m',131,0)\">第 131 行<\/a>)\n\t\t\t\t\tobj.AsyncStream=Async_stream_IO.AsyncSerialStream(varargin{:});"}}
+%[output:4f0e457d]
+%   data: {"dataType":"text","outputData":{"text":"\nBOX1：目标文件已存在，将尝试合并","truncated":false}}
 %---
-%[output:9cf37413]
-%   data: {"dataType":"error","outputData":{"errorType":"runtime","text":"无法对 'sprintf' 进行索引。必须使用 end 运算符对现有变量进行索引。"}}
+%[output:49c004d7]
+%   data: {"dataType":"text","outputData":{"text":"\nBOX1：会话开始，回合总数：30，将保存为：D:\\张天夫\\假🐀.AudioWater.行为.mat\n","truncated":false}}
 %---
-%[output:7e9fa769]
-%   data: {"dataType":"error","outputData":{"errorType":"runtime","text":"无法解析名称 'Formal1.PauseSession'。"}}
+%[output:32315367]
+%   data: {"dataType":"text","outputData":{"text":"\nBOX1：会话已放弃","truncated":false}}
 %---
-%[output:7f525406]
-%   data: {"dataType":"error","outputData":{"errorType":"runtime","text":"函数或变量 'BOX1' 无法识别。"}}
+%[output:8d5c3d46]
+%   data: {"dataType":"warning","outputData":{"text":"警告: 数据未保存"}}
 %---

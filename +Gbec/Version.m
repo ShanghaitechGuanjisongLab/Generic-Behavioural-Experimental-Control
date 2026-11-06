@@ -1,9 +1,35 @@
-function V=Version
-V.Me='v8.2.0';
-V.MatlabExtension='20.1.0';
-V.MATLAB='R2025a';
-V.Deploy=13;
-persistent NewVersion
-if isempty(NewVersion)
-	NewVersion=TextAnalytics.CheckUpdateFromGitHub('https://github.com/ShanghaitechGuanjisongLab/Generic-Behavioural-Experimental-Control/releases','通用行为实验控制',V.Me);
+function V = Version(AlwaysCheck)
+arguments
+	AlwaysCheck=false;
 end
+persistent pVersion
+if isempty(pVersion)||AlwaysCheck
+	V='8.2.1';
+	if~isempty(metafunction('TextAnalytics.CheckUpdateFromGitHub'))
+		TextAnalytics.CheckUpdateFromGitHub('https://github.com/Ebola-Chan-bot/Text-Analytics/releases','埃博拉酱的文本分析工具箱',['v',V]);
+	end
+	pVersion.Me=matlab.mpm.Version(V);
+	pVersion.MATLAB='R2025a';
+	pVersion.Dependencies=array2table(["MATLAB"	"20.2.4"	"https://github.com/Ebola-Chan-bot/MATLAB-Extension/releases"],VariableNames=["Namespace","Version","URL"]);
+	pVersion.Dependencies.Version=matlab.mpm.Version(pVersion.Dependencies.Version);
+	for D=1:height(pVersion.Dependencies)
+		Namespace=pVersion.Dependencies.Namespace(D);
+		MpmVersion=Namespace+".Version";
+		EarliestVersion=pVersion.Dependencies.Version(D);
+		URL=pVersion.Dependencies.URL(D);
+		if isempty(metafunction(MpmVersion))
+			warning('Gbec:Exception:Lack_dependence','Gbec:Exception:Lack_dependence：<a href="%s">%s v%s</a>',URL,Namespace,EarliestVersion);
+		else
+			MpmVersion=feval(MpmVersion).Me;
+			for F=["Major","Minor","Patch"]
+				if EarliestVersion.(F)<MpmVersion.(F)
+					break;
+				elseif EarliestVersion.(F)>MpmVersion.(F)
+					warning('Gbec:Exception:Dependence_version_too_low','Gbec:Exception:Dependence_version_too_low：<a href="%s">%s v%s</a>',URL,Namespace,EarliestVersion);
+					break;
+				end
+			end
+		end
+	end
+end
+V=pVersion;
